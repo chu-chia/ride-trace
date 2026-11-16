@@ -47,19 +47,20 @@ const DEM = {
   attribution: 'Terrain © Mapzen / AWS',
 };
 
-export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true } = {}) {
+export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, interactive = true, syncTheme = true } = {}) {
   let cur = style;
   let is3d = terrain;
   // 浮在地圖上的面板跟著底圖深淺走（深色、衛星 → 深色面板；淺色 → 淺色面板），不跟系統
-  const theme = () => { document.documentElement.dataset.theme = cur === 'light' ? 'light' : 'dark'; };
+  // syncTheme:false 給只有半邊是地圖的頁面（登入頁），那邊的表單還是跟系統
+  const theme = () => { if (syncTheme) document.documentElement.dataset.theme = cur === 'light' ? 'light' : 'dark'; };
   theme();
   const hooks = [];
   const map = new maplibregl.Map({
-    container, style: STYLES[cur].url, center, zoom,
+    container, style: STYLES[cur].url, center, zoom, interactive,
     maxPitch: 80, attributionControl: { compact: true },
     dragRotate: interactive3d, pitchWithRotate: interactive3d, touchPitch: interactive3d,
   });
-  if (!interactive3d) map.touchZoomRotate.disableRotation();
+  if (!interactive3d && interactive) map.touchZoomRotate.disableRotation();
 
   // 底圖、地形圖磚還沒出來前畫面是一片黑：先放「地圖載入中」，圖磚到齊就收掉
   const loadingEl = document.createElement('div');
