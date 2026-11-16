@@ -11,10 +11,10 @@ const STATUS = {
 const TRIP_ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
 const EV = {
   lost: ['失聯', 'var(--crit)', '!', '#ff3b30'], back: ['恢復', 'var(--ok)', '回', '#30a46c'],
-  start: ['開始', 'var(--accent)', '騎', '#0a84ff'], end: ['結束', 'var(--muted)', '終', '#8e8e93'],
+  start: ['開始', 'var(--accent)', '騎', '#d9500f'], end: ['結束', 'var(--muted)', '終', '#8e8e93'],
   join: ['加入', 'var(--accent)', '入', '#2aabee'], stop: ['結束紀錄', 'var(--muted)', '停', '#8e8e93'],
-  kick: ['移出', 'var(--warn)', '出', '#ff9f0a'], create: ['建立', 'var(--muted)', '建', '#8e8e93'],
-  behind: ['落隊', 'var(--warn)', '!', '#ff9f0a'], ahead: ['超前', 'var(--warn)', '前', '#ff9f0a'],
+  kick: ['移出', 'var(--warn)', '出', '#ffcc00'], create: ['建立', 'var(--muted)', '建', '#8e8e93'],
+  behind: ['落隊', 'var(--warn)', '!', '#ffcc00'], ahead: ['超前', 'var(--warn)', '前', '#ffcc00'],
   regroup: ['跟上', 'var(--ok)', '合', '#30a46c'],
 };
 const fmtKm = (km) => (Math.abs(km) < 1 ? Math.round(Math.abs(km) * 1000) + ' m' : Math.abs(km).toFixed(1) + ' km');

@@ -42,7 +42,7 @@ function zone() {
   if (!z) { z = document.createElement('div'); z.className = 'toasts'; document.body.append(z); }
   return z;
 }
-export function toast(text, { icon = '騎', color = '#2aabee', sub = '' } = {}) {
+export function toast(text, { icon = '騎', color = '#d9500f', sub = '' } = {}) {
   const el = document.createElement('div');
   el.className = 'toast';
   el.innerHTML = `<div class="ic" style="--c:${color};--ink:${inkOn(color)}">${esc(icon)}</div><div style="min-width:0"><div class="tx">${esc(text)}</div>${sub ? `<div class="tt">${esc(sub)}</div>` : ''}</div>`;

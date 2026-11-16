@@ -88,7 +88,7 @@ map.on('render', draw);
 addEventListener('resize', draw);
 
 /* ---------- 軌跡線圖層 ---------- */
-const LINE_COLOR = { dark: '#64d2ff', sat: '#ffd60a', light: '#0071e3' };
+const LINE_COLOR = { dark: '#ff9a52', sat: '#ffd60a', light: '#c2410c' };
 M.onStyle((style) => {
   if (!map.getSource('fp-lines')) map.addSource('fp-lines', { type: 'geojson', data: F.lines || { type: 'FeatureCollection', features: [] } });
   if (!map.getLayer('fp-lines')) {
