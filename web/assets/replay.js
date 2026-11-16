@@ -1,5 +1,5 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, $, $$, esc, avatar, initialOf, clock, dur } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -110,6 +110,7 @@ for (const m of riders) {
   const el = document.createElement('div');
   el.className = 'rider';
   el.style.setProperty('--c', m.color);
+  el.style.setProperty('--ink', inkOn(m.color));
   el.innerHTML = `<div class="arrow" style="visibility:hidden"></div><div class="dot">${esc(initialOf(m.nickname))}</div><div class="name">${esc(m.nickname)}</div>`;
   el.onclick = () => setFollow(m.uid);
   m.el = el;
@@ -243,7 +244,8 @@ $('#colorBy').onclick = (e) => {
   applyLayerState();
 };
 $('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
-$('#b3d').onclick = () => { M.set3d(!M.is3d); $('#b3d').classList.toggle('on', M.is3d); };
+$('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
+press($('#b3d'), M.is3d);
 
 /* ---------- 主迴圈 ---------- */
 let lastUi = 0, lastFilter = 0, lastT = performance.now();

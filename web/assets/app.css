@@ -2,16 +2,26 @@
 :root{
   --bg:#f5f5f7; --surface:#ffffff; --surface-2:#ececf0; --fg:#1d1d1f; --muted:#6e6e73; --line:rgba(0,0,0,.08);
   --accent:#0071e3; --ok:#1f9d55; --warn:#c96a00; --crit:#e5352b;
+  /* 小字用的狀態字色：淺色模式要加深才有 4.5:1；深色模式和本色相同 */
+  --accent-fill:#0071e3; --accent-ink:#0062c4; --ok-ink:#116b37; --warn-ink:#9a4f00; --crit-ink:#c0221a;
   --glass:rgba(250,250,252,.84); --shadow:0 10px 34px rgba(0,0,0,.12);
   --font:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
   --num:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",system-ui,sans-serif;
   color-scheme:light;
 }
-@media (prefers-color-scheme: dark){:root{
+/* 深色：一般頁面跟系統；地圖頁由 mapbase.js 依底圖設定 data-theme，優先於系統設定 */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#000; --surface:#1c1c1e; --surface-2:#2c2c2e; --fg:#f5f5f7; --muted:#98989d; --line:rgba(255,255,255,.1);
   --accent:#2997ff; --ok:#30d158; --warn:#ff9f0a; --crit:#ff453a;
+  --accent-fill:#0a84ff; --accent-ink:#2997ff; --ok-ink:#30d158; --warn-ink:#ff9f0a; --crit-ink:#ff453a;
   --glass:rgba(28,28,30,.84); --shadow:0 10px 34px rgba(0,0,0,.5); color-scheme:dark;
 }}
+:root[data-theme="dark"]{
+  --bg:#000; --surface:#1c1c1e; --surface-2:#2c2c2e; --fg:#f5f5f7; --muted:#98989d; --line:rgba(255,255,255,.1);
+  --accent:#2997ff; --ok:#30d158; --warn:#ff9f0a; --crit:#ff453a;
+  --accent-fill:#0a84ff; --accent-ink:#2997ff; --ok-ink:#30d158; --warn-ink:#ff9f0a; --crit-ink:#ff453a;
+  --glass:rgba(28,28,30,.84); --shadow:0 10px 34px rgba(0,0,0,.5); color-scheme:dark;
+}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.45}
@@ -23,19 +33,19 @@ a{color:var(--accent);text-decoration:none}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 .btn{border:0;border-radius:12px;padding:10px 16px;font-weight:600;font-size:14px;cursor:pointer;background:var(--surface-2);display:inline-flex;align-items:center;justify-content:center;gap:6px}
-.btn.primary{background:var(--accent);color:#fff}
-.btn.danger{background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit)}
+.btn.primary{background:var(--accent-fill);color:#fff}
+.btn.danger{background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit-ink)}
 .btn.block{width:100%;padding:13px;font-size:15px;border-radius:14px}
 .btn:disabled{opacity:.5;cursor:default}
 .input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:15px}
 .card{background:var(--surface);border-radius:18px;padding:16px}
 .eyebrow{font-size:11px;letter-spacing:.08em;color:var(--muted);font-weight:600}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
-.chip.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
-.chip.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
-.chip.crit{color:var(--crit);background:color-mix(in srgb,var(--crit) 14%,transparent)}
-.chip.info{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
-.avatar{width:34px;height:34px;border-radius:50%;background:var(--c);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;flex:none}
+.chip.ok{color:var(--ok-ink);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.chip.warn{color:var(--warn-ink);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.chip.crit{color:var(--crit-ink);background:color-mix(in srgb,var(--crit) 14%,transparent)}
+.chip.info{color:var(--accent-ink);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--c);color:var(--ink,#fff);display:grid;place-items:center;font-weight:700;font-size:14px;flex:none}
 .list{background:var(--surface);border-radius:16px;overflow:hidden}
 .li{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line)}
 .li:last-child{border-bottom:0}
@@ -44,14 +54,14 @@ a{color:var(--accent);text-decoration:none}
 .li .t2{font-size:12.5px;color:var(--muted)}
 a.li{color:inherit}
 .seg{display:flex;background:var(--surface-2);padding:3px;border-radius:10px;gap:2px}
-.seg button{flex:1;border:0;background:none;padding:7px 10px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap}
+.seg button{flex:1;border:0;background:none;padding:7px 10px;min-height:34px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap}
 .seg button.on{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.14);font-weight:600}
-.err{color:var(--crit);font-size:13px;min-height:1em}
+.err{color:var(--crit-ink);font-size:13px;min-height:1em}
 
 /* 通知 */
 .toasts{position:fixed;top:max(12px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(380px,calc(100% - 24px));display:flex;flex-direction:column;gap:8px;z-index:50;pointer-events:none}
 .toast{background:var(--glass);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border-radius:16px;padding:10px 12px;box-shadow:0 10px 28px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center;animation:tin .3s ease}
-.toast .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:12px;flex:none;background:var(--c)}
+.toast .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ink,#fff);font-weight:800;font-size:12px;flex:none;background:var(--c)}
 .toast .tx{font-size:13.5px;font-weight:600}
 .toast .tt{font-size:11.5px;color:var(--muted)}
 @keyframes tin{from{transform:translateY(-10px);opacity:.3}to{transform:none;opacity:1}}
@@ -68,18 +78,18 @@ a.li{color:inherit}
 .glass{background:var(--glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:0 6px 20px rgba(0,0,0,.16)}
 .tools{position:absolute;display:flex;flex-direction:column;gap:8px;z-index:5}
 .tool{min-width:42px;height:42px;padding:0 10px;border-radius:12px;border:0;cursor:pointer;font-size:12px;font-weight:600;display:grid;place-items:center}
-.tool.on{color:var(--accent)}
+.tool.on{background:var(--accent-fill);color:#fff;box-shadow:0 6px 20px color-mix(in srgb,var(--accent) 35%,transparent)}
 .maplibregl-ctrl-attrib{font-size:10px}
 
 /* 隊友標記 */
 .rider{position:relative;width:34px;height:34px;cursor:pointer}
-.rider .dot{position:absolute;inset:0;border-radius:50%;background:var(--c);border:2.5px solid #fff;display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.rider .dot{position:absolute;inset:0;border-radius:50%;background:var(--c);border:2.5px solid #fff;display:grid;place-items:center;color:var(--ink,#fff);font-weight:700;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .rider .arrow{position:absolute;left:50%;top:50%;width:0;height:0;transform-origin:0 0}
 .rider .arrow::before{content:"";position:absolute;left:-6px;top:-29px;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:9px solid var(--c)}
 .rider .name{position:absolute;top:38px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:9px;background:var(--glass);color:var(--fg)}
 .rider.me .dot{box-shadow:0 0 0 7px color-mix(in srgb,var(--c) 25%,transparent),0 2px 8px rgba(0,0,0,.35)}
-.rider.lost .dot{background:#8e8e93;border-style:dashed}
+.rider.lost .dot{background:#8e8e93;color:#fff;border-style:dashed}
 .rider.lost .arrow,.rider.rest .arrow,.rider.done .arrow{display:none}
-.rider.lost .name{color:var(--crit)}
+.rider.lost .name{color:var(--crit-ink)}
 .rider.gapflag .dot{box-shadow:0 0 0 4px var(--warn),0 2px 8px rgba(0,0,0,.35)}
-.rider.gapflag .name{color:var(--warn)}
+.rider.gapflag .name{color:var(--warn-ink)}

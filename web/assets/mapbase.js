@@ -50,6 +50,9 @@ const DEM = {
 export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true } = {}) {
   let cur = style;
   let is3d = terrain;
+  // 浮在地圖上的面板跟著底圖深淺走（深色、衛星 → 深色面板；淺色 → 淺色面板），不跟系統
+  const theme = () => { document.documentElement.dataset.theme = cur === 'light' ? 'light' : 'dark'; };
+  theme();
   const hooks = [];
   const map = new maplibregl.Map({
     container, style: STYLES[cur].url, center, zoom,
@@ -121,7 +124,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     get is3d() { return is3d; },
     // 樣式已經載入過就立刻執行一次（isStyleLoaded() 在圖磚載入中會是 false，不能用）
     onStyle(fn) { hooks.push(fn); if (styleLoaded) fn(cur); },
-    setStyle(name) { cur = name; map.setStyle(STYLES[name].url, { diff: false }); },
+    setStyle(name) { cur = name; theme(); map.setStyle(STYLES[name].url, { diff: false }); },
     nextStyle() { this.setStyle(ORDER[(ORDER.indexOf(cur) + 1) % ORDER.length]); return STYLES[cur].name; },
     // 跟隨模式：每一格把鏡頭中心移到 center。高度不直接貼地形（地形有細小起伏，鏡頭會上下彈），
     // 而是周圍取幾個點平均後再慢慢追，看起來就是平穩地沿著山坡移動。

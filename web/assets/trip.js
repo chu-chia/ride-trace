@@ -1,4 +1,4 @@
-import { api, $, $$, esc, avatar, initialOf, clock, dur, ago, toast } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -42,6 +42,7 @@ function upsertMember(u, state) {
     const el = document.createElement('div');
     el.className = 'rider' + (u.uid === S.me ? ' me' : '');
     el.style.setProperty('--c', u.color);
+    el.style.setProperty('--ink', inkOn(u.color));
     el.innerHTML = `<div class="arrow"></div><div class="dot">${esc(initialOf(u.nickname))}</div><div class="name">${esc(u.nickname)}</div>`;
     el.onclick = () => { setFollow(u.uid); };
     m = { u, state: {}, el, marker: new maplibregl.Marker({ element: el, anchor: 'center' }), trail: [], onMap: false, pos: null, anim: null, lastAt: 0, lastTarget: null };
@@ -173,13 +174,13 @@ function tick(now) {
 requestAnimationFrame(tick);
 
 function syncTools() {
-  $('#bAll').classList.toggle('on', S.follow === 'all');
-  $('#bMe').classList.toggle('on', S.follow === S.me);
+  press($('#bAll'), S.follow === 'all');
+  press($('#bMe'), S.follow === S.me);
 }
 $('#bAll').onclick = () => setFollow('all');
 $('#bMe').onclick = () => setFollow(S.me);
 $('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
-$('#b3d').onclick = () => { M.set3d(!M.is3d); $('#b3d').classList.toggle('on', M.is3d); };
+$('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 
 /* ---------- 面板 ---------- */
 $('#tabs').onclick = (e) => {
@@ -414,5 +415,5 @@ $('#bReplay').href = `/replay?id=${tid}`;
 $('#trUrl').textContent = `${location.origin}/osmand`;
 api('/api/me/device').then((d) => ($('#trId').textContent = d.device_id)).catch(() => {});
 syncTools();
-$('#b3d').classList.toggle('on', M.is3d);
+press($('#b3d'), M.is3d);
 connect();

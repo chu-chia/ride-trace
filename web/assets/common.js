@@ -24,7 +24,18 @@ export const dur = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); retur
 export const ago = (ms) => { const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? `${s} 秒前` : s < 3600 ? `${Math.floor(s / 60)} 分前` : `${Math.floor(s / 3600)} 小時前`; };
 // 頭像字：一般取暱稱最後一個字（阿偉 → 偉）；結尾是日期（武嶺 25/12/12）就取最後兩位數
 export const initialOf = (name = '?') => (/\d$/.test(name) ? name.replace(/\D/g, '').slice(-2) : name.slice(-1));
-export const avatar = (u) => `<div class="avatar" style="--c:${esc(u.color)}">${esc(initialOf(u.nickname))}</div>`;
+// 代表色上的字色：白字對比到 3:1（粗體門檻）就用白字，否則改深字（黃、淺藍、綠、橘這類亮色）
+const lum = (hex) => {
+  const h = String(hex).replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(h)) return 0;
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    .reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+};
+export const inkOn = (hex) => (1.05 / (lum(hex) + 0.05) >= 3 ? '#fff' : '#1d1d1f');
+export const avatar = (u) => `<div class="avatar" style="--c:${esc(u.color)};--ink:${inkOn(u.color)}">${esc(initialOf(u.nickname))}</div>`;
+// 工具按鈕的開關狀態：外觀和 aria-pressed 一起切，不只靠顏色
+export const press = (el, on) => { el.classList.toggle('on', !!on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); };
 
 function zone() {
   let z = $('.toasts');
@@ -34,7 +45,7 @@ function zone() {
 export function toast(text, { icon = '騎', color = '#2aabee', sub = '' } = {}) {
   const el = document.createElement('div');
   el.className = 'toast';
-  el.innerHTML = `<div class="ic" style="--c:${color}">${esc(icon)}</div><div style="min-width:0"><div class="tx">${esc(text)}</div>${sub ? `<div class="tt">${esc(sub)}</div>` : ''}</div>`;
+  el.innerHTML = `<div class="ic" style="--c:${color};--ink:${inkOn(color)}">${esc(icon)}</div><div style="min-width:0"><div class="tx">${esc(text)}</div>${sub ? `<div class="tt">${esc(sub)}</div>` : ''}</div>`;
   const z = zone();
   z.prepend(el);
   while (z.children.length > 3) z.lastChild.remove();
