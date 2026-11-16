@@ -27,4 +27,10 @@
 .qx-pin.all b{background:#30d158;color:#fff}
 .qx-pin.pick{padding:3px}
 .qx-pin.pick b{background:var(--accent);color:#fff}
+/* 測速點：紅框白底，中間是速限（同樣不能設 position） */
+.qx-cam{width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid #e5352b;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:default}
+.qx-cam b{font-size:10.5px;font-weight:800;color:#1d1d1f;letter-spacing:-.03em}
+.qx-cam.hit{box-shadow:0 0 0 5px rgba(255,159,10,.55),0 1px 5px rgba(0,0,0,.4)}
+.qx-cam.static{flex:none}
+.qx-pop code{font-size:11px;word-break:break-all}
 @media (max-width:760px){.qx-pop{width:calc(100vw - 88px)}}

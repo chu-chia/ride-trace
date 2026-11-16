@@ -1,4 +1,4 @@
-// 行程頁的 M3 互動功能：集合點（之後加測速、快速訊息、標註、SOS）。
+// 行程頁的 M3 互動功能：集合點、前方測速（之後加快速訊息、標註、SOS）。
 // 和 trip.js 分開放，避免和畫面設計的改動互相衝突。trip.js 只提供三個掛鉤：
 //   window.qijiM（地圖包裝）、window.qijiState（頁面狀態）、window 的 'qiji:msg' 事件（每則 WebSocket 訊息）
 import { api, $, esc, toast } from '/assets/common.js';
@@ -16,6 +16,7 @@ dock.innerHTML = `
   <div class="qx-pop glass" id="qxPop" hidden></div>
   <div class="qx-bar">
     <button class="tool glass" data-open="wp" title="集合點與休息點">集合點</button>
+    <button class="tool glass" data-open="cam" title="測速照相查詢">測速</button>
   </div>`;
 document.body.append(dock);
 const pop = $('#qxPop');
@@ -39,6 +40,7 @@ function render() {
   dock.querySelectorAll('[data-open]').forEach((b) => b.classList.toggle('on', b.dataset.open === X.open));
   pop.hidden = !X.open;
   if (X.open === 'wp') renderWpPanel();
+  if (X.open === 'cam') renderCamPanel();
 }
 
 /* ---------- 集合點 ---------- */
@@ -153,11 +155,92 @@ async function loadWps() {
   try { X.wps = await api(`/api/trips/${tid}/waypoints`); drawWps(); if (X.open === 'wp') render(); } catch { /* 不是成員或網路錯誤時 trip.js 會處理 */ }
 }
 
+/* ---------- 測速照相 ---------- */
+// 地圖：畫面附近的測速點（GEOSEARCH）；縮太小就不顯示
+X.cams = new Map();
+async function loadCams() {
+  if (map.getZoom() < 11) { X.cams.forEach((c) => c.marker.remove()); X.cams.clear(); return; }
+  const b = map.getBounds(), c = map.getCenter();
+  const km = Math.min(30, Math.max(1, b.getNorthEast().distanceTo(b.getSouthWest()) / 2000));
+  let list;
+  try { list = await api(`/api/speedcam/near?lon=${c.lng.toFixed(5)}&lat=${c.lat.toFixed(5)}&km=${km.toFixed(1)}`); } catch { return; }
+  const keep = new Set(list.map((x) => x.id));
+  for (const [id, m] of X.cams) if (!keep.has(id)) { m.marker.remove(); X.cams.delete(id); }
+  for (const cam of list) {
+    if (X.cams.has(cam.id)) continue;
+    const el = document.createElement('div');
+    el.className = 'qx-cam';
+    el.title = `${cam.addr}（${cam.direct}，速限 ${cam.limit}）`;
+    el.innerHTML = `<b>${cam.limit}</b>`;
+    X.cams.set(cam.id, { cam, el, marker: new maplibregl.Marker({ element: el }).setLngLat([cam.lon, cam.lat]).addTo(map) });
+  }
+}
+// 跟隨模式每一格都 jumpTo（每一格都有 moveend），不能用「停下來再載」；改成每 2 秒看一次，移動超過 300 m 或縮放改變才重載
+let camAt = null;
+setInterval(() => {
+  const c = map.getCenter(), z = Math.round(map.getZoom());
+  if (camAt && camAt.z === z && c.distanceTo(camAt.c) < 300) return;
+  camAt = { c, z };
+  loadCams();
+}, 2000);
+
+// 個人提醒：只有騎到測速點前方的那個人會跳通知；超速時速度標紅
+function camAlert(msg) {
+  const over = msg.kmh > msg.limit;
+  toast(`前方 ${msg.dist_m} m 測速照相 · 速限 ${msg.limit}`, {
+    icon: '速', color: over ? '#ff3b30' : '#ff9f0a',
+    sub: `${msg.addr}${over ? ` · 你目前 ${msg.kmh} km/h，請減速` : ''}`,
+  });
+  X.cams.get(msg.cam)?.el.classList.add('hit');
+}
+
+let camMeta = null;
+function renderCamPanel() {
+  const res = X.camRes;
+  pop.innerHTML = `
+    <div class="qx-head"><b>測速照相</b><span class="small muted">${camMeta ? `${esc(camMeta.source)} · ${camMeta.count} 個 · 更新 ${new Date(camMeta.updated).toLocaleDateString('zh-TW')}` : '騎到前方 1 km 會自動提醒'}</span></div>
+    <form class="qx-form" id="camForm">
+      <input class="input" name="q" placeholder="地址關鍵字，例如：臺14、國道一號" autocomplete="off" value="${esc(X.camQ?.q || '')}">
+      <div class="qx-inline">
+        <input class="input" name="city" placeholder="縣市" value="${esc(X.camQ?.city || '')}">
+        <select class="input" name="lim"><option value="">所有速限</option><option value="0-50">50 以下</option><option value="51-70">60～70</option><option value="71-90">80～90</option><option value="91-200">100 以上</option></select>
+      </div>
+      <div class="qx-inline"><button type="button" class="btn" id="camNear">畫面附近 10 km</button><button class="btn primary">查詢</button></div>
+    </form>
+    ${res ? `<div class="small muted">${res.total} 筆${res.total > res.items.length ? `（顯示前 ${res.items.length}）` : ''} · <code>${esc(res.query)}</code></div>
+      <div class="qx-list">${res.items.map((c) => `<div class="qx-row" data-cam="${c.id}" data-lon="${c.lon}" data-lat="${c.lat}">
+        <span class="qx-cam static"><b>${c.limit}</b></span>
+        <div class="grow"><div class="t1">${esc(c.addr)}</div><div class="t2">${esc(c.city)}${esc(c.region)} · ${esc(c.direct)}</div></div></div>`).join('')}</div>` : ''}`;
+  if (X.camQ?.lim) $('#camForm [name=lim]').value = X.camQ.lim;
+  const run = async (extra = {}) => {
+    const f = new FormData($('#camForm'));
+    X.camQ = { q: f.get('q'), city: f.get('city'), lim: f.get('lim') };
+    const p = new URLSearchParams({ q: X.camQ.q, city: X.camQ.city });
+    if (X.camQ.lim) { const [a, b] = X.camQ.lim.split('-'); p.set('min_limit', a); p.set('max_limit', b); }
+    Object.entries(extra).forEach(([k, v]) => p.set(k, v));
+    try { X.camRes = await api(`/api/speedcam/search?${p}`); renderCamPanel(); } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  };
+  $('#camForm').addEventListener('submit', (e) => { e.preventDefault(); run(); });
+  // 「附近」只保留速限條件，關鍵字和縣市清掉（不然常常查不到）
+  $('#camNear').addEventListener('click', () => {
+    $('#camForm [name=q]').value = ''; $('#camForm [name=city]').value = '';
+    const c = map.getCenter(); run({ lon: c.lng.toFixed(5), lat: c.lat.toFixed(5), km: 10 });
+  });
+  if (!camMeta) api('/api/speedcam/meta').then((m) => { camMeta = m; if (X.open === 'cam') $('.qx-head .small').textContent = `${m.source} · ${m.count} 個 · 更新 ${new Date(m.updated).toLocaleDateString('zh-TW')}`; }).catch(() => {});
+}
+pop.addEventListener('click', (e) => {
+  const row = e.target.closest('[data-cam]');
+  if (!row) return;
+  S.lastInteract = Date.now(); M.unfollow();
+  map.easeTo({ center: [+row.dataset.lon, +row.dataset.lat], zoom: 15.5, duration: 900 });
+});
+
 /* ---------- WebSocket 訊息 ---------- */
 addEventListener('qiji:msg', (e) => {
   const msg = e.detail;
   if (msg.kind === 'waypoints') { X.wps = msg.items; drawWps(); if (X.open === 'wp' && !X.pick?.lngLat) render(); }
   if (msg.kind === 'snapshot') loadWps();
+  if (msg.kind === 'speedcam' && msg.uid === S.me) camAlert(msg);
 });
 
 loadWps();

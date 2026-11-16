@@ -37,6 +37,15 @@ uv run python -m tools.import_gpx ~/Downloads/xxx.gpx --user wei --reset
 uv run python -m tools.extract_tracks ~/Downloads/xxx.gpx
 ```
 
+## 測速照相資料
+
+警政署「測速執法設置點」（政府資料開放平臺 dataset 7320，每月更新），公開資料：
+
+```bash
+cd backend
+uv run python -m tools.import_speedcam      # 下載最新 CSV，匯入 GEO＋Hash，重建 RediSearch 索引
+```
+
 ## 地圖比對（軌跡貼合道路）
 
 原始 GPS 約 10～13 秒一點，快的時候兩點相隔好幾百公尺，直線連起來會切過彎道。
@@ -91,6 +100,9 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 | Lua（落隊判斷） | group `alerts`：`GEOPOS` 取全隊位置，座標中位數當全隊中心、已騎里程判斷前後，超過門檻（預設 2 km，建立者可調）就在 `trip:{id}:lagflag` 設旗標並發事件；回到 75% 以內解除。判斷＋改旗標在同一個 script，多個 worker 同時算也只警示一次；`SET NX PX` 節流每行程 2 秒算一次 |
 | GEO（集合點） | `trip:{id}:waypoints` 存集合點／休息點；worker 對每筆回報 `GEOSEARCH FROMLONLAT … BYRADIUS` 找附近的點，進入各自半徑就算抵達 |
 | Lua（抵達／到齊） | `SADD trip:{id}:arrived:{wid}` 回傳 1 才通知「抵達」；再用 `SDIFF active arrived` 為空＋`SET NX` 判斷「全員到齊」，多個 worker 同時處理也只通知一次 |
+| GEO（測速） | `poi:speedcam` 全台約 1,900 個測速點；worker 對每筆回報 `GEOSEARCH … BYRADIUS 1000 m WITHDIST WITHCOORD`，留下行進方向 ±35° 扇形內、離行進方向延長線 100 m 內、而且拍攝方向相符的最近一支 |
+| RediSearch | `idx:speedcam`（Hash `speedcam:{id}`）：縣市／鄉鎮 TAG、速限 NUMERIC、地址中文全文、位置 GEO，一個查詢就能做「南投縣＋速限 40～60＋地址含臺14＋我附近 20 km」 |
+| TTL 去重 | 測速提醒 `SET camhit:{trip}:{uid}:{cam} NX EX 900`：key 還在就代表提醒過，時間到自動解除 |
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時在 Redis 裡 `SUNION` |
 
 ## 階段

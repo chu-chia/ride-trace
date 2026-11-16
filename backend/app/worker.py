@@ -13,6 +13,7 @@
 """
 import asyncio
 import json
+import math
 import logging
 import os
 import socket
@@ -21,6 +22,7 @@ from redis.exceptions import ResponseError
 
 from . import events
 from .db import K, arrive, check_lag, r, update_stats
+from .geo import bearing_deg
 
 log = logging.getLogger("qiji.worker")
 
@@ -125,11 +127,54 @@ async def check_arrival(tid: str, uid: str, lat: float, lon: float, ts: int):
         await broadcast(tid)
 
 
+CAM_AHEAD_M = 1000      # 規格 4.4：前方 1 km 內
+CAM_SECTOR_DEG = 35     # 行進方向左右 35° 的扇形才算「前方」
+CAM_LATERAL_M = 100     # 測速點離「行進方向延長線」的橫向距離上限：扇形在 1 km 外有 570 m 寬，會掃到旁邊的路
+CAM_DIR_DEG = 60        # 測速點只拍單一方向時，我的行進方向要差不多才提醒
+CAM_MIN_MS = 3          # 停車或牽車（< 約 11 km/h）不提醒
+CAM_PERSONAL_TTL = 900  # 同一個人同一支測速 15 分鐘內只提醒一次
+CAM_EVENT_TTL = 1800    # 寫進行程事件：同一支測速 30 分鐘內只記一次（全隊經過同一支不洗版）
+
+
+def angdiff(a: float, b: float) -> float:
+    return abs((a - b + 180) % 360 - 180)
+
+
+async def check_speedcam(tid: str, uid: str, f: dict):
+    """GEOSEARCH poi:speedcam 找 1 km 內的測速點，留下「在我前方的扇形裡、而且拍我這個方向」的最近一支。
+    去重用 SET NX EX：key 還在就代表提醒過，TTL 到了自動解除，不用另外清。"""
+    try:
+        lat, lon, hd, sp = float(f["lat"]), float(f["lon"]), float(f["heading"]), float(f["speed"])
+    except (KeyError, ValueError):
+        return
+    if sp < CAM_MIN_MS:
+        return
+    near = await r.geosearch("poi:speedcam", longitude=lon, latitude=lat, radius=CAM_AHEAD_M, unit="m",
+                             withdist=True, withcoord=True, sort="ASC", count=8)
+    for cid, dist, (clon, clat) in near:
+        a = angdiff(hd, bearing_deg(lat, lon, clat, clon))
+        if float(dist) > 40 and (a > CAM_SECTOR_DEG or float(dist) * math.sin(math.radians(a)) > CAM_LATERAL_M):
+            continue
+        cam = await r.hmget(f"speedcam:{cid}", "addr", "limit", "bearing", "direct")
+        if cam[2] not in (None, "") and angdiff(hd, float(cam[2])) > CAM_DIR_DEG:
+            continue  # 單向測速、拍的是對向車道
+        if not await r.set(f"camhit:{tid}:{uid}:{cid}", 1, nx=True, ex=CAM_PERSONAL_TTL):
+            return  # 最近的那支已經提醒過
+        kmh, limit = round(sp * 3.6), int(cam[1] or 0)
+        info = {"cam": cid, "addr": cam[0], "limit": limit, "dist_m": round(float(dist)), "kmh": kmh,
+                "lon": clon, "lat": clat, "direct": cam[3]}
+        await events.publish(tid, {"kind": "speedcam", "uid": uid, **info})
+        if await r.set(f"camevt:{tid}:{cid}", 1, nx=True, ex=CAM_EVENT_TTL):
+            await events.emit(tid, "speedcam", uid, f"前方測速：{cam[0]}（速限 {limit}）", ts=int(f["ts"]), cam=cid)
+        return
+
+
 async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
-    """警示類：抵達集合點（每筆都查）、落隊（同一批裡同一個行程只判斷一次）。"""
+    """警示類：抵達集合點、前方測速（每筆都查）、落隊（同一批裡同一個行程只判斷一次）。"""
     for _, f in msgs:
         if f.get("trip") and f.get("uid") and "lat" in f:
             await check_arrival(f["trip"], f["uid"], float(f["lat"]), float(f["lon"]), int(f["ts"]))
+            await check_speedcam(f["trip"], f["uid"], f)
     trips = dict.fromkeys(f["trip"] for _, f in msgs if f.get("trip"))
     for tid in trips:
         await check_trip_lag(tid)
