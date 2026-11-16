@@ -18,6 +18,7 @@ WEB_DIR = Path(os.environ.get("WEB_DIR", Path(__file__).resolve().parents[2] / "
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await r.ping()
+    await r.set("stat:ws", 0)  # 後台的 WebSocket 連線數：重開時舊連線都斷了，從 0 算起
     task = asyncio.create_task(live.expiry_listener())
     yield
     task.cancel()

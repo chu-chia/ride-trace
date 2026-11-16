@@ -43,6 +43,9 @@ async def trip_ws(ws: WebSocket, tid: str):
             [asyncio.create_task(pump()), asyncio.create_task(recv())], return_when=asyncio.FIRST_COMPLETED)
         for t in pending:
             t.cancel()
+        for t in done:  # 瀏覽器關掉時 recv() 會丟 WebSocketDisconnect，取出來就不會被當成「沒處理的例外」印出來
+            if not t.cancelled():
+                t.exception()
     except WebSocketDisconnect:
         pass
     except Exception as e:  # noqa: BLE001
