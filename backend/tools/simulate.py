@@ -28,7 +28,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.geo import bearing_deg, haversine_m  # noqa: E402
 
 COLORS = ["#ff9f0a", "#30d158", "#bf5af2", "#ff375f", "#5ac8fa", "#ffd60a"]
-BOT_PASSWORD = "***REMOVED***"
+def _env(name: str, default: str = "") -> str:
+    """先看環境變數，再看專案根目錄的 .env（不進版控）。"""
+    if os.environ.get(name):
+        return os.environ[name]
+    path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+    if os.path.exists(path):
+        for line in open(path, encoding="utf-8"):
+            k, _, v = line.strip().partition("=")
+            if k == name:
+                return v.strip()
+    return default
+
+
+# 機器人帳號的密碼放在 .env 的 SIM_BOT_PASSWORD（範例見 .env.example），不寫在程式碼裡
+BOT_PASSWORD = _env("SIM_BOT_PASSWORD")
+if not BOT_PASSWORD:
+    raise SystemExit("請在專案根目錄的 .env 設定 SIM_BOT_PASSWORD（參考 .env.example）")
 
 
 class Rider:

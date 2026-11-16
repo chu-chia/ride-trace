@@ -23,6 +23,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       WEB_DIR: /web
       VALHALLA_URL: http://valhalla:8002
+      ADMIN_USERS: ${ADMIN_USERS:-wei}
     volumes:
       - ./web:/web:ro
     ports:

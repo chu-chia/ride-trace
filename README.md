@@ -1,16 +1,17 @@
 # 騎跡
 
-機車車隊即時定位與回放系統（DBMS 課程 Redis 個人專題）。朋友約騎車時，每個人在地圖上即時看到彼此，系統全程記錄；另外有全年迷霧足跡地圖。
+機車車隊即時定位與回放系統（DBMS 課程 Redis 個人專題）。朋友約騎車時，每個人在地圖上即時看到彼此，有落隊、失聯、集合點、SOS 等警示；系統全程記錄可以整隊回放；另外還有全年足跡、點亮全台鄉鎮、熱力圖，以及給電腦大螢幕的戰情室和管理後台。
 
-接手的 agent 請先讀 `AGENTS.md`。
+接手的 agent 請先讀 `AGENTS.md`。架構圖與 UML 在 `docs/架構與UML.md`，部署在 `docs/部署.md`，繳交清單在 `docs/繳交清單.md`。
 
-目前進度：**M1 核心、M2 回放、M3 警示與互動（Telegram 除外）、M4 導航**（見下方「階段」）。
+目前進度：**M1～M5 完成**；M3 的 Telegram 推播先不做；M6 文件已備好，部署、簡報、影片待使用者處理（見下方「階段」）。
 
 ## 啟動
 
 需要 Docker Desktop。
 
 ```bash
+cp .env.example .env              # 第一次：設定模擬器機器人密碼、管理者帳號
 docker compose up -d --build      # Redis 8（6390）＋ API／網頁（8750）＋ Worker ＋ Valhalla（8752）
 open http://localhost:8750
 ```
@@ -18,14 +19,29 @@ open http://localhost:8750
 開發時也可以只開 Redis，用 uv 跑 API（改程式會自動重載）：
 
 ```bash
-docker compose up -d redis
+docker compose up -d redis valhalla
 cd backend && uv venv --python 3.12 && uv pip install -e .
 uv run uvicorn app.main:app --port 8750 --reload
+uv run python -m app.worker        # 另開一個終端機跑 worker
 ```
 
-手機要用網頁定位必須是 HTTPS，建議用 `tailscale serve` 或 Tailscale Funnel 開一個固定網址。
+手機網頁定位必須是 HTTPS，見 `docs/部署.md`（Tailscale）。
 
-## 匯入足跡與展示用軌跡
+## 頁面
+
+| 網址 | 內容 |
+|---|---|
+| `/login` | 帳號登入（登入頁背景是台灣經典路線巡航） |
+| `/` | 首頁：我的足跡、進行中的行程、開團／加入、我的行程 |
+| `/trip?id=` | 騎乘頁：即時地圖、隊友、事件、邀請 QR、回報設定；左下集合點／測速／訊息／標註／SOS／路線、全隊進度條、轉彎提示 |
+| `/plan?trip=` | 規劃路線：搜尋地點加停靠點、機車／重機／汽車、1～3 條方案、依你的速度估時間、沿路線找加油站等、Google Maps 匯入（選用） |
+| `/replay?id=` | 回放：全隊同步、時間軸＋事件、跟拍鏡頭、速度與海拔曲線、整趟摘要 |
+| `/war?id=` | 戰情室（電腦大螢幕）：3D 自動運鏡、隊員卡片牆、事件流、進度條＋海拔剖面 |
+| `/footprint` | 全年足跡地圖（迷霧、日期範圍、一天中的時段、逐月播放） |
+| `/me` | 我的紀錄：點亮全台鄉鎮、熱力圖、累計統計、各種路的實際速度 |
+| `/admin` | 管理後台（`ADMIN_USERS`）：Redis 狀態、線上人數、每秒寫入與 Pub/Sub、Worker 進度、外部資料同步 |
+
+## 資料準備（都在本機處理）
 
 個人位置資料一律放在 `data/`，已列在 `.gitignore`，**不要上傳**。
 
@@ -33,89 +49,89 @@ uv run uvicorn app.main:app --port 8750 --reload
 cd backend
 # 1. 先在網頁註冊帳號，再把 GPX 匯入成這個帳號的全年足跡
 uv run python -m tools.import_gpx ~/Downloads/xxx.gpx --user wei --reset
-# 2. 切出展示用的真實騎乘片段（武嶺 4 段、北宜 1 段）到 data/tracks/
+# 2. 切出展示用的真實騎乘片段（武嶺 4 段、北宜 1 段、台北→武嶺）到 data/tracks/，再對到道路上
 uv run python -m tools.extract_tracks ~/Downloads/xxx.gpx
+uv run python -m tools.match_tracks
+# 3. 公開資料：測速照相（警政署）、地名與 POI、鄉鎮界線（本機 OSM 檔，Valhalla 第一次啟動時下載）
+uv run python -m tools.import_speedcam
+uv run --with osmium python -m tools.import_poi
+uv run --with osmium --with shapely python -m tools.import_towns
+# 4. 用全年足跡算：熱力圖＋點亮鄉鎮、各種路的實際速度（之後 worker 會即時更新前者）
+uv run python -m tools.build_longterm --user wei --reset
+uv run python -m tools.pace_profile --user wei --reset
 ```
 
-## 測速照相資料
-
-警政署「測速執法設置點」（政府資料開放平臺 dataset 7320，每月更新），公開資料：
-
-```bash
-cd backend
-uv run python -m tools.import_speedcam      # 下載最新 CSV，匯入 GEO＋Hash，重建 RediSearch 索引
-```
-
-## 地圖比對（軌跡貼合道路）
-
-原始 GPS 約 10～13 秒一點，快的時候兩點相隔好幾百公尺，直線連起來會切過彎道。
-`docker compose up -d valhalla` 會在本機建台灣路網（第一次約 3 分鐘，資料放 `data/valhalla/`），
-然後把展示軌跡對到道路上（GPS 不會送到外部服務）：
-
-```bash
-cd backend
-uv run python -m tools.match_tracks          # 比對 data/tracks/ 全部，原始點保留在 raw_points
-```
-
-重新執行 `extract_tracks` 會蓋掉比對結果，要再跑一次 `match_tracks`。
+Valhalla（`docker compose up -d valhalla`）第一次會下載台灣 OSM（約 330 MB）建路網，約 3～30 分鐘，資料放 `data/valhalla/`。地圖比對、路線計算、個人速度都只用本機 Valhalla，GPS 不會送到外部服務。
 
 ## GPS 模擬器
 
-把真實騎乘片段當成多位隊友，走跟手機一樣的 `/api/track`。時間戳用「重播的時間」（1 倍速），所以 30 倍速跑完的行程，回放和摘要仍是真實的時長與速度。
+把真實騎乘片段當成多位隊友，走跟手機一樣的 `/api/track`。時間戳用「重播的時間」（1 倍速），所以 30 倍速跑完的行程，回放和摘要仍是真實的時長與速度。機器人密碼在 `.env` 的 `SIM_BOT_PASSWORD`。
 
 ```bash
 cd backend
-# 預設重播 10/26 台北→武嶺（加 --group wuling 換成 4 段清境→武嶺）
-# 加入你在網頁建立的行程（你按「開始行程」後出發）
-uv run python -m tools.simulate --group wuling --code ABC123
-# 機器人自己開團並開始，印出邀請碼讓你加入觀看
-uv run python -m tools.simulate --group wuling --create "武嶺日出團"
-# 20 倍速；第 2 位在模擬第 600～900 秒斷訊（20 倍速下約 15 秒，不夠觸發失聯，要失聯請拉長）
-uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2@600-3000
+uv run python -m tools.simulate --group wuling --code ABC123              # 加入你建立的行程（你按開始後出發）
+uv run python -m tools.simulate --group wuling --create "武嶺日出團"        # 機器人自己開團並開始
+uv run python -m tools.simulate --group beiyi --create "北宜" --speed 20   # 北宜路線（沿途有測速照相）
+uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2@600-3000   # 第 2 位斷訊（失聯）
 ```
+
+測完記得 `pkill -f tools.simulate`，並把測試行程收掉（`HSET trip:{id} status ended`、刪 `trip:{id}:active` 和指向它的 `user:*:active_trip`）。
 
 ## Traccar Client 設定
 
-在網頁「行程 → 回報」分頁可以看到：
-
-- 伺服器網址：`https://<你的網址>/osmand`
-- 裝置 ID：每個帳號一組隨機 ID（`/api/me/device`）
-
-同時支援舊版 OsmAnd 協定（query string，速度單位是節）和新版 JSON 格式。
+在網頁「行程 → 回報」分頁可以看到伺服器網址（`https://<你的網址>/osmand`）和每個帳號一組的裝置 ID。同時支援舊版 OsmAnd 協定（query string，速度單位是節）和新版 JSON 格式。原生 App 可以在背景回報，騎車時建議用它而不是網頁定位。
 
 ## Redis 用到的功能
 
+> 每一項都寫了「為什麼用 Redis、SQL 為什麼不方便」的理由在程式註解裡。
+
+### 即時與事件
+
 | 功能 | 用在哪 |
 |---|---|
-| GEO | `trip:{id}:geo` 即時位置；`GEOSEARCH` 算隊友距離 |
-| Pub/Sub | `trip:{id}:live` 位置與事件即時推到 WebSocket |
+| GEO | `trip:{id}:geo` 即時位置，`GEOSEARCH` 算隊友距離；`trip:{id}:waypoints` 集合點、`trip:{id}:marks` 標註、`poi:speedcam` 測速、`poi:geo:{種類}` 加油站等 |
+| Pub/Sub | `trip:{id}:live` 位置與事件即時推到 WebSocket（行程頁、戰情室） |
 | Streams | `track:{trip}:{uid}` 軌跡、`trip:{id}:events` 事件、`footprint:{uid}` 全年足跡（ID 就是時間戳，`XRANGE` 依時間查） |
-| TimeSeries | `ts:{trip}:{uid}:speed／alt` 速度與海拔（帶 trip／uid／kind 標籤，回放用 `TS.MRANGE … FILTER trip=… AGGREGATION avg` 一次取全隊）、`ts:sys:writes` 每秒寫入量 |
-| TTL＋Keyspace Notification | `hb:{trip}:{uid}` 心跳 90 秒過期 → 失聯警示；`session:` 登入、`invite:` 邀請碼、`cache:lines:` 查詢快取 |
-| Pipeline | 每筆 GPS 回報一次送出 10 個左右的指令；GPX 匯入每 5,000 點一批 |
+| Streams Consumer Group | 每筆回報 `XADD stream:ingest`；獨立 worker 容器 `XREADGROUP`：group `stats`（里程、極速、熱力圖、點亮鄉鎮）、group `alerts`（落隊、抵達、測速、路況、沿路線進度、偏離路線、異常久停）。處理完才 `XACK`，worker 當掉時 `XAUTOCLAIM` 接手閒置 60 秒的訊息；`docker compose up -d --scale worker=2` 自動分攤 |
+| TTL＋Keyspace Notification | `hb:{trip}:{uid}` 心跳 90 秒過期 → 失聯警示；`session:` 登入、`invite:` 邀請碼 24 小時 |
+| Pipeline | 每筆 GPS 回報一次送出十幾個指令；匯入工具每 5,000 筆一批；沿路線找 POI 一次送出上百個 `GEOSEARCH` |
 | Transactions | 開始行程用 `WATCH`＋`MULTI/EXEC` 樂觀鎖 |
-| Lua | 結束自己的紀錄：移出 active、最後一人時把行程改成 ended，原子完成 |
-| Streams Consumer Group | `stream:ingest` 由獨立的 worker 容器 `XREADGROUP` 消費；group `stats` 算每人里程／極速／移動時間（`trip:{id}:stats:{uid}`）。處理完才 `XACK`，worker 當掉時用 `XAUTOCLAIM` 接手閒置 60 秒的訊息；`docker compose up -d --scale worker=2` 自動分攤。進度看 `GET /api/system/streams`（`XINFO GROUPS／CONSUMERS`） |
-| Lua（冪等） | worker 更新統計時依 ts 去重，at-least-once 重送不會重算里程 |
-| Lua（落隊判斷） | group `alerts`：`GEOPOS` 取全隊位置，座標中位數當全隊中心、已騎里程判斷前後，超過門檻（預設 2 km，建立者可調）就在 `trip:{id}:lagflag` 設旗標並發事件；回到 75% 以內解除。判斷＋改旗標在同一個 script，多個 worker 同時算也只警示一次；`SET NX PX` 節流每行程 2 秒算一次 |
-| GEO（集合點） | `trip:{id}:waypoints` 存集合點／休息點；worker 對每筆回報 `GEOSEARCH FROMLONLAT … BYRADIUS` 找附近的點，進入各自半徑就算抵達 |
-| Lua（抵達／到齊） | `SADD trip:{id}:arrived:{wid}` 回傳 1 才通知「抵達」；再用 `SDIFF active arrived` 為空＋`SET NX` 判斷「全員到齊」，多個 worker 同時處理也只通知一次 |
-| GEO（測速） | `poi:speedcam` 全台約 1,900 個測速點；worker 對每筆回報 `GEOSEARCH … BYRADIUS 1000 m WITHDIST WITHCOORD`，留下行進方向 ±35° 扇形內、離行進方向延長線 100 m 內、而且拍攝方向相符的最近一支 |
-| RediSearch | `idx:speedcam`（Hash `speedcam:{id}`）：縣市／鄉鎮 TAG、速限 NUMERIC、地址中文全文、位置 GEO，一個查詢就能做「南投縣＋速限 40～60＋地址含臺14＋我附近 20 km」 |
-| TTL 去重 | 測速提醒 `SET camhit:{trip}:{uid}:{cam} NX EX 900`：key 還在就代表提醒過，時間到自動解除 |
-| Streams＋Pub/Sub（互動） | 快速訊息、地圖標註、SOS 都寫進 `trip:{id}:events` 並廣播，回放自動帶到；時間用本人裝置回報的 ts |
-| GEO（標註） | `trip:{id}:marks`；坑洞／落石由 worker `GEOSEARCH` 前方 300 m，提醒正騎過去的隊友（標註的人不提醒） |
-| TTL 限流 | 快速訊息 `SET ratelimit:msg:{uid} NX PX 2000`，2 秒內只能發一則 |
-| RedisJSON | `route:{id}` 存整條路線（途經點、幾千個座標、累計里程、轉彎指示、摘要）；`JSON.GET route:{id} $.summary $.points` 只取需要的部分，worker 也只取 `$.coords $.cum_km`，不必整包讀出來再解析 |
-| Lua（路線版落隊） | 有路線時，worker 先把每個人投影到路線上得到「沿路線里程」（`trip:{id}:progress`），落隊 Lua 改用里程中位數當中心：山路髮夾彎直線只差 400 m、沿路線其實落後 3 km 的情況也抓得到 |
-| Hash＋HSETNX／HDEL | 偏離路線（離路線 > 150 m）`HSETNX trip:{id}:offroute` 回傳 1 才通知，回到 60 m 內 `HDEL` 回傳 1 才通知「回到路線」 |
-| Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時在 Redis 裡 `SUNION` |
+
+### 原子判斷（Lua、NX）
+
+| 功能 | 用在哪 |
+|---|---|
+| Lua：結束紀錄 | 移出 active、最後一人時把行程改成 ended，原子完成 |
+| Lua：冪等統計 | worker 更新里程時依 ts 去重，at-least-once 重送不會重算 |
+| Lua：落隊 | 有路線用「沿路線里程」中位數當中心（山路髮夾彎直線只差 400 m、沿路線落後 3 km 也抓得到），沒路線用座標中位數＋已騎里程；判斷＋改旗標在同一個 script，多個 worker 也只警示一次 |
+| Lua：抵達／全員到齊 | `SADD` 回傳 1 才通知抵達；`SDIFF active arrived` 為空＋`SET NX` 判斷全員到齊 |
+| `SET NX EX`／`NX PX` | 測速提醒去重（15 分鐘）、坑洞提醒去重、快速訊息限流（2 秒）、落隊判斷節流（每行程 2 秒一次） |
+| `HSETNX`／`HDEL` | 偏離路線／回到路線、異常久停／恢復移動，回傳值保證只通知一次 |
+
+### 查詢與分析
+
+| 功能 | 用在哪 |
+|---|---|
+| RediSearch：測速 | `idx:speedcam`：縣市 TAG＋速限 NUMERIC＋地址中文全文＋位置 GEO，「南投縣、速限 40～60、地址含臺14、我附近 20 km」一個查詢 |
+| RediSearch：地點搜尋 | `idx:poi`：本機 OSM 的 10.5 萬筆地名與 POI，中文斷詞＋前綴；`FT.SUGADD／FT.SUGGET`（含 FUZZY）打字自動完成 |
+| RediSearch：GEOSHAPE | `idx:townshape`：全台 368 個鄉鎮市區多邊形，`FT.SEARCH "@shape:[CONTAINS $pt]"` 查一個點在哪個鄉鎮 → 點亮鄉鎮（SQL 通常得裝 PostGIS） |
+| RedisJSON | `route:{id}` 整條路線（途經點、幾千個座標、累計里程、轉彎指示）；`JSON.GET … $.summary` 只取需要的部分 |
+| TimeSeries | `ts:{trip}:{uid}:speed／alt`（回放 `TS.MRANGE … FILTER trip=… AGGREGATION avg`）；`ts:pace:{uid}:{類別}:m／s` 個人在各種路的距離與時間（`TS.MRANGE … GROUPBY cat REDUCE sum`）；`ts:sys:writes`、`ts:sys:pubsub` 後台每秒寫入與訊息量 |
+| Sorted Set | `heat:{uid}` 熱力圖格子計數（`ZINCRBY`，`ZREVRANGE` 就是最常去的地方）；`online:report` 線上人數（`ZCOUNT` 最近 2 分鐘） |
+| Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時 `SUNION`；`user:{uid}:towns` 點亮的鄉鎮（`SADD` 回傳 1 = 第一次點亮）；`SDIFF` 算誰還沒到集合點 |
+| Hash 快取 | `celltown` 格子 → 鄉鎮（同一格不必每次都查空間索引）；`cache:` 查詢結果 TTL 快取 |
 
 ## 階段
 
 - [x] **M1 核心**：帳號、開團／邀請碼／開始／結束、位置回報（網頁＋Traccar）、即時地圖（深色／衛星／淺色、3D 地形）、失聯偵測、GPX 匯入、模擬器、全年迷霧足跡
-- [x] **M2 回放**：全隊同步、時間軸＋倍速（1～300×）、事件標記可跳轉、跟拍鏡頭（車頭朝上、3D）、依隊員／速度／海拔上色、海拔與速度曲線（TS.MRANGE）、整趟摘要
-- [ ] M3 警示與互動：Worker（consumer group）✓、落隊 ✓、抵達 ✓、測速（RediSearch）✓、訊息／標註／SOS ✓；Telegram 推播待做
-- [x] **M4 導航**：Google Maps 連結匯入、Valhalla 路線（機車不走國道與快速道路／重機不走國道但 3甲 例外、可走快速道路／汽車）、規劃頁 `/plan`、路線存 RedisJSON、沿路線進度與全隊進度條、預估抵達、轉彎提示、偏離路線、路線版落隊
-- [ ] M5 戰情室、後台、點亮鄉鎮（GEOSHAPE）、熱力圖
-- [ ] M6 部署、UML、簡報、影片
+- [x] **M2 回放**：全隊同步、時間軸＋倍速（1～300×）、事件標記可跳轉、跟拍鏡頭、依隊員／速度／海拔上色、海拔與速度曲線（TS.MRANGE）、整趟摘要
+- [x] **M3 警示與互動**：Worker（consumer group）、落隊、抵達與全員到齊、前方測速（RediSearch）、快速訊息、地圖標註與前方路況、SOS、異常久停。**Telegram 推播先不做**（使用者決定）
+- [x] **M4 導航**：規劃頁（地點搜尋、聰明插入停靠點、沿路線找）、Valhalla 路線（機車不走國道與快速道路／重機不走國道但國道3甲例外、可走快速道路／汽車）、1～3 條方案、依個人速度估時間、Google Maps 匯入（選用）、全隊進度條、轉彎提示、偏離路線、路線版落隊
+- [x] **M5 長期紀錄與大螢幕**：點亮全台鄉鎮（GEOSHAPE）、熱力圖、累計統計、戰情室、管理後台
+- [ ] **M6 繳交**：架構圖與 UML、部署說明、簡報大綱、影片腳本、繳交清單與 Redis 匯出工具已備好（`docs/`）；實際部署、簡報、錄影、上傳 GitHub 由使用者進行
+
+## 沒有做的（規格有、但這次不做）
+
+- Telegram／Web Push 推播（使用者決定先不做）
+- TDX 即時路況、封路、天氣（需要申請 API 金鑰；後台已標示「未串接」）
+- 文字聊天室（目前用快速訊息＋自訂文字代替）、Google 登入（使用者決定用帳號密碼）
