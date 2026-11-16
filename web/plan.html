@@ -13,6 +13,7 @@
   .pl header b{font-size:16px;display:block}
   .pl header span{font-size:12px;color:var(--muted)}
   .pl .body{flex:1;overflow-y:auto;padding:6px 14px 14px;display:flex;flex-direction:column;gap:12px}
+  .pl .body>*{flex-shrink:0} /* 轉彎指示很長時，不要把途經點清單擠成 0 高 */
   .pl h3{margin:4px 2px 0;font-size:13px;color:var(--muted);font-weight:600}
   .row{display:flex;gap:8px}
   .row>.input{flex:1;min-width:0}
@@ -64,7 +65,9 @@
     <div class="note">Google 的連結只帶得出起點、終點和途經點，路線由騎跡用機車模式重新計算；想固定走哪條路，就在 Google Maps 多加幾個途經點。</div>
     <h3>途經點 <span class="note" style="font-weight:400">（在地圖上點一下加入，點可以拖曳）</span></h3>
     <div class="pts" id="pts"></div>
-    <label class="opt"><input type="checkbox" id="avoid" checked> 避開國道（550cc 以下機車不能上國道）</label>
+    <h3>交通工具</h3>
+    <div class="seg" id="veh"><button data-v="scooter" class="on">機車</button><button data-v="heavy">重機</button><button data-v="car">汽車</button></div>
+    <div class="note" id="vehNote"></div>
     <div id="msg"></div>
     <div id="result" hidden>
       <div class="sum"><div><b class="num" id="sKm">–</b><span>公里</span></div><div><b class="num" id="sMin">–</b><span>預估時間</span></div><div><b class="num" id="sTurn">–</b><span>個轉彎</span></div></div>

@@ -116,6 +116,6 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 - [x] **M1 核心**：帳號、開團／邀請碼／開始／結束、位置回報（網頁＋Traccar）、即時地圖（深色／衛星／淺色、3D 地形）、失聯偵測、GPX 匯入、模擬器、全年迷霧足跡
 - [x] **M2 回放**：全隊同步、時間軸＋倍速（1～300×）、事件標記可跳轉、跟拍鏡頭（車頭朝上、3D）、依隊員／速度／海拔上色、海拔與速度曲線（TS.MRANGE）、整趟摘要
 - [ ] M3 警示與互動：Worker（consumer group）✓、落隊 ✓、抵達 ✓、測速（RediSearch）✓、訊息／標註／SOS ✓；Telegram 推播待做
-- [x] **M4 導航**：Google Maps 連結匯入、Valhalla 機車路線（避開國道）、規劃頁 `/plan`、路線存 RedisJSON、沿路線進度與全隊進度條、預估抵達、轉彎提示、偏離路線、路線版落隊
+- [x] **M4 導航**：Google Maps 連結匯入、Valhalla 路線（機車避開國道／重機可走國道／汽車三種模式）、規劃頁 `/plan`、路線存 RedisJSON、沿路線進度與全隊進度條、預估抵達、轉彎提示、偏離路線、路線版落隊
 - [ ] M5 戰情室、後台、點亮鄉鎮（GEOSHAPE）、熱力圖
 - [ ] M6 部署、UML、簡報、影片

@@ -138,27 +138,42 @@ def turn_text(m: dict) -> tuple[str, str]:
     if t in (26,) and m.get("roundabout_exit_count"):
         act = f"進入圓環，第 {m['roundabout_exit_count']} 個出口"
     names = (m.get("street_names") or m.get("begin_street_names") or [])[:2]
-    return act, "／".join(road_name(n, names) for n in names)
+    street = "／".join(road_name(n, names, bool(m.get("highway"))) for n in names)
+    # 交流道：附上出口名稱和方向牌，例如「霧峰系統交流道（往國姓／埔里）」
+    sign = m.get("sign") or {}
+    exit_name = "／".join(x["text"] for x in sign.get("exit_name_elements", [])[:1])
+    toward = "／".join(x["text"] for x in sign.get("exit_toward_elements", [])[:2])
+    extra = f"{exit_name}（往{toward}）" if exit_name and toward else exit_name or (f"往{toward}" if toward else "")
+    return act, " · ".join(x for x in (street, extra) if x)
 
 
-def road_name(n: str, all_names: list[str]) -> str:
-    """OSM 的道路編號只寫數字：1～99 是省道（台3、台7甲），100～199 是縣道。名稱裡有「高速」的是國道，不補。"""
-    if any("高速" in x for x in all_names):
-        return n
+def road_name(n: str, all_names: list[str], highway: bool = False) -> str:
+    """OSM 的道路編號只寫數字。Valhalla 標 highway（國道等級）就是國道；
+    其餘 1～99 是省道（台3、台7甲），100～199 是縣道。"""
     m = re.fullmatch(r"(\d{1,3})([甲乙丙丁戊己庚]?)", n)
     if not m:
         return n
+    if highway or any("高速" in x for x in all_names):
+        return f"國道{n}"
     num = int(m.group(1))
     return f"台{n}" if num < 100 else f"縣道{n}" if num < 200 else n
 
 
-async def valhalla_route(points: list[dict], avoid_highways: bool) -> dict:
+# 交通工具 → Valhalla 的 costing。台灣 550cc 以下機車不能上國道；550cc 以上紅牌重機可以走部分國道。
+VEHICLES = {
+    "scooter": {"name": "機車", "costing": "motorcycle", "options": {"use_highways": 0, "use_trails": 0}},
+    "heavy": {"name": "重機", "costing": "motorcycle", "options": {"use_highways": 1, "use_trails": 0}},
+    "car": {"name": "汽車", "costing": "auto", "options": {}},
+}
+
+
+async def valhalla_route(points: list[dict], vehicle: str) -> dict:
+    v = VEHICLES[vehicle]
     body = {
         "locations": [{"lat": p["lat"], "lon": p["lon"], "type": "break" if i in (0, len(points) - 1) else "through"}
                       for i, p in enumerate(points)],
-        "costing": "motorcycle",
-        # 台灣 550cc 以下機車不能上國道：use_highways=0 盡量避開高速公路等級的道路
-        "costing_options": {"motorcycle": {"use_highways": 0 if avoid_highways else 0.5, "use_trails": 0}},
+        "costing": v["costing"],
+        "costing_options": {v["costing"]: v["options"]} if v["options"] else {},
         "units": "kilometers",
     }
     try:
@@ -209,14 +224,22 @@ class PointIn(BaseModel):
 
 class PlanIn(BaseModel):
     points: list[PointIn] = Field(min_length=2, max_length=25)
-    avoid_highways: bool = True
+    vehicle: str = "scooter"            # scooter 機車／heavy 重機／car 汽車
+    avoid_highways: bool | None = None  # 舊版欄位：有給就換算成 vehicle
     source_url: str = Field("", max_length=4000)
+
+    def mode(self) -> str:
+        if self.avoid_highways is not None and self.vehicle == "scooter":
+            return "scooter" if self.avoid_highways else "heavy"
+        if self.vehicle not in VEHICLES:
+            raise HTTPException(400, "交通工具只能是 scooter、heavy、car")
+        return self.vehicle
 
 
 @router.post("/routes/preview")
 async def preview(body: PlanIn, uid: str = Depends(current_uid)):
     """只算不存：規劃頁預覽用。"""
-    return await valhalla_route([p.model_dump() for p in body.points], body.avoid_highways)
+    return await valhalla_route([p.model_dump() for p in body.points], body.mode())
 
 
 # ---------- 行程的路線 ----------
@@ -240,8 +263,9 @@ async def trip_route_summary(tid: str, uid: str = Depends(current_uid)):
     rid = await r.hget(K.trip(tid), "route")
     if not rid:
         return {}
-    res = await r.json().get(K.route(rid), "$.summary", "$.points", "$.avoid_highways")
-    return {"summary": res["$.summary"][0], "points": res["$.points"][0], "avoid_highways": res["$.avoid_highways"][0]}
+    res = await r.json().get(K.route(rid), "$.summary", "$.points", "$.vehicle")
+    return {"summary": res["$.summary"][0], "points": res["$.points"][0],
+            "vehicle": (res["$.vehicle"] or ["scooter"])[0]}
 
 
 @router.put("/trips/{tid}/route")
@@ -252,10 +276,11 @@ async def set_route(tid: str, body: PlanIn, uid: str = Depends(current_uid)):
     if t.get("status") == "ended":
         raise HTTPException(409, "行程已經結束")
     pts = [p.model_dump() for p in body.points]
-    route = await valhalla_route(pts, body.avoid_highways)
+    vehicle = body.mode()
+    route = await valhalla_route(pts, vehicle)
     rid = str(await r.incr("seq:route"))
     doc = {"id": rid, "trip": tid, "by": uid, "created": int(time.time() * 1000), "points": pts,
-           "avoid_highways": body.avoid_highways, "source_url": body.source_url, **route}
+           "vehicle": vehicle, "avoid_highways": vehicle == "scooter", "source_url": body.source_url, **route}
     await r.json().set(K.route(rid), "$", doc)
     old = t.get("route")
     await r.hset(K.trip(tid), "route", rid)
@@ -263,7 +288,8 @@ async def set_route(tid: str, body: PlanIn, uid: str = Depends(current_uid)):
         await r.delete(K.route(old))
     await r.delete(K.progress(tid))
     s = route["summary"]
-    await events.emit(tid, "route", uid, f"設定路線：{s['km']:.1f} km，預估 {s['min'] // 60} 小時 {s['min'] % 60} 分")
+    await events.emit(tid, "route", uid, f"設定路線（{VEHICLES[vehicle]['name']}）：{s['km']:.1f} km，"
+                                          f"預估 {s['min'] // 60} 小時 {s['min'] % 60} 分")
     await events.publish(tid, {"kind": "route", "id": rid})
     return {"id": rid, "summary": s}
 

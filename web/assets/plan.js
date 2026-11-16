@@ -9,7 +9,19 @@ $('#back').href = `/trip?id=${tid}`;
 const M = createMap($('#map'), { style: 'dark', center: [121.0, 23.8], zoom: 7, terrain: false });
 const map = M.map;
 window.qijiMap = map;
-const P = { pts: [], route: null, trip: null, markers: [], seq: 0, sourceUrl: '' };
+const P = { pts: [], route: null, trip: null, markers: [], seq: 0, sourceUrl: '', vehicle: 'scooter' };
+const VEH_NOTE = {
+  scooter: '機車模式，避開國道（550cc 以下不能上國道）',
+  heavy: '機車模式，可走國道（550cc 以上紅牌；國道目前只開放部分路段，請以公告為準）',
+  car: '汽車模式（同行的車或支援車）',
+};
+function setVehicle(v) {
+  P.vehicle = v;
+  document.querySelectorAll('#veh button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  $('#vehNote').textContent = VEH_NOTE[v];
+}
+$('#veh').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && b.dataset.v !== P.vehicle) { setVehicle(b.dataset.v); preview(); } });
+setVehicle('scooter');
 
 const pad = () => (innerWidth <= 760 ? { top: 60, bottom: innerHeight * 0.52 + 30, left: 30, right: 30 } : { top: 60, bottom: 60, left: 420, right: 80 });
 
@@ -77,7 +89,7 @@ async function preview() {
   if (P.pts.length < 2) { P.route = null; showRoute(); return; }
   $('#msg').innerHTML = '<div class="note">計算路線中…</div>';
   try {
-    const route = await api('/api/routes/preview', { method: 'POST', body: { points: P.pts, avoid_highways: $('#avoid').checked } });
+    const route = await api('/api/routes/preview', { method: 'POST', body: { points: P.pts, vehicle: P.vehicle } });
     if (seq !== P.seq) return; // 已經有更新的請求
     P.route = route;
     $('#msg').innerHTML = '';
@@ -88,7 +100,6 @@ async function preview() {
     $('#msg').innerHTML = `<div class="err">${esc(err.message)}</div>`;
   }
 }
-$('#avoid').onchange = preview;
 
 function showRoute() {
   map.getSource('plan')?.setData(lineGeo());
@@ -123,7 +134,7 @@ $('#gForm').addEventListener('submit', async (e) => {
 $('#apply').onclick = async () => {
   $('#apply').disabled = true;
   try {
-    const r = await api(`/api/trips/${tid}/route`, { method: 'PUT', body: { points: P.pts, avoid_highways: $('#avoid').checked, source_url: P.sourceUrl } });
+    const r = await api(`/api/trips/${tid}/route`, { method: 'PUT', body: { points: P.pts, vehicle: P.vehicle, source_url: P.sourceUrl } });
     if ($('#asRest').checked) {
       for (const [i, p] of P.pts.slice(1, -1).entries()) {
         await api(`/api/trips/${tid}/waypoints`, { method: 'POST', body: { name: p.name || `途經點 ${i + 1}`, lat: p.lat, lon: p.lon, kind: 'rest' } }).catch(() => {});
@@ -153,7 +164,7 @@ $('#clear').onclick = async () => {
     const route = await api(`/api/trips/${tid}/route`);
     if (route?.points) {
       P.pts = route.points; P.route = route; P.sourceUrl = route.source_url || '';
-      $('#avoid').checked = route.avoid_highways !== false;
+      setVehicle(route.vehicle || (route.avoid_highways === false ? 'heavy' : 'scooter'));
       $('#clear').hidden = !P.trip.is_owner || P.trip.status === 'ended';
       renderPts(); drawMarkers();
       M.onStyle(() => showRoute());

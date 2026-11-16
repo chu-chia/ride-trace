@@ -479,7 +479,7 @@ function renderRoutePanel() {
       <div class="t2">${fmtKm(p.km)} / ${fmtKm(total)}${done ? ' · 已結束' : ` · 剩 ${fmtKm(left)} · 約 ${etaClock((left / speedKmh(m.u.uid)) * 60)} 到`}</div></div></div>`;
   }).join('');
   pop.innerHTML = `
-    <div class="qx-head"><b>路線</b><span class="small muted">${s.km.toFixed(1)} km · 預估 ${Math.floor(s.min / 60)}:${String(s.min % 60).padStart(2, '0')} · ${X.route.avoid_highways ? '避開國道' : '可走國道'} · 落隊改用沿路線距離</span></div>
+    <div class="qx-head"><b>路線</b><span class="small muted">${s.km.toFixed(1)} km · 預估 ${Math.floor(s.min / 60)}:${String(s.min % 60).padStart(2, '0')} · ${{ scooter: '機車', heavy: '重機', car: '汽車' }[X.route.vehicle || (X.route.avoid_highways === false ? 'heavy' : 'scooter')]} · 落隊改用沿路線距離</span></div>
     <div class="qx-list">${rows || '<div class="small muted" style="padding:6px 2px">還沒有人開始回報位置</div>'}</div>
     <a class="btn block" href="/plan?trip=${tid}">${owner ? '修改路線' : '看路線規劃'}</a>`;
 }
