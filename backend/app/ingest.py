@@ -105,8 +105,11 @@ async def ingest(uid: str, fix: Fix) -> dict:
                                   "RETENTION", TS_RETENTION_MS, "ON_DUPLICATE", "LAST",
                                   "LABELS", "trip", tid, "uid", uid, "kind", "alt")
             p.set(K.hb(tid, uid), now, ex=HEARTBEAT_S)
-            p.xadd(K.ingest, {"trip": tid, "uid": uid, **fields}, maxlen=100_000, approximate=True)
             p.publish(K.live(tid), json.dumps({"kind": "pos", "uid": uid, **{k: _num(v) if k != "src" else v for k, v in fields.items()}}))
+        # 交給 worker：行程中的回報（警示、統計），以及所有新的足跡點（熱力圖、點亮鄉鎮）
+        if live or fresh:
+            p.xadd(K.ingest, {"trip": tid if live else "", "uid": uid, "fp": 1 if fresh else 0, **fields},
+                   maxlen=100_000, approximate=True)
         p.execute_command("TS.INCRBY", K.ts_writes, 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000)
         results = await p.execute(raise_on_error=False)
 

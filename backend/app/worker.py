@@ -23,6 +23,7 @@ from redis.exceptions import ResponseError
 
 from . import events
 from .db import K, arrive, check_lag, r, update_stats
+from .longterm import record_point
 from .geo import bearing_deg
 
 log = logging.getLogger("qiji.worker")
@@ -46,8 +47,15 @@ async def ensure_group(group: str):
 # ---------- handlers：收到一批訊息，回傳要 XACK 的 ID ----------
 
 async def handle_stats(msgs: list[tuple[str, dict]]) -> list[str]:
-    """每位隊友的里程、極速、移動時間。Lua 原子更新，依 ts 去重，重送不會重算。"""
+    """每位隊友的里程、極速、移動時間（Lua 原子更新，依 ts 去重，重送不會重算）；
+    所有新的足跡點都更新熱力圖與點亮鄉鎮（不管有沒有在行程中）。"""
     changed: dict[tuple[str, str], None] = {}
+    for _, f in msgs:
+        if f.get("fp") == "1" and f.get("uid") and "lat" in f:
+            code = await record_point(f["uid"], float(f["lat"]), float(f["lon"]), int(f["ts"]))
+            if code and f.get("trip"):
+                name, county = await r.hmget(f"town:{code}", "name", "county")
+                await events.emit(f["trip"], "town", f["uid"], f"點亮新鄉鎮：{county}{name}", ts=int(f["ts"]), town=code)
     for _, f in msgs:
         tid, uid = f.get("trip"), f.get("uid")
         if not tid or not uid or "lat" not in f:
