@@ -22,6 +22,8 @@ const EV = {
   sos: ['SOS', 'var(--crit)', 'S', '#ff3b30'], sos_off: ['解除 SOS', 'var(--ok)', '安', '#30a46c'],
   route: ['路線', 'var(--accent)', '路', '#0a84ff'], offroute: ['偏離路線', 'var(--warn)', '偏', '#ff9f0a'],
   onroute: ['回到路線', 'var(--ok)', '回', '#30a46c'],
+  stuck: ['異常久停', 'var(--warn)', '停', '#ff9f0a'], moving: ['恢復移動', 'var(--ok)', '動', '#30a46c'],
+  town: ['點亮鄉鎮', 'var(--accent)', '亮', '#ff8a3d'],
 };
 const fmtKm = (km) => (Math.abs(km) < 1 ? Math.round(Math.abs(km) * 1000) + ' m' : Math.abs(km).toFixed(1) + ' km');
 

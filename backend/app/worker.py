@@ -283,6 +283,42 @@ async def check_progress(tid: str, uid: str, f: dict):
         await events.publish(tid, {"kind": "progress", "uid": uid, "km": round(km, 3), "off_m": round(off)})
 
 
+STUCK_MIN = 10          # 規格 4.4：不在集合點或休息點，卻靜止超過 N 分鐘
+STUCK_SPEED_MS = 1.0    # 低於這個速度算靜止
+STUCK_NEAR_WP_M = 300   # 在集合點／休息點 300 m 內的停車是正常休息，不警示
+
+
+async def check_stuck(tid: str, uid: str, f: dict):
+    """異常久停：靜止開始的時間記在 state 的 stop_since（裝置時間）；超過 10 分鐘、附近又沒有集合點／休息點，
+    就用 HSETNX 標記並通知一次；重新移動（> 3 m/s）時 HDEL 解除並通知「恢復移動」。"""
+    try:
+        sp, ts = float(f.get("speed") or 0), int(f["ts"])
+    except (KeyError, ValueError):
+        return
+    key = K.state(tid, uid)
+    if sp >= 3:
+        await r.hdel(key, "stop_since")
+        if await r.hdel(K.stuck(tid), uid):
+            await events.emit(tid, "moving", uid, "恢復移動", ts=ts)
+        return
+    if sp >= STUCK_SPEED_MS:
+        return
+    since = await r.hget(key, "stop_since")
+    if not since:
+        await r.hset(key, "stop_since", ts)
+        return
+    mins = (ts - int(since)) / 60000
+    if mins < STUCK_MIN:
+        return
+    near = await r.geosearch(K.waypoints(tid), longitude=float(f["lon"]), latitude=float(f["lat"]),
+                             radius=STUCK_NEAR_WP_M, unit="m", count=1)
+    if near:
+        return  # 在集合點／休息點：正常休息
+    if await r.hsetnx(K.stuck(tid), uid, ts):
+        await events.emit(tid, "stuck", uid, f"異常久停：已經停了 {int(mins)} 分鐘，附近沒有集合點或休息點", ts=ts,
+                          lat=f["lat"], lon=f["lon"])
+
+
 async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
     """警示類：抵達集合點、前方測速（每筆都查）、落隊（同一批裡同一個行程只判斷一次）。"""
     for _, f in msgs:
@@ -291,6 +327,7 @@ async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
             await check_arrival(f["trip"], f["uid"], float(f["lat"]), float(f["lon"]), int(f["ts"]))
             await check_speedcam(f["trip"], f["uid"], f)
             await check_hazard(f["trip"], f["uid"], f)
+            await check_stuck(f["trip"], f["uid"], f)
     trips = dict.fromkeys(f["trip"] for _, f in msgs if f.get("trip"))
     for tid in trips:
         await check_trip_lag(tid)
