@@ -6,48 +6,101 @@
 <title>騎跡</title>
 <link rel="stylesheet" href="/assets/app.css">
 <style>
-  .head{display:flex;justify-content:space-between;align-items:center}
-  .head h1{margin:2px 0 0;font-size:28px}
-  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .row2 form{display:flex;flex-direction:column;gap:8px}
-  .fp{display:flex;align-items:center;gap:14px;cursor:pointer;color:inherit}
-  .fp b{font-size:17px}
-  .fog{width:54px;height:54px;border-radius:14px;flex:none;background:radial-gradient(circle at 35% 40%,transparent 0 9px,rgba(20,26,34,.9) 15px),radial-gradient(circle at 70% 65%,#5ac8fa 0 6px,transparent 7px),linear-gradient(135deg,#2b3a4a,#11161c)}
-  @media (max-width:440px){.row2{grid-template-columns:1fr}}
+  /* ---------- 背景：速度流線（homebg.js），細琥珀光軌斜斜慢慢流過 ---------- */
+  #bg{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+  .page{position:relative;z-index:1}
+  .page{max-width:640px;gap:16px}
+  .head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-top:8px}
+  .head h1{margin:4px 0 0;font-size:30px;line-height:1.15}
+
+  /* 帳號選單：頭像點開才有登出 */
+  .menu{position:relative}
+  .menu summary{list-style:none;cursor:pointer;border-radius:50%;display:block}
+  .menu summary::-webkit-details-marker{display:none}
+  .menu summary .avatar{width:40px;height:40px;font-size:16px}
+  .menu .pop{position:absolute;right:0;top:48px;z-index:20;min-width:200px;padding:6px;border-radius:14px;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .menu .who{padding:10px 12px 8px;border-bottom:1px solid var(--line);margin-bottom:4px}
+  .menu .who b{display:block;font-size:15px}
+  .menu .pop button{border:0;background:none;text-align:left;padding:11px 12px;border-radius:10px;font-size:15px;cursor:pointer;min-height:44px}
+  .menu .pop button:hover{background:var(--surface-2)}
+
+  /* 招牌：足跡卡片。地圖類內容固定用夜色，不跟深淺色切換 */
+  .fp{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);height:300px;border-radius:24px;overflow:hidden;color:#f5f5f7;
+      background:radial-gradient(120% 90% at 85% 10%,#3a1d0c 0%,rgba(58,29,12,0) 55%),linear-gradient(160deg,#141a22,#07090c)}
+  .fp .txt{display:flex;flex-direction:column;justify-content:space-between;padding:20px 0 20px 22px;min-width:0}
+  .fp .eyebrow{color:#ffb27a}
+  .fp b{display:block;font-size:24px;line-height:1.2;margin-top:4px}
+  .fp .nums{display:flex;flex-direction:column;gap:10px}
+  .fp .nums div{display:flex;flex-direction:column}
+  .fp .nums strong{font-size:22px;line-height:1.1}
+  .fp .nums span{font-size:12px;color:#b9b9c0}
+  .fp .art{position:relative}
+  .fp canvas{position:absolute;inset:0;width:100%;height:100%}
+  .fp .go{position:absolute;right:14px;bottom:14px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.14);font-size:20px}
+  /* 進行中的行程：放在最前面，一鍵回地圖 */
+  .live{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:18px;background:var(--surface);color:inherit;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--ok) 55%,transparent)}
+  .live .pulse{width:12px;height:12px;border-radius:50%;background:var(--ok);flex:none;box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent);animation:pulse 1.8s infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 10px transparent}100%{box-shadow:0 0 0 0 transparent}}
+  @media (prefers-reduced-motion:reduce){.live .pulse{animation:none}}
+  .live b{font-size:16px}
+  .live .btn{flex:none}
+
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .row2 form{display:flex;flex-direction:column;gap:10px}
+  .row2 .eyebrow{font-size:12px}
+  @media (max-width:440px){.row2{grid-template-columns:1fr}.fp{height:280px}.fp .nums strong{font-size:19px}.fp b{font-size:21px}}
 </style>
 </head>
 <body>
+<canvas id="bg" aria-hidden="true"></canvas>
 <main class="page">
-  <div class="head">
+  <header class="head">
     <div><div class="eyebrow" id="today"></div><h1 id="hello">騎跡</h1></div>
-    <div style="display:flex;gap:8px;align-items:center"><span id="me"></span><button class="btn" id="logout">登出</button></div>
-  </div>
+    <details class="menu" id="menu">
+      <summary aria-label="帳號選單" id="me"></summary>
+      <div class="pop">
+        <div class="who"><b id="meName"></b><span class="small muted" id="meUser"></span></div>
+        <button type="button" id="logout">登出</button>
+      </div>
+    </details>
+  </header>
 
-  <a class="card fp" href="/footprint">
-    <div class="fog" aria-hidden="true"></div>
-    <div style="flex:1;min-width:0"><b>我的足跡</b><div class="small muted" id="fpSum">全年迷霧地圖，看看自己去過哪裡</div></div>
-    <span class="muted">›</span>
+  <a class="fp" href="/footprint" aria-label="我的足跡：打開全年迷霧地圖">
+    <div class="txt">
+      <div><div class="eyebrow">我的足跡</div><b id="fpTitle">去過的每一條路</b></div>
+      <div class="nums" id="fpNums"></div>
+    </div>
+    <div class="art"><canvas id="fpCanvas" aria-hidden="true"></canvas><span class="go" aria-hidden="true">›</span></div>
+  </a>
+
+  <a class="live" id="live" hidden>
+    <span class="pulse" aria-hidden="true"></span>
+    <div style="flex:1;min-width:0"><div class="small muted">進行中的行程</div><b id="liveName"></b><div class="small muted" id="liveSub"></div></div>
+    <span class="btn primary">回到地圖</span>
   </a>
 
   <div class="row2">
     <form class="card" id="createF">
       <div class="eyebrow">臨時開團</div>
-      <input class="input" id="tripName" placeholder="行程名稱，例如 武嶺日出團" maxlength="30">
+      <input class="input" id="tripName" placeholder="行程名稱，例如 武嶺日出團" maxlength="30" aria-label="行程名稱">
       <button class="btn primary">建立行程</button>
     </form>
     <form class="card" id="joinF">
       <div class="eyebrow">加入行程</div>
-      <input class="input num" id="code" placeholder="6 碼邀請碼" maxlength="6" style="text-transform:uppercase;letter-spacing:.15em">
+      <input class="input num" id="code" placeholder="6 碼邀請碼" maxlength="6" autocomplete="off" autocapitalize="characters" aria-label="邀請碼" style="text-transform:uppercase;letter-spacing:.15em">
       <button class="btn">加入</button>
     </form>
   </div>
-  <div class="err" id="err"></div>
+  <div class="err" id="err" role="alert"></div>
 
   <h2 class="sec">我的行程</h2>
   <div class="list" id="trips"><div class="li"><span class="muted">載入中…</span></div></div>
 </main>
 <script type="module">
 import { api, $, esc, avatar, clock } from '/assets/common.js';
+import { drawFootprint } from '/assets/footmini.js';
+import { startBg } from '/assets/homebg.js';
+startBg($('#bg'));
 const ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
 const d = new Date();
 $('#today').textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${'日一二三四五六'[d.getDay()]}`;
@@ -55,15 +108,27 @@ $('#today').textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${'�
 const me = await api('/api/me');
 $('#hello').textContent = `${d.getHours() < 11 ? '早安' : d.getHours() < 18 ? '午安' : '晚安'}，${me.nickname}`;
 $('#me').innerHTML = avatar(me);
+$('#meName').textContent = me.nickname;
+$('#meUser').textContent = '@' + me.username;
 $('#logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); location.href = '/login'; };
+// 點選單外面或按 Esc 就收起來
+document.addEventListener('click', (e) => { if (!$('#menu').contains(e.target)) $('#menu').open = false; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#menu').open = false; });
 
+const tripWhen = (t) => (t.started ? `${new Date(+t.started).toLocaleDateString('zh-TW')} ${clock(+t.started)} 出發` : `建立於 ${new Date(+t.created).toLocaleDateString('zh-TW')}`);
 async function loadTrips() {
   const trips = await api('/api/trips');
+  const live = trips.find((t) => t.status === 'live');
+  if (live) {
+    $('#live').hidden = false;
+    $('#live').href = '/trip?id=' + live.id;
+    $('#liveName').textContent = live.name;
+    $('#liveSub').textContent = `${tripWhen(live)} · ${live.member_count} 人`;
+  }
   $('#trips').innerHTML = trips.length ? trips.map((t) => {
     const [label, cls] = ST[t.status] || ['', ''];
-    const when = t.started ? `${new Date(+t.started).toLocaleDateString('zh-TW')} ${clock(+t.started)} 出發` : `建立於 ${new Date(+t.created).toLocaleDateString('zh-TW')}`;
-    return `<a class="li" href="/${t.status === 'ended' ? 'replay' : 'trip'}?id=${t.id}"><div class="grow"><div class="t1">${esc(t.name)} <span class="chip ${cls}">${label}</span></div><div class="t2">${when} · ${t.member_count} 人 · 邀請碼 ${esc(t.invite)}</div></div><span class="muted">›</span></a>`;
-  }).join('') : '<div class="li"><span class="muted">還沒有行程，建立一個或用邀請碼加入</span></div>';
+    return `<a class="li" href="/${t.status === 'ended' ? 'replay' : 'trip'}?id=${t.id}"><div class="grow"><div class="t1">${esc(t.name)} <span class="chip ${cls}">${label}</span></div><div class="t2">${tripWhen(t)} · ${t.member_count} 人 · 邀請碼 ${esc(t.invite)}</div></div><span class="muted" aria-hidden="true">›</span></a>`;
+  }).join('') : '<div class="li"><span class="muted">還沒有行程。在上面建立一個，或輸入朋友給的邀請碼。</span></div>';
 }
 async function join(code) {
   try { const t = await api('/api/trips/join', { method: 'POST', body: { code } }); location.href = '/trip?id=' + t.id; }
@@ -79,11 +144,23 @@ $('#joinF').onsubmit = (e) => { e.preventDefault(); join($('#code').value.trim()
 const pending = new URLSearchParams(location.search).get('join');
 if (pending) join(pending.toUpperCase());
 loadTrips();
+
+// 足跡卡片：數字先出來，縮圖資料比較大（約 5 萬格）隨後畫上
 api('/api/footprint/summary').then((s) => {
-  if (!s.points) return;
+  if (!s.points) {
+    $('#fpTitle').textContent = '還沒有足跡';
+    $('#fpNums').innerHTML = '<div><span>開始一趟行程，或匯入 GPX，地圖就會一格一格亮起來</span></div>';
+    return;
+  }
   const n = Object.keys(s.days).length;
   const km = Object.values(s.days).reduce((a, b) => a + b, 0);
-  $('#fpSum').textContent = `${n} 天、${s.points.toLocaleString()} 個點、約 ${Math.round(km).toLocaleString()} km`;
+  $('#fpNums').innerHTML = `<div><strong class="num">${n.toLocaleString()}</strong><span>天有紀錄</span></div><div><strong class="num">${Math.round(km).toLocaleString()} km</strong><span>總里程</span></div>`;
+  return api('/api/footprint/cells/all').then((c) => {
+    const draw = () => drawFootprint($('#fpCanvas'), c.cells, c.cell_deg);
+    draw();
+    addEventListener('resize', draw);
+    $('#fpNums').insertAdjacentHTML('beforeend', `<div><strong class="num">${c.count.toLocaleString()}</strong><span>個點亮的格子</span></div>`);
+  });
 }).catch(() => {});
 </script>
 </body>

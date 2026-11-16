@@ -1,6 +1,9 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, $, $$, esc, avatar, initialOf, clock, dur } from '/assets/common.js';
-import { createMap } from '/assets/mapbase.js';
+import { api, $, $$, dock, esc, avatar, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
+import { createMap, declutter } from '/assets/mapbase.js';
+
+// 寬螢幕：標題列（返回、行程名）併進右側面板頂端；手機維持浮在左上（先做，避免資料載完才跳版面）
+dock($('.topbar'), $('.panel'), '(min-width: 861px)');
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
@@ -110,6 +113,7 @@ for (const m of riders) {
   const el = document.createElement('div');
   el.className = 'rider';
   el.style.setProperty('--c', m.color);
+  el.style.setProperty('--ink', inkOn(m.color));
   el.innerHTML = `<div class="arrow" style="visibility:hidden"></div><div class="dot">${esc(initialOf(m.nickname))}</div><div class="name">${esc(m.nickname)}</div>`;
   el.onclick = () => setFollow(m.uid);
   m.el = el;
@@ -235,7 +239,8 @@ $('#colorBy').onclick = (e) => {
   applyLayerState();
 };
 $('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
-$('#b3d').onclick = () => { M.set3d(!M.is3d); $('#b3d').classList.toggle('on', M.is3d); };
+$('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
+press($('#b3d'), M.is3d);
 
 /* ---------- 主迴圈 ---------- */
 let lastUi = 0, lastFilter = 0, lastT = performance.now();
@@ -285,8 +290,20 @@ function frame(now) {
     // 全隊：每一格平滑地框住所有人（暫停時不動，保留整趟總覽或使用者自己調的視角）
     M.followGroup(riders.map((m) => stateAt(m, R.t).pos), { padding: pad(), maxZoom: 14.5 });
   }
+  if (now - lastDeclutter > 200) {
+    lastDeclutter = now;
+    const list = [...riders].sort((a, b) => (b.uid === R.follow) - (a.uid === R.follow));
+    declutter(map, list.map((m) => ({ el: m.el, pos: stateAt(m, R.t).pos, name: m.nickname })));
+  }
   requestAnimationFrame(frame);
 }
+let lastDeclutter = 0;
+
+// 手機版把「鏡頭／上色方式」那一列搬進下方面板，時間軸只留播放列
+const camRow = $('#camRow'), narrow = matchMedia('(max-width:860px)');
+const placeCamRow = () => (narrow.matches ? $('.panel .scroll').prepend(camRow) : $('.timeline').append(camRow));
+narrow.addEventListener('change', placeCamRow);
+placeCamRow();
 
 renderRiders();
 renderSummary();

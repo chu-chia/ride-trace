@@ -1,5 +1,5 @@
-import { api, $, $$, esc, avatar, initialOf, clock, dur, ago, toast } from '/assets/common.js';
-import { createMap } from '/assets/mapbase.js';
+import { api, $, $$, dock, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
+import { createMap, declutter } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
@@ -11,10 +11,10 @@ const STATUS = {
 const TRIP_ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
 const EV = {
   lost: ['失聯', 'var(--crit)', '!', '#ff3b30'], back: ['恢復', 'var(--ok)', '回', '#30a46c'],
-  start: ['開始', 'var(--accent)', '騎', '#0a84ff'], end: ['結束', 'var(--muted)', '終', '#8e8e93'],
+  start: ['開始', 'var(--accent)', '騎', '#d9500f'], end: ['結束', 'var(--muted)', '終', '#8e8e93'],
   join: ['加入', 'var(--accent)', '入', '#2aabee'], stop: ['結束紀錄', 'var(--muted)', '停', '#8e8e93'],
-  kick: ['移出', 'var(--warn)', '出', '#ff9f0a'], create: ['建立', 'var(--muted)', '建', '#8e8e93'],
-  behind: ['落隊', 'var(--warn)', '!', '#ff9f0a'], ahead: ['超前', 'var(--warn)', '前', '#ff9f0a'],
+  kick: ['移出', 'var(--warn)', '出', '#ffcc00'], create: ['建立', 'var(--muted)', '建', '#8e8e93'],
+  behind: ['落隊', 'var(--warn)', '!', '#ffcc00'], ahead: ['超前', 'var(--warn)', '前', '#ffcc00'],
   regroup: ['跟上', 'var(--ok)', '合', '#30a46c'],
   waypoint: ['集合點', 'var(--muted)', '集', '#8e8e93'], arrive: ['抵達', 'var(--ok)', '到', '#30a46c'],
   allin: ['全員到齊', 'var(--ok)', '齊', '#30a46c'],
@@ -50,6 +50,7 @@ function upsertMember(u, state) {
     const el = document.createElement('div');
     el.className = 'rider' + (u.uid === S.me ? ' me' : '');
     el.style.setProperty('--c', u.color);
+    el.style.setProperty('--ink', inkOn(u.color));
     el.innerHTML = `<div class="arrow"></div><div class="dot">${esc(initialOf(u.nickname))}</div><div class="name">${esc(u.nickname)}</div>`;
     el.onclick = () => { setFollow(u.uid); };
     m = { u, state: {}, el, marker: new maplibregl.Marker({ element: el, anchor: 'center' }), trail: [], onMap: false, pos: null, anim: null, lastAt: 0, lastTarget: null };
@@ -152,7 +153,7 @@ function camera(force) {
 // 之後「全隊」由動畫迴圈每一格平滑追（M.followGroup），不再定時 easeTo
 
 // 動畫迴圈：標記平滑移動、跟隨的人保持在畫面中間、軌跡線尾巴接著標記
-let lastTrailDraw = 0;
+let lastTrailDraw = 0, lastDeclutter = 0;
 function tick(now) {
   for (const m of S.members.values()) {
     if (!m.anim) continue;
@@ -175,6 +176,13 @@ function tick(now) {
     const pts = [...S.members.values()].filter((m) => m.pos).map((m) => m.pos);
     if (pts.length >= 2) M.followGroup(pts, { padding: S.pad, maxZoom: 15 });
   } else M.unfollow();
+  if (now - lastDeclutter > 200) {
+    lastDeclutter = now;
+    const ft = followTarget();
+    const list = [...S.members.values()].filter((m) => m.onMap && m.pos)
+      .sort((a, b) => (b.u.uid === S.me) - (a.u.uid === S.me) || (b === ft) - (a === ft));
+    declutter(map, list.map((m) => ({ el: m.el, pos: m.pos, name: m.u.nickname })));
+  }
   if (now - lastTrailDraw > 150 && map.getSource('trails')) {
     lastTrailDraw = now;
     map.getSource('trails').setData(trailsGeo());
@@ -184,13 +192,13 @@ function tick(now) {
 requestAnimationFrame(tick);
 
 function syncTools() {
-  $('#bAll').classList.toggle('on', S.follow === 'all');
-  $('#bMe').classList.toggle('on', S.follow === S.me);
+  press($('#bAll'), S.follow === 'all');
+  press($('#bMe'), S.follow === S.me);
 }
 $('#bAll').onclick = () => setFollow('all');
 $('#bMe').onclick = () => setFollow(S.me);
 $('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
-$('#b3d').onclick = () => { M.set3d(!M.is3d); $('#b3d').classList.toggle('on', M.is3d); };
+$('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 
 /* ---------- 面板 ---------- */
 $('#tabs').onclick = (e) => {
@@ -426,5 +434,8 @@ $('#bReplay').href = `/replay?id=${tid}`;
 $('#trUrl').textContent = `${location.origin}/osmand`;
 api('/api/me/device').then((d) => ($('#trId').textContent = d.device_id)).catch(() => {});
 syncTools();
-$('#b3d').classList.toggle('on', M.is3d);
+press($('#b3d'), M.is3d);
 connect();
+
+// 寬螢幕：標題列（返回、行程名、回放）併進右側面板頂端；手機維持浮在左上
+dock($('.topbar'), $('.panel'), '(min-width: 761px)');

@@ -30,7 +30,10 @@ const pop = $('#qxPop');
 function placeDock() {
   const panel = $('#panel');
   const narrow = innerWidth <= 760;
-  dock.style.bottom = narrow && panel ? `${Math.max(12, innerHeight - panel.getBoundingClientRect().top + 12)}px` : '';
+  // 手機：放在面板上方，再多留地圖版權列（MapLibre attribution）的高度，按鈕列才不會壓在它上面
+  const attr = document.querySelector('.maplibregl-ctrl-bottom-right')?.getBoundingClientRect();
+  const extra = attr && attr.height ? attr.height + 6 : 0;
+  dock.style.bottom = narrow && panel ? `${Math.max(12, innerHeight - panel.getBoundingClientRect().top + 12 + extra)}px` : '';
 }
 setInterval(placeDock, 400);
 addEventListener('resize', placeDock);
@@ -398,8 +401,8 @@ const routeGeo = () => ({ type: 'Feature', properties: {}, geometry: { type: 'Li
 M.onStyle(() => {
   if (!map.getSource('qx-route')) map.addSource('qx-route', { type: 'geojson', data: routeGeo() });
   const before = map.getLayer('trails-casing') ? 'trails-casing' : undefined; // 路線畫在大家的軌跡下面
-  if (!map.getLayer('qx-route-casing')) map.addLayer({ id: 'qx-route-casing', type: 'line', source: 'qx-route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#0b3d91', 'line-width': 9, 'line-opacity': 0.45 } }, before);
-  if (!map.getLayer('qx-route')) map.addLayer({ id: 'qx-route', type: 'line', source: 'qx-route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#64a8ff', 'line-width': 5, 'line-opacity': 0.55 } }, before);
+  if (!map.getLayer('qx-route-casing')) map.addLayer({ id: 'qx-route-casing', type: 'line', source: 'qx-route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#04204a', 'line-width': 11, 'line-opacity': 0.75 } }, before);
+  if (!map.getLayer('qx-route')) map.addLayer({ id: 'qx-route', type: 'line', source: 'qx-route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3d9bff', 'line-width': 6, 'line-opacity': 0.9 } }, before);
 });
 
 async function loadRoute() {

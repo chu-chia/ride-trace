@@ -13,15 +13,19 @@
   .topbar b{font-size:15px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
   .topbar .sub{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
   .tools{right:max(12px,env(safe-area-inset-right,0px));top:max(12px,env(safe-area-inset-top,0px))}
-  .panel{position:fixed;z-index:9;right:12px;top:72px;bottom:12px;width:380px;border-radius:22px;display:flex;flex-direction:column;overflow:hidden}
+  .panel{position:fixed;z-index:9;right:12px;top:12px;bottom:12px;width:380px;border-radius:22px;display:flex;flex-direction:column;overflow:hidden}
   .tools{right:404px}
   .panel .handle{display:none}
+  /* 地圖來源標示避開右側面板（maps.md：法律標示要固定在地圖上、不被擋住） */
+  .maplibregl-ctrl-bottom-right{right:400px}
   .banner{margin:14px 14px 0;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--accent) 12%,transparent);font-size:13.5px;display:flex;flex-direction:column;gap:10px}
   .panel .seg{margin:12px 14px 8px;flex:none}
   .body{flex:1;overflow-y:auto;padding:4px 14px 16px;display:flex;flex-direction:column;gap:10px}
   .li .right{text-align:right;font-size:12px;white-space:nowrap}
   #lagSet select{font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:2px 6px}
-  .li .kick{border:0;background:none;color:var(--crit);font-size:12px;cursor:pointer;padding:4px}
+  .li .kick{border:0;background:none;color:var(--crit-ink);font-size:13px;cursor:pointer;padding:6px 10px;min-height:32px;margin-right:-10px;border-radius:8px}
+  .li .kick:hover{background:color-mix(in srgb,var(--crit) 10%,transparent)}
+  .topbar a.go{margin-left:4px;padding:8px 12px;border-radius:10px;background:var(--surface-2);color:var(--fg);font-size:13px;font-weight:600;white-space:nowrap}
   .ev{display:grid;grid-template-columns:42px 9px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)}
   .ev:last-child{border-bottom:0}
   .ev time{font-size:11.5px;color:var(--muted)}
@@ -43,6 +47,8 @@
     .panel .handle::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--muted);opacity:.45}
     .tools{right:12px;top:76px}
     .topbar b{max-width:52vw}
+    .maplibregl-ctrl-bottom-right{right:0;bottom:46dvh}
+    body:has(.panel.small) .maplibregl-ctrl-bottom-right{bottom:150px}
   }
 </style>
 </head>
@@ -52,14 +58,14 @@
 <div class="topbar glass">
   <a class="back" href="/" aria-label="回首頁">‹</a>
   <div style="min-width:0"><b id="tName">行程</b><div class="sub"><span id="tStatus" class="chip">載入中</span><span class="num" id="tTimer"></span></div></div>
+  <a class="go" id="bReplay" title="回放到目前為止的紀錄">回放</a>
 </div>
 
 <div class="tools">
-  <button class="tool glass" id="bStyle" title="切換地圖風格">深色</button>
-  <button class="tool glass" id="b3d" title="3D 地形">3D</button>
-  <button class="tool glass on" id="bAll" title="自動顯示全隊">全隊</button>
-  <button class="tool glass" id="bMe" title="跟著我">跟我</button>
-  <a class="tool glass" id="bReplay" title="回放到目前為止的紀錄" style="color:var(--fg)">回放</a>
+  <button class="tool glass" id="bStyle" title="切換地圖風格（深色 → 衛星 → 淺色）">深色</button>
+  <button class="tool glass" id="b3d" title="3D 地形" aria-pressed="false">3D</button>
+  <button class="tool glass on" id="bAll" title="自動顯示全隊" aria-pressed="true">全隊</button>
+  <button class="tool glass" id="bMe" title="跟著我" aria-pressed="false">跟我</button>
 </div>
 
 <aside class="panel glass" id="panel">
