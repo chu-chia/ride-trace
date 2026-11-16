@@ -1,4 +1,4 @@
-// MapLibre 5 底圖：深色、衛星、淺色三種。
+// MapLibre 5 底圖：深色、衛星、淺色，足跡頁另有深藍。
 // 3D 模式＝山的地形（AWS 高程）＋城市的立體建築（OpenFreeMap 向量資料）＋天空。
 // 換風格後 style.load 會把地形、建築、天空和各頁自己的圖層全部加回來。
 const SAT = {
@@ -19,8 +19,10 @@ export const STYLES = {
   dark: { name: '深色', url: 'https://tiles.openfreemap.org/styles/dark' },
   sat: { name: '衛星', url: SAT },
   light: { name: '淺色', url: 'https://tiles.openfreemap.org/styles/liberty' },
+  // 足跡頁用：Liberty（有地名、路名、地標圖示）重新上成深藍色，黃色軌跡在上面最清楚
+  navy: { name: '深藍', url: 'https://tiles.openfreemap.org/styles/liberty' },
 };
-const ORDER = ['dark', 'sat', 'light'];
+const DEFAULT_ORDER = ['dark', 'sat', 'light'];
 
 // 每種底圖的建築顏色（依高度由低到高）、山影、天空
 const LOOK = {
@@ -34,6 +36,11 @@ const LOOK = {
     hillshade: { 'hillshade-exaggeration': 0.25, 'hillshade-shadow-color': '#000000' },
     sky: { 'sky-color': '#6fa4dd', 'horizon-color': '#cfe0f0', 'fog-color': '#dfe9f3', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.6, 'fog-ground-blend': 0.35, 'atmosphere-blend': 0 },
   },
+  navy: {
+    building: ['#2d4084', '#34498f', '#3c529b'], buildingOpacity: 0.9,
+    hillshade: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': '#0d1638', 'hillshade-highlight-color': '#3a4f95', 'hillshade-accent-color': '#1a2759' },
+    sky: { 'sky-color': '#0b1433', 'horizon-color': '#24356f', 'fog-color': '#1a2759', 'sky-horizon-blend': 0.7, 'horizon-fog-blend': 0.6, 'fog-ground-blend': 0.35, 'atmosphere-blend': 0 },
+  },
   light: {
     building: ['#e4ddd2', '#c9bfb0', '#b3a794'], buildingOpacity: 0.85,
     hillshade: { 'hillshade-exaggeration': 0.45, 'hillshade-shadow-color': '#4b5563' },
@@ -41,13 +48,62 @@ const LOOK = {
   },
 };
 const BUILDING_ID = 'qiji-buildings-3d';
+
+// 深藍底圖：把 Liberty 的每一層依「是什麼」換色。只改顏色，不動資料與篩選。
+const NAVY = {
+  land: '#24356f', water: '#16245a', waterLine: '#1c2c66', green: '#22396c', landuse: '#283a78', building: '#2d4084',
+  casing: '#1e2d63', major: '#4d62ad', secondary: '#42569d', minor: '#34478a', path: '#2f4180', rail: '#3a4c8c', boundary: '#7d8cc8',
+  halo: '#17234f', city: '#f2f4ff', place: '#cdd4f5', poi: '#c3cbef', road: '#aab5e4', waterText: '#7f93d6', transit: '#9fc0ff',
+};
+function recolorNavy(map) {
+  const set = (id, prop, v) => { try { map.setPaintProperty(id, prop, v); } catch { /* 該層沒有這個屬性 */ } };
+  for (const l of map.getStyle().layers) {
+    const id = l.id, sl = l['source-layer'] || '';
+    if (l.type === 'background') set(id, 'background-color', NAVY.land);
+    else if (l.type === 'raster' && id === 'natural_earth') map.setLayoutProperty(id, 'visibility', 'none');
+    else if (l.type === 'fill') {
+      if (sl === 'water') set(id, 'fill-color', NAVY.water);
+      else if (id === 'park' || /wood|grass|wetland/.test(id)) { set(id, 'fill-color', NAVY.green); set(id, 'fill-outline-color', NAVY.green); }
+      else if (sl === 'building') { set(id, 'fill-color', NAVY.building); set(id, 'fill-outline-color', NAVY.building); }
+      else { set(id, 'fill-color', NAVY.landuse); set(id, 'fill-opacity', 0.55); }
+    } else if (l.type === 'line') {
+      if (sl === 'waterway') set(id, 'line-color', NAVY.waterLine);
+      else if (sl === 'boundary') set(id, 'line-color', NAVY.boundary);
+      else if (id === 'park_outline') set(id, 'line-opacity', 0);
+      else if (sl === 'aeroway') set(id, 'line-color', NAVY.minor);
+      else if (sl === 'transportation') {
+        set(id, 'line-color', /casing/.test(id) ? NAVY.casing : /rail/.test(id) ? NAVY.rail : /path|pedestrian/.test(id) ? NAVY.path
+          : /motorway|trunk|primary/.test(id) ? NAVY.major : /secondary|link/.test(id) ? NAVY.secondary : NAVY.minor);
+      }
+    } else if (l.type === 'symbol') {
+      set(id, 'text-halo-color', NAVY.halo);
+      set(id, 'text-halo-width', 1.4);
+      if (/label_(city|country|state)/.test(id)) set(id, 'text-color', NAVY.city);
+      else if (/label_/.test(id)) set(id, 'text-color', NAVY.place);
+      else if (id === 'poi_transit') set(id, 'text-color', NAVY.transit);
+      else if (/^poi|airport/.test(id)) set(id, 'text-color', NAVY.poi);
+      else if (/water/.test(id)) set(id, 'text-color', NAVY.waterText);
+      else if (/highway-name/.test(id)) set(id, 'text-color', NAVY.road);
+    }
+  }
+  // 地名、地標、路名只顯示中文（沒有中文名才用原名），不要英文疊在上面
+  const zh = ['coalesce', ['get', 'name:zh-Hant'], ['get', 'name:zh'], ['get', 'name']];
+  for (const l of map.getStyle().layers) {
+    if (l.type === 'symbol' && l.layout?.['text-field'] && /label_|poi|water_name|highway-name|airport/.test(l.id)) map.setLayoutProperty(l.id, 'text-field', zh);
+  }
+  // 城市名放大，像參考圖那樣一眼看到在哪
+  for (const [id, size] of [['label_city', [5, 12, 9, 18, 13, 22]], ['label_city_capital', [5, 14, 9, 20, 13, 24]], ['label_town', [8, 11, 12, 15, 15, 18]]]) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'text-size', ['interpolate', ['linear'], ['zoom'], ...size]);
+  }
+}
 const DEM = {
   type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 14,
   tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
   attribution: 'Terrain © Mapzen / AWS',
 };
 
-export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, interactive = true, syncTheme = true } = {}) {
+export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, interactive = true, syncTheme = true, styles = DEFAULT_ORDER } = {}) {
+  const ORDER = styles;
   let cur = style;
   let is3d = terrain;
   // 浮在地圖上的面板跟著底圖深淺走（深色、衛星 → 深色面板；淺色 → 淺色面板），不跟系統
@@ -128,6 +184,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   let styleLoaded = false;
   map.on('style.load', () => {
     styleLoaded = true;
+    if (cur === 'navy') recolorNavy(map);
     applyTerrain();
     applyBuildings();
     hooks.forEach((fn) => fn(cur));

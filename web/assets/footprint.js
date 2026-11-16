@@ -1,4 +1,5 @@
-// 全年迷霧足跡：地圖蓋一層霧，去過的格子把霧擦掉。可以切換日期範圍與一天中的時段。
+// 全年足跡：深藍底圖上用黃色畫出騎過的每一條路（可切換日期範圍與一天中的時段）。
+// 「迷霧模式」是選配：地圖蓋一層霧，去過的格子把霧擦掉。
 import { api, $, $$ } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 
@@ -7,13 +8,14 @@ const BUCKETS = ['dawn', 'day', 'dusk', 'night'];
 const BUCKET_NAME = { dawn: '清晨', day: '白天', dusk: '傍晚', night: '夜間' };
 const WEEK = '日一二三四五六';
 
-const M = createMap($('#map'), { style: 'dark', center: [120.95, 23.7], zoom: 7, interactive3d: false });
+const M = createMap($('#map'), { style: 'navy', styles: ['navy', 'sat', 'light'], center: [120.95, 23.7], zoom: 7, interactive3d: false });
 const map = M.map;
 map.keyboard.disableRotation();
+window.qijiMap = map; // 方便用 CDP 驗證鏡頭狀態（其他地圖頁也有）
 
 const F = {
   summary: null, cellDeg: 0.0015, all: null, sel: null, selFlat: null,
-  from: null, to: null, buckets: new Set(BUCKETS), lines: null, req: 0, playing: false, anchor: null,
+  from: null, to: null, buckets: new Set(BUCKETS), lines: null, allLines: null, req: 0, playing: false, anchor: null,
 };
 
 /* ---------- 日期工具 ---------- */
@@ -38,8 +40,8 @@ const cv = $('#fog');
 const ctx = cv.getContext('2d');
 function fogColor(z) {
   // 深色底圖配灰藍色的霧，去過的地方才露出底下深色、清楚的地圖
-  const a = z < 9 ? 0.8 : 0.88;
-  return M.style === 'light' ? `rgba(226,230,236,${a})` : `rgba(52,62,78,${a})`;
+  const a = z < 9 ? 0.72 : 0.8;
+  return M.style === 'light' ? `rgba(226,230,236,${a})` : `rgba(12,20,52,${a})`;
 }
 function draw() {
   const dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight;
@@ -48,6 +50,7 @@ function draw() {
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
   ctx.clearRect(0, 0, w, h);
+  if (!$('#optFog').checked) { cv.style.filter = 'none'; return; }
   const z = map.getZoom();
   ctx.fillStyle = fogColor(z);
   ctx.fillRect(0, 0, w, h);
@@ -88,13 +91,33 @@ map.on('render', draw);
 addEventListener('resize', draw);
 
 /* ---------- 軌跡線圖層 ---------- */
-const LINE_COLOR = { dark: '#ff9a52', sat: '#ffd60a', light: '#c2410c' };
+// 黃色在深藍與衛星底圖上都最醒目；淺色底圖改用琥珀色
+const LINE_COLOR = { navy: '#ffe14d', sat: '#ffe14d', light: '#c2410c' };
+const EMPTY = { type: 'FeatureCollection', features: [] };
+const isAll = () => F.summary && F.from === F.summary.first && F.to === F.summary.last && F.buckets.size === 4;
+function syncLayers() {
+  const vis = (id, on) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  const lines = $('#optLines').checked;
+  vis('fp-lines', lines); vis('fp-glow', lines);
+  // 只看一段時間時，其他時間去過的路淡淡留著當參考（迷霧模式下改由迷霧呈現）
+  vis('fp-all', lines && $('#optAll').checked && !$('#optFog').checked && !isAll());
+}
 M.onStyle((style) => {
-  if (!map.getSource('fp-lines')) map.addSource('fp-lines', { type: 'geojson', data: F.lines || { type: 'FeatureCollection', features: [] } });
-  if (!map.getLayer('fp-lines')) {
-    map.addLayer({ id: 'fp-lines', type: 'line', source: 'fp-lines', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: $('#optLines').checked ? 'visible' : 'none' },
-      paint: { 'line-color': LINE_COLOR[style], 'line-opacity': 0.9, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.2, 12, 2.5, 16, 4] } });
-  }
+  if (!map.getSource('fp-lines')) map.addSource('fp-lines', { type: 'geojson', data: F.lines || EMPTY });
+  if (!map.getSource('fp-all')) map.addSource('fp-all', { type: 'geojson', data: F.allLines || EMPTY });
+  const c = LINE_COLOR[style] || '#ffe14d';
+  // 全島看要粗一點才看得到；拉近到街道時要細，路名、地標才讀得到
+  const width = (k) => ['interpolate', ['linear'], ['zoom'], 6, 1.5 * k, 10, 2 * k, 13, 2.6 * k, 16, 4 * k];
+  const layout = { 'line-join': 'round', 'line-cap': 'round' };
+  // 軌跡畫在地名、路名底下，字才不會被黃線蓋住
+  // 找「所有道路、橋、建築之後」的第一個文字層（Liberty 的單行道箭頭在橋之前，不能用它）
+  const ls = map.getStyle().layers;
+  const lastShape = ls.findLastIndex((l) => l.type !== 'symbol' && !l.id.startsWith('fp-') && l.id !== 'hillshade');
+  const below = ls.slice(lastShape + 1).find((l) => l.type === 'symbol')?.id;
+  if (!map.getLayer('fp-all')) map.addLayer({ id: 'fp-all', type: 'line', source: 'fp-all', layout, paint: { 'line-color': style === 'light' ? '#6e6e73' : '#c9d1f5', 'line-opacity': 0.28, 'line-width': width(0.7) } }, below);
+  if (!map.getLayer('fp-glow')) map.addLayer({ id: 'fp-glow', type: 'line', source: 'fp-lines', layout, paint: { 'line-color': c, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.22, 13, 0.1], 'line-width': width(2.6), 'line-blur': ['interpolate', ['linear'], ['zoom'], 6, 2, 14, 4] } }, below);
+  if (!map.getLayer('fp-lines')) map.addLayer({ id: 'fp-lines', type: 'line', source: 'fp-lines', layout, paint: { 'line-color': c, 'line-opacity': 0.92, 'line-width': width(1) } }, below);
+  syncLayers();
   $('#bStyle').textContent = M.styleName;
   draw();
 });
@@ -110,7 +133,7 @@ async function load(fit = false) {
   $('#loading').hidden = false;
   renderRange();
   try {
-    const wantLines = $('#optLines').checked && !F.playing;
+    const wantLines = $('#optLines').checked;
     const [cells, lines] = await Promise.all([
       api('/api/footprint/cells?' + q),
       wantLines ? api('/api/footprint/lines?' + q) : Promise.resolve(null),
@@ -122,8 +145,11 @@ async function load(fit = false) {
     $('#stCells').textContent = cells.count.toLocaleString();
     $('#stKm').textContent = Math.round(cells.km).toLocaleString();
     $('#stDays').textContent = cells.days;
-    F.lines = lines || { type: 'FeatureCollection', features: [] };
+    F.lines = lines || EMPTY;
     map.getSource('fp-lines')?.setData(F.lines);
+    if (isAll() && lines && !F.allLines) { F.allLines = lines; map.getSource('fp-all')?.setData(lines); }
+    if (!F.allLines && !isAll() && $('#optAll').checked) loadAllLines();
+    syncLayers();
     if (fit) fitSelection();
     draw();
   } catch (e) {
@@ -131,6 +157,15 @@ async function load(fit = false) {
   } finally {
     if (id === F.req) $('#loading').hidden = true;
   }
+}
+
+// 全部時間的路線（當淡色參考用），只抓一次
+let allReq = null;
+function loadAllLines() {
+  if (allReq || !F.summary) return;
+  allReq = api(`/api/footprint/lines?from=${F.summary.first}&to=${F.summary.last}&buckets=${BUCKETS.join(',')}`)
+    .then((l) => { F.allLines = l; map.getSource('fp-all')?.setData(l); syncLayers(); })
+    .catch(() => { allReq = null; });
 }
 
 function sidePad() {
@@ -201,7 +236,7 @@ function renderCalendar() {
       const km = s.days[keyOf(day)] || 0;
       const o = km ? 0.25 + 0.75 * Math.min(1, Math.log10(km + 1) / Math.log10(max + 1)) : 1;
       const inSel = !outside && day >= F.from && day <= F.to;
-      out += `<rect ${outside ? '' : `data-d="${day}"`} x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2.5" fill="${km ? 'var(--accent)' : 'var(--surface-2)'}" fill-opacity="${outside ? 0.35 : o.toFixed(2)}" ${inSel ? 'stroke="var(--fg)" stroke-width="1.3"' : ''}><title>${slash(day)} · ${km ? km.toFixed(1) + ' km' : '沒有紀錄'}</title></rect>`;
+      out += `<rect ${outside ? '' : `data-d="${day}"`} x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2.5" fill="${km ? 'var(--track)' : 'var(--surface-2)'}" fill-opacity="${outside ? 0.35 : o.toFixed(2)}" ${inSel ? 'stroke="var(--fg)" stroke-width="1.3"' : ''}><title>${slash(day)} · ${km ? km.toFixed(1) + ' km' : '沒有紀錄'}</title></rect>`;
     }
   });
   const wpx = 4 * colW, hpx = Math.ceil(months.length / 4) * rowH;
@@ -237,11 +272,9 @@ $('#buckets').onclick = (e) => {
   syncChips();
   schedule(false);
 };
-$('#optLines').onchange = () => {
-  if (map.getLayer('fp-lines')) map.setLayoutProperty('fp-lines', 'visibility', $('#optLines').checked ? 'visible' : 'none');
-  if ($('#optLines').checked) schedule(false);
-};
-$('#optAll').onchange = draw;
+$('#optLines').onchange = () => { syncLayers(); if ($('#optLines').checked) schedule(false); };
+$('#optAll').onchange = () => { syncLayers(); draw(); if (!F.allLines) loadAllLines(); };
+$('#optFog').onchange = () => { syncLayers(); draw(); };
 
 $('#play').onclick = async () => {
   if (F.playing) { F.playing = false; return; }
@@ -261,7 +294,7 @@ $('#play').onclick = async () => {
     await new Promise((ok) => setTimeout(ok, 1100));
   }
   F.playing = false;
-  $('#play').textContent = '逐月播放：看迷霧一個月一個月散開';
+  $('#play').textContent = '逐月播放：看足跡一個月一個月長出來';
   syncChips();
   schedule(false);
 };
