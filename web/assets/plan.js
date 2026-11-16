@@ -10,10 +10,11 @@ const M = createMap($('#map'), { style: 'dark', center: [121.0, 23.8], zoom: 7, 
 const map = M.map;
 window.qijiMap = map;
 const P = { pts: [], route: null, trip: null, markers: [], seq: 0, sourceUrl: '', vehicle: 'scooter' };
+window.qijiPlan = P; // 除錯用
 const VEH_NOTE = {
-  scooter: '機車模式，避開國道（550cc 以下不能上國道）',
-  heavy: '機車模式，可走國道（550cc 以上紅牌；國道目前只開放部分路段，請以公告為準）',
-  car: '汽車模式（同行的車或支援車）',
+  scooter: '機車：國道、快速道路都不走',
+  heavy: '重機（550cc 以上紅牌）：不走國道（國道3甲例外），可以走快速道路',
+  car: '汽車：國道、快速道路都可以',
 };
 function setVehicle(v) {
   P.vehicle = v;
@@ -106,6 +107,9 @@ function showRoute() {
   $('#result').hidden = !P.route;
   $('#apply').disabled = !P.route || !P.trip?.is_owner;
   if (!P.route) return;
+  const w = P.route.warnings || [];
+  $('#msg').innerHTML = (w.length ? `<div class="warn">⚠ 這條路線用到${{ scooter: '機車', heavy: '重機' }[P.vehicle] || ''}不能走的路段：${w.map(esc).join('、')}。可能是沒有其他路可以到，請在地圖上加途經點改道。</div>` : '')
+    + (P.route.uses_3a ? '<div class="note">這條路線有走國道3甲（重機可以行駛）。</div>' : '');
   const s = P.route.summary;
   $('#sKm').textContent = s.km.toFixed(1);
   $('#sMin').textContent = s.min >= 60 ? `${Math.floor(s.min / 60)}:${String(s.min % 60).padStart(2, '0')}` : `${s.min} 分`;

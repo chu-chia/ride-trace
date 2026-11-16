@@ -159,31 +159,83 @@ def road_name(n: str, all_names: list[str], highway: bool = False) -> str:
     return f"台{n}" if num < 100 else f"縣道{n}" if num < 200 else n
 
 
-# 交通工具 → Valhalla 的 costing。台灣 550cc 以下機車不能上國道；550cc 以上紅牌重機可以走部分國道。
+# 交通工具 → Valhalla 的 costing 與台灣的路權規定：
+#   機車（550cc 以下）：國道、快速道路都不能走
+#   重機（550cc 以上紅牌）：國道不行（國道3甲例外），快速道路可以
+#   汽車：都可以
+# 路網裡國道是 motorway（OSM 也把國道標成收費，包含其實不收費的 3甲），快速道路是 trunk。
+# Valhalla 的 exclude_tolls 是「禁止」，正好擋掉國道；use_highways=0 是「盡量避開」高速等級（含快速道路）。
+# 「盡量」不是保證，所以算完再用 trace_attributes 檢查實際走到的道路等級，違規就警告。
 VEHICLES = {
-    "scooter": {"name": "機車", "costing": "motorcycle", "options": {"use_highways": 0, "use_trails": 0}},
-    "heavy": {"name": "重機", "costing": "motorcycle", "options": {"use_highways": 1, "use_trails": 0}},
-    "car": {"name": "汽車", "costing": "auto", "options": {}},
+    "scooter": {"name": "機車", "costing": "motorcycle", "options": {"use_highways": 0, "exclude_tolls": True, "use_trails": 0},
+                "forbid": {"motorway", "trunk"}},
+    "heavy": {"name": "重機", "costing": "motorcycle", "options": {"use_highways": 1, "exclude_tolls": True, "use_trails": 0},
+              "forbid": {"motorway"}},
+    "car": {"name": "汽車", "costing": "auto", "options": {}, "forbid": set()},
 }
+
+
+def is_3a(edge: dict) -> bool:
+    return any(n.startswith("3甲") for n in edge.get("names", []))
+
+
+async def _post(path: str, body: dict) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=120) as c:
+            res = await c.post(f"{VALHALLA}{path}", json=body)
+    except httpx.HTTPError as e:
+        raise HTTPException(503, f"路線引擎沒有回應：{e!r}")
+    return res.json()
+
+
+async def restricted_edges(d: dict) -> list[dict]:
+    """把算出來的路線丟回 trace_attributes，取得每個路段的道路等級（國道 motorway／快速道路 trunk）。"""
+    out = []
+    for leg in d["trip"]["legs"]:
+        t = await _post("/trace_attributes", {"encoded_polyline": leg["shape"], "costing": "auto", "shape_match": "edge_walk",
+                                               "filters": {"attributes": ["edge.road_class", "edge.names", "edge.length"],
+                                                           "action": "include"}})
+        out += [e for e in t.get("edges", []) if e.get("road_class") in ("motorway", "trunk")]
+    return out
+
+
+def violations(edges: list[dict], vehicle: str) -> list[str]:
+    """回傳違反路權的路段說明（依道路彙整）。重機走國道3甲不算違規。"""
+    forbid = VEHICLES[vehicle]["forbid"]
+    agg: dict[tuple, float] = {}
+    for e in edges:
+        rc = e["road_class"]
+        if rc not in forbid or (vehicle == "heavy" and rc == "motorway" and is_3a(e)):
+            continue
+        k = (rc, (e.get("names") or ["未命名"])[0])
+        agg[k] = agg.get(k, 0) + e.get("length", 0)
+    label = lambda rc, n: road_name(n, [n], True) if rc == "motorway" else f"快速道路 {road_name(n, [n])}"
+    return [f"{label(rc, n)}（{km:.1f} km）" for (rc, n), km in agg.items() if km >= 0.05]
 
 
 async def valhalla_route(points: list[dict], vehicle: str) -> dict:
     v = VEHICLES[vehicle]
-    body = {
-        "locations": [{"lat": p["lat"], "lon": p["lon"], "type": "break" if i in (0, len(points) - 1) else "through"}
-                      for i, p in enumerate(points)],
-        "costing": v["costing"],
-        "costing_options": {v["costing"]: v["options"]} if v["options"] else {},
-        "units": "kilometers",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=60) as c:
-            res = await c.post(f"{VALHALLA}/route", json=body)
-    except httpx.HTTPError as e:
-        raise HTTPException(503, f"路線引擎沒有回應：{e!r}")
-    d = res.json()
+    locs = [{"lat": p["lat"], "lon": p["lon"], "type": "break" if i in (0, len(points) - 1) else "through"}
+            for i, p in enumerate(points)]
+
+    def body(opts):
+        return {"locations": locs, "costing": v["costing"], "costing_options": {v["costing"]: opts} if opts else {},
+                "units": "kilometers"}
+
+    d = await _post("/route", body(v["options"]))
     if "trip" not in d:
         raise HTTPException(422, f"算不出路線：{d.get('error', d)}")
+    edges = await restricted_edges(d) if v["forbid"] else []
+    if vehicle == "heavy":
+        # 國道3甲例外：OSM 把 3甲 也標成收費，exclude_tolls 會一起擋掉。
+        # 另外算一條允許國道的路線，如果它用到的國道「全部都是 3甲」而且比較快，就用它。
+        alt = await _post("/route", body({**v["options"], "exclude_tolls": False}))
+        if "trip" in alt and alt["trip"]["summary"]["time"] < d["trip"]["summary"]["time"] - 30:
+            alt_edges = await restricted_edges(alt)
+            mw = [e for e in alt_edges if e["road_class"] == "motorway"]
+            if mw and all(is_3a(e) for e in mw):
+                d, edges = alt, alt_edges
+    warnings = violations(edges, vehicle)
     coords, maneuvers, km0 = [], [], 0.0
     for leg in d["trip"]["legs"]:
         shape = decode_polyline6(leg["shape"])
@@ -213,6 +265,8 @@ async def valhalla_route(points: list[dict], vehicle: str) -> dict:
     return {
         "coords": [coords[i] for i in idx], "cum_km": [round(cum[i], 4) for i in idx], "maneuvers": maneuvers,
         "summary": {"km": round(s["length"], 2), "min": round(s["time"] / 60), "points": len(idx)},
+        "uses_3a": vehicle == "heavy" and any(e["road_class"] == "motorway" and is_3a(e) for e in edges),
+        "warnings": warnings,
     }
 
 
