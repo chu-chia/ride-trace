@@ -1,4 +1,4 @@
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
+import { api, $, $$, dock, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
 import { createMap, declutter } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -424,3 +424,6 @@ api('/api/me/device').then((d) => ($('#trId').textContent = d.device_id)).catch(
 syncTools();
 press($('#b3d'), M.is3d);
 connect();
+
+// 寬螢幕：標題列（返回、行程名、回放）併進右側面板頂端；手機維持浮在左上
+dock($('.topbar'), $('.panel'), '(min-width: 761px)');

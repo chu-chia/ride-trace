@@ -86,6 +86,10 @@ function recolorNavy(map) {
       else if (/highway-name/.test(id)) set(id, 'text-color', NAVY.road);
     }
   }
+  // 道路編號盾牌（白底小方塊，例如「1」「5」「XY-011」）和單行道箭頭在深藍上糊成白點，看不出是什麼，關掉
+  for (const l of map.getStyle().layers) {
+    if (/shield|one_way_arrow/.test(l.id)) map.setLayoutProperty(l.id, 'visibility', 'none');
+  }
   // 地名、地標、路名只顯示中文（沒有中文名才用原名），不要英文疊在上面
   const zh = ['coalesce', ['get', 'name:zh-Hant'], ['get', 'name:zh'], ['get', 'name']];
   for (const l of map.getStyle().layers) {

@@ -1,6 +1,9 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
+import { api, $, $$, dock, esc, avatar, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
 import { createMap, declutter } from '/assets/mapbase.js';
+
+// 寬螢幕：標題列（返回、行程名）併進右側面板頂端；手機維持浮在左上（先做，避免資料載完才跳版面）
+dock($('.topbar'), $('.panel'), '(min-width: 861px)');
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';

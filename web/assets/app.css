@@ -103,3 +103,8 @@ a.li{color:inherit}
 .rider.gapflag .dot{box-shadow:0 0 0 4px var(--warn),0 2px 8px rgba(0,0,0,.35)}
 .rider.gapflag .name{color:var(--warn-ink)}
 .rider.stacked .name{display:none}
+
+/* 地圖頁標題列：寬螢幕時併進右側面板的頂端（common.js dock），不再單獨浮在左上角 */
+.panel .topbar,.panel .topbar.glass{position:static;max-width:none;border-radius:0;background:none;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;padding:12px 14px 10px 8px;border-bottom:1px solid var(--line);flex:none}
+.panel .topbar>div{flex:1;min-width:0}
+.panel .topbar b{max-width:none;font-size:17px}

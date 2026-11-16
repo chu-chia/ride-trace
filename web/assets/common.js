@@ -37,6 +37,16 @@ export const avatar = (u) => `<div class="avatar" style="--c:${esc(u.color)};--i
 // 工具按鈕的開關狀態：外觀和 aria-pressed 一起切，不只靠顏色
 export const press = (el, on) => { el.classList.toggle('on', !!on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); };
 
+// 寬螢幕時把 el 搬進 into 的最上面（例如標題列併進右側面板），窄螢幕放回原位
+export function dock(el, into, query) {
+  const home = el.parentNode, anchor = document.createComment('dock');
+  home.insertBefore(anchor, el);
+  const mq = matchMedia(query);
+  const place = () => (mq.matches ? into.prepend(el) : anchor.after(el));
+  mq.addEventListener('change', place);
+  place();
+}
+
 function zone() {
   let z = $('.toasts');
   if (!z) { z = document.createElement('div'); z.className = 'toasts'; document.body.append(z); }

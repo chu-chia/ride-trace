@@ -6,6 +6,10 @@
 <title>騎跡</title>
 <link rel="stylesheet" href="/assets/app.css">
 <style>
+  /* 背景：上方一抹日出琥珀光＋淡淡的等高線（騎車上山的意象），內容卡片都是實心，不受影響 */
+  body{background:radial-gradient(90% 420px at 50% -120px,color-mix(in srgb,var(--accent) 22%,transparent),transparent 70%) no-repeat,var(--bg)}
+  #topo{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+  .page{position:relative;z-index:1}
   .page{max-width:640px;gap:16px}
   .head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-top:8px}
   .head h1{margin:4px 0 0;font-size:30px;line-height:1.15}
@@ -49,6 +53,7 @@
 </style>
 </head>
 <body>
+<canvas id="topo" aria-hidden="true"></canvas>
 <main class="page">
   <header class="head">
     <div><div class="eyebrow" id="today"></div><h1 id="hello">騎跡</h1></div>
@@ -95,6 +100,43 @@
 <script type="module">
 import { api, $, esc, avatar, clock } from '/assets/common.js';
 import { drawFootprint } from '/assets/footmini.js';
+/* ---------- 等高線背景 ---------- */
+// 幾座「山」，每座畫一圈圈不規則的等高線；每 5 圈一條計曲線（比較深），跟真的地形圖一樣
+function drawTopo() {
+  const cv = $('#topo'), dpr = Math.min(2, devicePixelRatio || 1), W = innerWidth, H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const [r, gg, b] = dark ? [255, 154, 82] : [194, 65, 12];
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const big = Math.max(W, H);
+  const peaks = [[0.08, 0.2, 0.55], [0.92, 0.35, 0.6], [0.2, 0.95, 0.5], [0.85, 1.0, 0.45], [0.5, 0.62, 0.3]];
+  for (const [px, py, size] of peaks) {
+    const cx = px * W, cy = py * H, maxR = size * big, rings = 22;
+    const ph = Array.from({ length: 4 }, () => rnd() * Math.PI * 2);
+    for (let k = 1; k <= rings; k++) {
+      const base = (k / rings) * maxR;
+      const index = k % 5 === 0;
+      g.strokeStyle = `rgba(${r},${gg},${b},${index ? (dark ? 0.16 : 0.13) : (dark ? 0.075 : 0.06)})`;
+      g.lineWidth = index ? 1.3 : 0.8;
+      g.beginPath();
+      for (let i = 0; i <= 180; i++) {
+        const t = (i / 180) * Math.PI * 2;
+        // 外圈起伏比較大，看起來像山脊與山谷
+        const wob = 1 + (0.1 + 0.12 * k / rings) * Math.sin(3 * t + ph[0] + k * 0.08) + 0.06 * Math.sin(5 * t + ph[1] - k * 0.05) + 0.04 * Math.sin(8 * t + ph[2]);
+        const x = cx + Math.cos(t) * base * wob, y = cy + Math.sin(t) * base * wob * 0.8;
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  }
+}
+drawTopo();
+addEventListener('resize', () => { clearTimeout(drawTopo.t); drawTopo.t = setTimeout(drawTopo, 150); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawTopo);
+
 const ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
 const d = new Date();
 $('#today').textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${'日一二三四五六'[d.getDay()]}`;
