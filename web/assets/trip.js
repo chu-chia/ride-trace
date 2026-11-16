@@ -1,5 +1,5 @@
 import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
-import { createMap } from '/assets/mapbase.js';
+import { createMap, declutter } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
@@ -145,7 +145,7 @@ function camera(force) {
 setInterval(() => camera(false), 3000);
 
 // 動畫迴圈：標記平滑移動、跟隨的人保持在畫面中間、軌跡線尾巴接著標記
-let lastTrailDraw = 0;
+let lastTrailDraw = 0, lastDeclutter = 0;
 function tick(now) {
   for (const m of S.members.values()) {
     if (!m.anim) continue;
@@ -165,6 +165,13 @@ function tick(now) {
       M.follow(t.pos, { padding: S.pad });
     }
   } else M.unfollow();
+  if (now - lastDeclutter > 200) {
+    lastDeclutter = now;
+    const ft = followTarget();
+    const list = [...S.members.values()].filter((m) => m.onMap && m.pos)
+      .sort((a, b) => (b.u.uid === S.me) - (a.u.uid === S.me) || (b === ft) - (a === ft));
+    declutter(map, list.map((m) => ({ el: m.el, pos: m.pos, name: m.u.nickname })));
+  }
   if (now - lastTrailDraw > 150 && map.getSource('trails')) {
     lastTrailDraw = now;
     map.getSource('trails').setData(trailsGeo());

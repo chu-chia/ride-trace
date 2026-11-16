@@ -1,6 +1,6 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
 import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
-import { createMap } from '/assets/mapbase.js';
+import { createMap, declutter } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
@@ -291,8 +291,20 @@ function frame(now) {
       M.follow(st.pos, { padding: pad(), ...(R.bearing != null ? { bearing: R.bearing } : {}) });
     }
   }
+  if (now - lastDeclutter > 200) {
+    lastDeclutter = now;
+    const list = [...riders].sort((a, b) => (b.uid === R.follow) - (a.uid === R.follow));
+    declutter(map, list.map((m) => ({ el: m.el, pos: stateAt(m, R.t).pos, name: m.nickname })));
+  }
   requestAnimationFrame(frame);
 }
+let lastDeclutter = 0;
+
+// 手機版把「鏡頭／上色方式」那一列搬進下方面板，時間軸只留播放列
+const camRow = $('#camRow'), narrow = matchMedia('(max-width:860px)');
+const placeCamRow = () => (narrow.matches ? $('.panel .scroll').prepend(camRow) : $('.timeline').append(camRow));
+narrow.addEventListener('change', placeCamRow);
+placeCamRow();
 
 renderRiders();
 renderSummary();

@@ -44,6 +44,8 @@
   .tl-row select{border:0;background:var(--surface-2);border-radius:10px;padding:7px 8px;font-size:13px}
   .legend{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
   .legend i{display:block;width:110px;height:8px;border-radius:4px}
+  /* 地圖來源標示放在時間軸上方、面板左邊 */
+  .maplibregl-ctrl-bottom-right{right:400px;bottom:124px}
   @media (max-width:860px){
     .panel{left:0;right:0;bottom:0;top:auto;width:auto;height:40dvh;border-radius:22px 22px 0 0}
     .timeline{left:8px;right:8px;bottom:calc(40dvh + 8px)}
@@ -56,6 +58,11 @@
     .tl-time b{font-size:15px}
     .track{min-width:0}
     .legend{display:none}
+    .maplibregl-ctrl-bottom-right{right:0;bottom:calc(40dvh + 78px)}
+    /* 手機：鏡頭／上色方式搬進面板（replay.js），時間軸只剩一列，地圖多一點空間 */
+    .panel #camRow{flex-wrap:nowrap;gap:8px}
+    .panel #camRow .seg{min-width:0!important;flex:1.4}
+    .panel #camRow #cam{flex:1;min-width:0;padding:9px 8px}
   }
 </style>
 </head>
@@ -79,7 +86,7 @@
     <div class="track"><div class="ticks" id="ticks"></div><input type="range" id="range" min="0" max="1" step="1" value="0" aria-label="時間軸"></div>
     <select id="rate" aria-label="倍速"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="30">30×</option><option value="60" selected>60×</option><option value="120">120×</option><option value="300">300×</option></select>
   </div>
-  <div class="tl-row">
+  <div class="tl-row" id="camRow">
     <select id="cam" aria-label="鏡頭"></select>
     <div class="seg" id="colorBy" style="min-width:220px"><button class="on" data-c="rider">隊員色</button><button data-c="speed">速度</button><button data-c="alt">海拔</button></div>
     <div class="legend" id="legend" hidden></div>

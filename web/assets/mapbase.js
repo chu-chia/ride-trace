@@ -61,6 +61,21 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   });
   if (!interactive3d) map.touchZoomRotate.disableRotation();
 
+  // 底圖、地形圖磚還沒出來前畫面是一片黑：先放「地圖載入中」，圖磚到齊就收掉
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'map-loading glass';
+  loadingEl.setAttribute('role', 'status');
+  loadingEl.innerHTML = '<span class="spin" aria-hidden="true"></span>地圖載入中…';
+  (typeof container === 'string' ? document.getElementById(container) : container).after(loadingEl);
+  // 用第一次 load（樣式＋第一批圖磚畫出來）；跟隨鏡頭會一直載新圖磚，等「全部載完」會等太久
+  const doneLoading = () => {
+    loadingEl.remove();
+    // 精簡版來源標示預設是展開的，在手機上會蓋住一條地圖；收成 ⓘ，點了再展開
+    map.getContainer().querySelector('.maplibregl-ctrl-attrib.maplibregl-compact-show')?.classList.remove('maplibregl-compact-show');
+  };
+  map.once('load', doneLoading);
+  setTimeout(doneLoading, 30000); // 網路很慢時也不要一直蓋著
+
   const firstSymbol = () => map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
 
   function applyBuildings() {
@@ -157,4 +172,23 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       map.easeTo({ pitch: on ? 60 : 0, duration: 800 });
     },
   };
+}
+
+// 標記重疊時整理名字：靠太近的隊友只留第一個人的名字，後面加「+N」，其他人只顯示頭像。
+// items：[{ el, pos:[lon,lat], name }]，越前面越優先（自己、正在跟的人放前面）。
+export function declutter(map, items, gap = 40) {
+  const kept = [];
+  for (const it of items) {
+    if (!it.pos) continue;
+    const p = map.project(it.pos);
+    const lead = kept.find((k) => Math.hypot(k.p.x - p.x, k.p.y - p.y) < gap);
+    // 帶名字的那個疊在最上面，名字才不會被後面的頭像蓋住
+    if (lead) { lead.n += 1; it.el.classList.add('stacked'); it.el.style.zIndex = '1'; }
+    else { kept.push({ it, p, n: 0 }); it.el.classList.remove('stacked'); it.el.style.zIndex = '2'; }
+  }
+  for (const k of kept) {
+    const label = k.it.el.querySelector('.name');
+    const text = k.n ? `${k.it.name} +${k.n}` : k.it.name;
+    if (label && label.textContent !== text) label.textContent = text;
+  }
 }
