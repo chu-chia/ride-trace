@@ -21,6 +21,7 @@ dock.innerHTML = `
     <button class="tool glass" data-open="cam" title="測速照相查詢">測速</button>
     <button class="tool glass" data-open="msg" title="快速訊息">訊息</button>
     <button class="tool glass" data-open="mark" title="地圖標註">標註</button>
+    <a class="tool glass qx-war" href="/war?id=${tid}" target="_blank" rel="noopener" title="戰情室：用電腦大螢幕看全隊">戰情室</a>
     <button class="qx-sos" id="qxSos" title="長按 1.5 秒發出 SOS"><i></i><span>SOS</span></button>
   </div>`;
 document.body.append(dock);

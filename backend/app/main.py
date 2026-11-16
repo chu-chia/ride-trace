@@ -40,7 +40,7 @@ def page(file: str):
     return handler
 
 
-PAGES = {"/me": "me.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html"}
+PAGES = {"/war": "war.html", "/me": "me.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html"}
 for path, file in PAGES.items():
     app.add_api_route(path, page(file), include_in_schema=False)
 

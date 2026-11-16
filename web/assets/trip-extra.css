@@ -1,6 +1,8 @@
 /* 行程頁 M3 互動功能（trip-extra.js）。和 app.css／trip.html 分開，避免和畫面設計的改動衝突。 */
 .qx-dock{position:fixed;z-index:8;left:max(12px,env(safe-area-inset-left,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-width:calc(100% - 24px)}
 .qx-bar{display:flex;gap:8px;flex-wrap:wrap}
+.qx-bar .qx-war{color:var(--fg);text-decoration:none}
+@media (max-width:760px){.qx-bar .qx-war{display:none}} /* 手機不需要戰情室 */
 .qx-bar .tool.on{background:var(--accent);color:#fff}
 .qx-pop{width:min(340px,calc(100vw - 24px));max-height:min(60vh,520px);overflow-y:auto;border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:10px}
 .qx-head{display:flex;flex-direction:column;gap:2px}
