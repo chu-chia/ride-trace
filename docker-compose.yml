@@ -30,6 +30,17 @@ services:
       - redis
     restart: unless-stopped
 
+  # 背景 Worker：Streams consumer group 消費 stream:ingest（統計、之後的落隊／抵達／測速警示）。
+  # 多開幾個會自動分攤：docker compose up -d --scale worker=2
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+    restart: unless-stopped
+
   # 路線引擎：地圖比對（把 GPS 點對到道路上）、之後的機車導航。
   # 第一次啟動會下載台灣 OSM（約 330 MB）並建立路網，約 10～30 分鐘。
   valhalla:

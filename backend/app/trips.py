@@ -9,6 +9,7 @@ from redis.exceptions import WatchError
 from . import events
 from .auth import current_uid, public_user
 from .db import K, end_record, r
+from .worker import stats_dict
 
 router = APIRouter(prefix="/api/trips")
 INVITE_TTL = 24 * 3600
@@ -111,6 +112,7 @@ async def trip_detail(tid: str, uid: str) -> dict:
         u = await public_user(m)
         u["active"] = m in active
         u["state"] = await r.hgetall(K.state(tid, m))
+        u["stats"] = stats_dict(await r.hmget(K.stats(tid, m), "km", "max_kmh", "moving_s"))
         members.append(u)
     t["members"] = members
     t["me"] = uid

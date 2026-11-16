@@ -226,6 +226,9 @@ function renderTeam() {
     const bits = [];
     if (isMe) bits.push('我');
     else if (km != null) bits.push(`距離我 ${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'}`);
+    const k = m.u.stats;
+    if (k?.km > 0) bits.push(`騎了 ${k.km < 10 ? k.km.toFixed(1) : Math.round(k.km)} km`);
+    if (k?.max_kmh > 0) bits.push(`極速 ${Math.round(k.max_kmh)}`);
     if (s.batt) bits.push(`電量 ${Math.round(+s.batt)}%`);
     if (s.seen || s.ts) bits.push(ago(+s.seen || +s.ts));
     const kick = S.trip.is_owner && !isMe ? `<button class="kick" data-kick="${m.u.uid}">移出</button>` : '';
@@ -309,6 +312,7 @@ function handle(msg) {
       if (m) { m.state.status = msg.status; if (msg.status === 'done') m.u.active = false; placeMarker(m); renderTeam(); }
       break;
     }
+    case 'stats': { const m = S.members.get(msg.uid); if (m) m.u.stats = msg; break; } // 每秒的 renderTeam 會畫出來
     case 'member': upsertMember(msg.user, {}); renderTeam(); break;
     case 'trip':
       S.trip.status = msg.status;

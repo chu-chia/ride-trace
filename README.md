@@ -11,7 +11,7 @@
 需要 Docker Desktop。
 
 ```bash
-docker compose up -d --build      # Redis 8（6390）＋ API／網頁（8750）＋ Valhalla（8752）
+docker compose up -d --build      # Redis 8（6390）＋ API／網頁（8750）＋ Worker ＋ Valhalla（8752）
 open http://localhost:8750
 ```
 
@@ -86,6 +86,8 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 | Pipeline | 每筆 GPS 回報一次送出 10 個左右的指令；GPX 匯入每 5,000 點一批 |
 | Transactions | 開始行程用 `WATCH`＋`MULTI/EXEC` 樂觀鎖 |
 | Lua | 結束自己的紀錄：移出 active、最後一人時把行程改成 ended，原子完成 |
+| Streams Consumer Group | `stream:ingest` 由獨立的 worker 容器 `XREADGROUP` 消費；group `stats` 算每人里程／極速／移動時間（`trip:{id}:stats:{uid}`）。處理完才 `XACK`，worker 當掉時用 `XAUTOCLAIM` 接手閒置 60 秒的訊息；`docker compose up -d --scale worker=2` 自動分攤。進度看 `GET /api/system/streams`（`XINFO GROUPS／CONSUMERS`） |
+| Lua（冪等） | worker 更新統計時依 ts 去重，at-least-once 重送不會重算里程 |
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時在 Redis 裡 `SUNION` |
 
 ## 階段
