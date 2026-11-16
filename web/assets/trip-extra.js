@@ -426,7 +426,9 @@ function routeKmOf(lon, lat) {
 // 預估速度：自己有平均速度就用自己的，否則用路線的預估
 function speedKmh(uid) {
   const avg = S.members.get(uid)?.u.stats?.avg_kmh;
-  return avg && avg > 8 ? avg : X.route ? (X.route.summary.km / Math.max(1, X.route.summary.min)) * 60 : 40;
+  // 沒有即時平均速度時，用規劃時「依建立者的速度」的預估（有的話），否則用一般估計
+  const s = X.route?.summary;
+  return avg && avg > 8 ? avg : s ? (s.km / Math.max(1, s.min_personal || s.min)) * 60 : 40;
 }
 const fmtKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(km < 100 ? 1 : 0)} km`);
 const etaClock = (min) => clock(Date.now() + min * 60000);

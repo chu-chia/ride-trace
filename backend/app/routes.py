@@ -189,18 +189,43 @@ async def _post(path: str, body: dict) -> dict:
     return res.json()
 
 
-async def route_edges(trip: dict) -> list[dict]:
+TRACE_ATTRS = ["edge.road_class", "edge.names", "edge.length", "edge.density", "edge.speed",
+               "edge.begin_shape_index", "edge.end_shape_index"]
+
+
+async def _trace(body: dict) -> list[dict] | None:
+    t = await _post("/trace_attributes", {**body, "filters": {"attributes": TRACE_ATTRS, "action": "include"}})
+    return t.get("edges") if "edges" in t else None
+
+
+async def route_edges(trip: dict, costing: str) -> list[dict] | None:
     """把算出來的路線丟回 trace_attributes，取得每個路段的道路等級、市區密度、長度、速度：
-    檢查路權（國道 motorway／快速道路 trunk）和依個人速度估時間都靠它。"""
+    檢查路權（國道 motorway／快速道路 trunk）和依個人速度估時間都靠它。
+    先用 edge_walk（沿著路線本身的路段走，最準）；要用和算路線相同的交通工具，否則機車能走、汽車不能走的路段會對不上。
+    失敗就切成 150 km 以內的小段做地圖比對（Valhalla 的比對上限 200 km）。都失敗回傳 None（呼叫端要明講「無法檢查」）。"""
     out = []
     for leg in trip["legs"]:
-        t = await _post("/trace_attributes", {"encoded_polyline": leg["shape"], "costing": "auto", "shape_match": "edge_walk",
-                                               "filters": {"attributes": ["edge.road_class", "edge.names", "edge.length",
-                                                                          "edge.density", "edge.speed", "edge.begin_shape_index",
-                                                                          "edge.end_shape_index"], "action": "include"}})
-        edges = t.get("edges", [])
-        # 彎路：用路線本身的形狀算（和個人速度的分類方式一樣），取路段中點的判斷
         shape = [(lat, lon) for lon, lat in decode_polyline6(leg["shape"])]
+        edges = await _trace({"encoded_polyline": leg["shape"], "costing": costing, "shape_match": "edge_walk"})
+        if edges is None:
+            edges, start = [], 0
+            cum = [0.0]
+            for x, y in zip(shape, shape[1:]):
+                cum.append(cum[-1] + haversine_m(x[0], x[1], y[0], y[1]))
+            while start < len(shape) - 1:
+                end = start
+                while end + 1 < len(shape) and cum[end + 1] - cum[start] < 150_000:
+                    end += 1
+                part = await _trace({"shape": [{"lat": a, "lon": b} for a, b in shape[start:end + 1]],
+                                     "costing": costing, "shape_match": "map_snap"})
+                if part is None:
+                    return None
+                for e in part:  # 索引換回整條路線的
+                    e["begin_shape_index"] = e.get("begin_shape_index", 0) + start
+                    e["end_shape_index"] = e.get("end_shape_index", 0) + start
+                edges += part
+                start = end
+        # 彎路：用路線本身的形狀算（和個人速度的分類方式一樣），取路段中點的判斷
         flags = curvy_flags(shape)
         for e in edges:
             mid = (e.get("begin_shape_index", 0) + e.get("end_shape_index", 0)) // 2
@@ -232,7 +257,9 @@ def personal_minutes(edges: list[dict], pace: dict) -> int | None:
     return round(hours * 60)
 
 
-def build_route(trip: dict, edges: list[dict], vehicle: str, pace: dict) -> dict:
+def build_route(trip: dict, edges: list[dict] | None, vehicle: str, pace: dict) -> dict:
+    checked = edges is not None
+    edges = edges or []
     coords, maneuvers = [], []
     legs = trip["legs"]
     for leg in legs:
@@ -270,7 +297,8 @@ def build_route(trip: dict, edges: list[dict], vehicle: str, pace: dict) -> dict
                     "min_personal": personal_minutes(edges, pace) if vehicle != "car" else None},
         "via": " → ".join(via[:5]),
         "uses_3a": vehicle == "heavy" and any(e.get("road_class") == "motorway" and is_3a(e) for e in edges),
-        "warnings": violations(edges, vehicle),
+        "warnings": violations(edges, vehicle) + ([] if checked or not VEHICLES[vehicle]["forbid"]
+                                                  else ["（這條路線無法自動檢查路權，請自行確認沒有國道或快速道路）"]),
     }
 
 
@@ -293,13 +321,13 @@ async def valhalla_routes(points: list[dict], vehicle: str, uid: str | None = No
     trips = [d["trip"]] + [a["trip"] for a in d.get("alternates", []) if "trip" in a]
     pace = await get_pace(uid) if uid and vehicle != "car" else {}
     need_edges = bool(v["forbid"] or pace)
-    all_edges = [await route_edges(t) if need_edges else [] for t in trips]
+    all_edges = [await route_edges(t, v["costing"]) if need_edges else [] for t in trips]
     if vehicle == "heavy":
         # 國道3甲例外：OSM 把 3甲 也標成收費，exclude_tolls 會一起擋掉。
         # 另外算一條允許國道的路線，如果它用到的國道「全部都是 3甲」而且比較快，就換掉第一條。
         alt = await _post("/route", body({**v["options"], "exclude_tolls": False}))
         if "trip" in alt and alt["trip"]["summary"]["time"] < trips[0]["summary"]["time"] - 30:
-            alt_edges = await route_edges(alt["trip"])
+            alt_edges = await route_edges(alt["trip"], v["costing"]) or []
             mw = [e for e in alt_edges if e.get("road_class") == "motorway"]
             if mw and all(is_3a(e) for e in mw):
                 trips[0], all_edges[0] = alt["trip"], alt_edges
