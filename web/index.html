@@ -6,69 +6,6 @@
 <title>騎跡</title>
 <link rel="stylesheet" href="/assets/app.css">
 <style>
-  .page{position:relative;z-index:1}
-
-  /* ---------- 首頁背景（homebg.js，頭像選單切換） ---------- */
-  .bg{z-index:0;pointer-events:none;overflow:hidden}
-  .bg canvas{position:absolute;inset:0;width:100%;height:100%}
-  .bg.full{position:fixed;inset:0}
-  /* 頁首型：只佔上面一截，往下淡進底色 */
-  .bg.top{position:absolute;left:0;right:0;top:0;height:440px;-webkit-mask-image:linear-gradient(#000 45%,transparent);mask-image:linear-gradient(#000 45%,transparent)}
-  .bgcap{position:fixed;z-index:0;left:0;right:0;bottom:10px;text-align:center;font-size:11px;color:var(--muted);opacity:.8;pointer-events:none}
-  body[data-bg="sky"] .head,body[data-bg="dash"] .head{color:#fff;text-shadow:0 1px 10px rgba(0,0,0,.35);padding-top:72px}
-  body[data-bg="sky"] .head .eyebrow,body[data-bg="dash"] .head .eyebrow{color:rgba(255,255,255,.8)}
-  body[data-bg="sky"] .menu summary .avatar{box-shadow:0 0 0 2px rgba(255,255,255,.85)}
-  body[data-bg="dash"] .head{padding-top:110px}
-
-  /* 以下兩種卡片元件（homehero.js）目前沒有放上首頁，樣式先留著 */
-  /* ---------- 頂部樣式 2：年度紀錄 ---------- */
-  .hero-year{display:flex;flex-direction:column;gap:12px;padding:18px 18px 16px}
-  .hy-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
-  .hy-head b{display:block;font-size:20px;margin-top:2px}
-  .hy-legend{display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
-  .hy-legend i{width:10px;height:10px;border-radius:2.5px;display:block}
-  .hero-year svg{width:100%;height:auto;display:block}
-  .hero-year svg text{font-size:9.5px;fill:var(--muted)}
-  .hero-year .l0{fill:var(--surface-2)}
-  .hero-year .l1{fill:color-mix(in srgb,var(--accent) 30%,var(--surface-2));background:color-mix(in srgb,var(--accent) 30%,var(--surface-2))}
-  .hero-year .l2{fill:color-mix(in srgb,var(--accent) 55%,var(--surface-2));background:color-mix(in srgb,var(--accent) 55%,var(--surface-2))}
-  .hero-year .l3{fill:color-mix(in srgb,var(--accent) 80%,var(--surface-2));background:color-mix(in srgb,var(--accent) 80%,var(--surface-2))}
-  .hero-year .l4{fill:var(--accent);background:var(--accent)}
-  .hy-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-  .hy-stats div{display:flex;flex-direction:column;min-width:0}
-  .hy-stats strong{font-size:20px;line-height:1.15}
-  .hy-stats span{font-size:12px;color:var(--muted)}
-
-  /* ---------- 頂部樣式 5：儀表（像機車儀表板，固定夜色） ---------- */
-  .hero-gauge{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:8px;align-items:center;padding:18px 20px;border-radius:24px;color:#f5f5f7;
-              background:radial-gradient(80% 90% at 30% 60%,#1b2330,#0a0d12 75%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
-  .hero-gauge .dial{width:100%;height:auto;display:block}
-  .dial .track{fill:none;stroke:rgba(255,255,255,.08);stroke-width:10}
-  .dial .fill{fill:none;stroke:#ff8a3d;stroke-width:10;stroke-linecap:round;filter:drop-shadow(0 0 6px rgba(255,138,61,.6))}
-  .dial .red{fill:none;stroke:#ff453a;stroke-width:4;opacity:.8}
-  .dial .mj{stroke:#f5f5f7;stroke-width:2.2}
-  .dial .mn{stroke:rgba(245,245,247,.45);stroke-width:1.2}
-  .dial text{fill:#c7c7cc;font-size:11px;text-anchor:middle;font-family:var(--num)}
-  .dial .unit{font-size:12px;fill:#8e8e93}
-  .dial #needle{transform-box:view-box;transform-origin:150px 150px}
-  .dial .needle{stroke:#ff8a3d;stroke-width:3.5;stroke-linecap:round;filter:drop-shadow(0 0 4px rgba(255,138,61,.8))}
-  .dial .hub{fill:#2c2c2e;stroke:#ff8a3d;stroke-width:2}
-  .g-side .eyebrow{color:#ffb27a}
-  .g-big{font-size:15px;color:#c7c7cc}
-  .g-big strong{font-size:38px;color:#fff;line-height:1.1}
-  .g-rows{display:grid;gap:6px;margin:10px 0 12px}
-  .g-rows div{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:#aeaeb2;border-bottom:1px solid rgba(255,255,255,.07);padding-bottom:5px}
-  .g-rows b{color:#f5f5f7;font-weight:600}
-  .odo{display:flex;align-items:center;gap:3px;font-size:10px;letter-spacing:.08em;color:#8e8e93}
-  .odo i{font-style:normal;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:16px;color:#f5f5f7;background:#000;border-radius:4px;padding:2px 4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
-  .odo span:first-child{margin-right:4px}
-  .odo span:last-child{margin-left:4px}
-  @media (max-width:520px){.hero-gauge{grid-template-columns:1fr}.hero-gauge .dial{max-width:300px;margin:0 auto}.hy-stats{grid-template-columns:repeat(2,1fr)}}
-
-  /* 設定：首頁頂部樣式 */
-  .menu .msec{padding:10px 12px 4px;font-size:12px;font-weight:600;color:var(--muted);border-top:1px solid var(--line);margin-top:4px}
-  .menu .pop button[role="menuitemradio"]{display:flex;justify-content:space-between;align-items:center;width:100%}
-  .menu .pop button[aria-checked="true"]::after{content:"✓";color:var(--accent-ink);font-weight:700}
   .page{max-width:640px;gap:16px}
   .head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-top:8px}
   .head h1{margin:4px 0 0;font-size:30px;line-height:1.15}
@@ -112,8 +49,6 @@
 </style>
 </head>
 <body>
-<div class="bg" id="bg" aria-hidden="true"><canvas id="bgc"></canvas></div>
-<div class="bgcap" id="bgcap" aria-hidden="true"></div>
 <main class="page">
   <header class="head">
     <div><div class="eyebrow" id="today"></div><h1 id="hello">騎跡</h1></div>
@@ -121,9 +56,7 @@
       <summary aria-label="帳號選單" id="me"></summary>
       <div class="pop">
         <div class="who"><b id="meName"></b><span class="small muted" id="meUser"></span></div>
-        <div class="msec" id="bgLabel">首頁背景</div>
-        <div role="group" aria-labelledby="bgLabel" id="bgOpts"></div>
-        <button type="button" id="logout" style="border-top:1px solid var(--line);border-radius:0 0 10px 10px;margin-top:4px">登出</button>
+        <button type="button" id="logout">登出</button>
       </div>
     </details>
   </header>
@@ -162,7 +95,6 @@
 <script type="module">
 import { api, $, esc, avatar, clock } from '/assets/common.js';
 import { drawFootprint } from '/assets/footmini.js';
-import { BGS, getBg, setBg, renderBg, setData } from '/assets/homebg.js';
 const ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
 const d = new Date();
 $('#today').textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${'日一二三四五六'[d.getDay()]}`;
@@ -208,19 +140,7 @@ if (pending) join(pending.toUpperCase());
 loadTrips();
 
 // 足跡卡片：數字先出來，縮圖資料比較大（約 5 萬格）隨後畫上
-// 首頁背景：先畫（天色、流線不用資料），summary 回來再補上要資料的那幾種
-let bg = getBg();
-$('#bgOpts').innerHTML = Object.entries(BGS).map(([k, n]) => `<button type="button" role="menuitemradio" data-b="${k}" aria-checked="${k === bg}">${n}</button>`).join('');
-$('#bgOpts').onclick = (e) => {
-  const b = e.target.closest('[data-b]'); if (!b) return;
-  bg = b.dataset.b; setBg(bg);
-  $('#bgOpts').querySelectorAll('[data-b]').forEach((x) => x.setAttribute('aria-checked', x === b));
-  renderBg(bg);
-};
-renderBg(bg);
-
 api('/api/footprint/summary').then((s) => {
-  setData({ summary: s });
   if (!s.points) {
     $('#fpTitle').textContent = '還沒有足跡';
     $('#fpNums').innerHTML = '<div><span>開始一趟行程，或匯入 GPX，地圖就會一格一格亮起來</span></div>';
