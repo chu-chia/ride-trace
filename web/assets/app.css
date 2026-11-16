@@ -72,7 +72,8 @@ a.li{color:inherit}
 .maplibregl-ctrl-attrib{font-size:10px}
 
 /* 隊友標記 */
-.rider{position:relative;width:34px;height:34px;cursor:pointer}
+/* 標記本身要維持 MapLibre 的 position:absolute；改成 relative 會讓多個標記照文件流往下疊（第 n 個偏 34×n px） */
+.rider{position:absolute;width:34px;height:34px;cursor:pointer}
 .rider .dot{position:absolute;inset:0;border-radius:50%;background:var(--c);border:2.5px solid #fff;display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .rider .arrow{position:absolute;left:50%;top:50%;width:0;height:0;transform-origin:0 0}
 .rider .arrow::before{content:"";position:absolute;left:-6px;top:-29px;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:9px solid var(--c)}

@@ -98,6 +98,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   // MapLibre 5 的鏡頭動畫被打斷時，地形高度可能停在 0（鏡頭會鑽進 3000 公尺的山裡）。
   // 每次停下來就把畫面中心的高度校正成地形高度。
   let following = false, smoothEl = null, lastT = 0;
+  let grp = null, grpT = 0; // 全隊鏡頭目前的（平滑後）中心與縮放
   function fixElevation() {
     if (following || !is3d || !map.getTerrain() || map.isMoving()) return;
     const e = map.queryTerrainElevation(map.getCenter());
@@ -142,7 +143,28 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       }
       map.jumpTo({ center, elevation: el, ...extra });
     },
+    // 全隊鏡頭：每一格算「框住所有人」需要的中心和縮放，鏡頭往那裡平滑地追（不用 easeTo：
+    // 每隔一段時間重新 easeTo 會一頓一頓的，動畫結束時地形高度校正還會讓畫面跳一下）。
+    // 有人快跑出畫面時拉遠要快，拉近則慢慢來，避免縮放一直來回。
+    followGroup(pts, { padding, maxZoom = 14.5 } = {}) {
+      if (!pts.length) return;
+      const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
+      const cam = map.cameraForBounds(b, { padding, maxZoom, bearing: map.getBearing() });
+      const c = b.getCenter();
+      const tz = cam?.zoom ?? map.getZoom();
+      const now = performance.now();
+      const dt = Math.min(0.2, (now - (grpT || now)) / 1000);
+      grpT = now;
+      if (!grp || !following) { const mc = map.getCenter(); grp = { lon: mc.lng, lat: mc.lat, zoom: map.getZoom() }; }
+      const kc = 1 - Math.exp(-dt / 0.7);
+      const kz = 1 - Math.exp(-dt / (tz < grp.zoom ? 0.5 : 2.2));
+      grp.lon += (c.lng - grp.lon) * kc;
+      grp.lat += (c.lat - grp.lat) * kc;
+      grp.zoom += (tz - grp.zoom) * kz;
+      this.follow([grp.lon, grp.lat], { zoom: grp.zoom, padding });
+    },
     unfollow() {
+      grp = null; grpT = 0;
       if (!following) return;
       following = false; lastT = 0;
       map.setCenterClampedToGround(true);

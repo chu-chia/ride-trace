@@ -123,16 +123,8 @@ function fitAll(dur = 900) {
   const pts = riders.flatMap((m) => m.track.filter((_, i) => i % 10 === 0).map((p) => [p[2], p[1]]));
   const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
   const cam = map.cameraForBounds(b, { padding: pad(), maxZoom: 15 });
-  if (cam) map.easeTo({ ...cam, pitch: M.is3d ? 50 : 0, bearing: 0, duration: dur });
+  if (cam) { R.easeUntil = performance.now() + dur + 50; map.easeTo({ ...cam, pitch: M.is3d ? 50 : 0, bearing: 0, duration: dur }); }
 }
-function fitCurrent() {
-  const pts = riders.map((m) => stateAt(m, R.t).pos);
-  const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
-  const cam = map.cameraForBounds(b, { padding: pad(), maxZoom: 14.5, bearing: map.getBearing() });
-  if (cam) map.easeTo({ ...cam, pitch: map.getPitch(), duration: 1200 });
-}
-setInterval(() => { if (R.follow === 'all' && R.playing && Date.now() - R.lastInteract > 8000) fitCurrent(); }, 1500);
-
 function setFollow(uid) {
   R.follow = uid;
   if (uid !== 'all') R.sel = uid;
@@ -225,7 +217,7 @@ function drawCharts() { chart($('#altChart'), ALT, 'm'); chart($('#spdChart'), S
 
 /* ---------- 時間軸 ---------- */
 $('#range').min = t0; $('#range').max = t1; $('#range').step = 1000;
-function seek(t) { R.t = Math.max(t0, Math.min(t1, t)); R.zoomed = R.follow === 'all' ? R.zoomed : false; update(true); }
+function seek(t) { R.seekAt = performance.now(); R.t = Math.max(t0, Math.min(t1, t)); R.zoomed = R.follow === 'all' ? R.zoomed : false; update(true); }
 $('#range').oninput = (e) => seek(+e.target.value);
 $('#rate').onchange = (e) => { R.rate = +e.target.value; };
 function syncPlay() { $('#play').innerHTML = R.playing ? PAUSE : PLAY; $('#play').setAttribute('aria-label', R.playing ? '暫停' : '播放'); }
@@ -288,6 +280,10 @@ function frame(now) {
       }
       M.follow(st.pos, { padding: pad(), ...(R.bearing != null ? { bearing: R.bearing } : {}) });
     }
+  } else if (R.follow === 'all' && R.styleReady && Date.now() - R.lastInteract > 8000 && (R.playing || now - (R.seekAt || 0) < 1500)
+             && now > (R.easeUntil || 0)) {
+    // 全隊：每一格平滑地框住所有人（暫停時不動，保留整趟總覽或使用者自己調的視角）
+    M.followGroup(riders.map((m) => stateAt(m, R.t).pos), { padding: pad(), maxZoom: 14.5 });
   }
   requestAnimationFrame(frame);
 }

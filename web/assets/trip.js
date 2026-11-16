@@ -25,6 +25,7 @@ const map = M.map;
 map.setPitch(55);
 window.qijiMap = map; // 方便在主控台除錯
 const S = { trip: null, me: null, members: new Map(), events: [], follow: 'all', lastInteract: 0, nearby: {}, gps: null, wake: null, trailDirty: true };
+window.qijiState = S; // 除錯用
 
 /* ---------- 成員與標記 ---------- */
 function statusOf(m) {
@@ -139,9 +140,9 @@ function camera(force) {
   if (pts.length < 2) return;
   const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
   const cam = map.cameraForBounds(b, { padding: S.pad, maxZoom: 15, bearing: map.getBearing() });
-  if (cam) map.easeTo({ ...cam, pitch: map.getPitch(), padding: S.pad, duration: 900 });
+  if (cam) { S.easeUntil = performance.now() + 950; map.easeTo({ ...cam, pitch: map.getPitch(), padding: S.pad, duration: 900 }); }
 }
-setInterval(() => camera(false), 3000);
+// 之後「全隊」由動畫迴圈每一格平滑追（M.followGroup），不再定時 easeTo
 
 // 動畫迴圈：標記平滑移動、跟隨的人保持在畫面中間、軌跡線尾巴接著標記
 let lastTrailDraw = 0;
@@ -163,6 +164,9 @@ function tick(now) {
     } else if (now > (S.easeUntil || 0)) {
       M.follow(t.pos, { padding: S.pad });
     }
+  } else if (!t && S.follow === 'all' && S.styleReady && Date.now() - S.lastInteract > 12000 && now > (S.easeUntil || 0)) {
+    const pts = [...S.members.values()].filter((m) => m.pos).map((m) => m.pos);
+    if (pts.length >= 2) M.followGroup(pts, { padding: S.pad, maxZoom: 15 });
   } else M.unfollow();
   if (now - lastTrailDraw > 150 && map.getSource('trails')) {
     lastTrailDraw = now;
