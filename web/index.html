@@ -105,6 +105,7 @@
 </main>
 <script type="module">
 import { api, $, esc, avatar, clock } from '/assets/common.js';
+api('/api/admin/whoami').then((w) => { if (w.admin) $('#adminLink').hidden = false; }).catch(() => {});
 import { drawFootprint } from '/assets/footmini.js';
 import { startBg } from '/assets/homebg.js';
 startBg($('#bg'));

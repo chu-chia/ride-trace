@@ -67,7 +67,7 @@ async def handle_stats(msgs: list[tuple[str, dict]]) -> list[str]:
     # 同一批裡同一個人只推一次，避免 Pub/Sub 訊息量翻倍
     for tid, uid in changed:
         s = await r.hmget(K.stats(tid, uid), "km", "max_kmh", "moving_s")
-        await r.publish(K.live(tid), json.dumps({"kind": "stats", "uid": uid, **stats_dict(s)}))
+        await events.publish(tid, {"kind": "stats", "uid": uid, **stats_dict(s)})
     return [i for i, _ in msgs]
 
 

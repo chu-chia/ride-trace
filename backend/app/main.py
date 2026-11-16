@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, footprint, ingest, interact, live, longterm, pace, poi, replay, routes, speedcam, system, trips, waypoints
+from . import admin, auth, footprint, ingest, interact, live, longterm, pace, poi, replay, routes, speedcam, system, trips, waypoints
 from .db import r
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="騎跡 API", lifespan=lifespan)
-for mod in (auth, trips, replay, ingest, live, footprint, system, waypoints, speedcam, interact, routes, poi, pace, longterm):
+for mod in (auth, trips, replay, ingest, live, footprint, system, waypoints, speedcam, interact, routes, poi, pace, longterm, admin):
     app.include_router(mod.router)
 
 
@@ -40,7 +40,7 @@ def page(file: str):
     return handler
 
 
-PAGES = {"/war": "war.html", "/me": "me.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html"}
+PAGES = {"/admin": "admin.html", "/war": "war.html", "/me": "me.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html"}
 for path, file in PAGES.items():
     app.add_api_route(path, page(file), include_in_schema=False)
 

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>管理後台 · 騎跡</title>
+<link rel="stylesheet" href="/assets/app.css">
+<style>
+  main{max-width:1180px;margin:0 auto;padding:20px 16px 40px;display:flex;flex-direction:column;gap:14px}
+  header{display:flex;align-items:center;gap:12px}
+  header a{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:22px;color:var(--fg);text-decoration:none;background:var(--surface)}
+  header h1{margin:0;font-size:22px}
+  header span{margin-left:auto;font-size:12.5px;color:var(--muted)}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  .kpi{background:var(--surface);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+  .kpi b{font-size:24px}
+  .kpi span{font-size:12px;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .card h3{margin:0 0 10px;font-size:14px;display:flex;justify-content:space-between;align-items:baseline}
+  .card h3 small{font-size:12px;color:var(--muted);font-weight:500}
+  svg.ch{width:100%;height:140px;display:block}
+  .bars{display:flex;flex-direction:column;gap:6px}
+  .br{display:grid;grid-template-columns:120px 1fr 90px;gap:10px;align-items:center;font-size:13px}
+  .br .t{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+  .br .t i{display:block;height:100%;background:var(--accent)}
+  .br em{font-style:normal;color:var(--muted);text-align:right;font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  td.r,th.r{text-align:right}
+  .muted{color:var(--muted)}
+  .denied{padding:40px;text-align:center;color:var(--muted)}
+  @media (max-width:860px){ .kpis{grid-template-columns:repeat(2,1fr)} .grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<main>
+  <header><a href="/" aria-label="回首頁">‹</a><h1>管理後台</h1><span id="upd">載入中…</span></header>
+  <div id="denied" class="denied card" hidden>只有管理者可以看後台</div>
+  <div id="app" hidden>
+    <div class="kpis">
+      <div class="kpi"><b class="num" id="kMem">–</b><span>Redis 記憶體</span></div>
+      <div class="kpi"><b class="num" id="kKeys">–</b><span>key 數量</span></div>
+      <div class="kpi"><b class="num" id="kOps">–</b><span>每秒指令數</span></div>
+      <div class="kpi"><b class="num" id="kOnline">–</b><span>線上回報（2 分鐘內）</span></div>
+      <div class="kpi"><b class="num" id="kWs">–</b><span>WebSocket 連線</span></div>
+      <div class="kpi"><b class="num" id="kLive">–</b><span>進行中的行程</span></div>
+    </div>
+    <div class="grid" style="margin-top:14px">
+      <div class="card"><h3>每秒位置寫入 <small>TimeSeries ts:sys:writes · 10 秒平均</small></h3><svg class="ch" id="cWrites" preserveAspectRatio="none"></svg></div>
+      <div class="card"><h3>每秒 Pub/Sub 訊息 <small>TimeSeries ts:sys:pubsub · 10 秒平均</small></h3><svg class="ch" id="cPub" preserveAspectRatio="none"></svg></div>
+      <div class="card"><h3>各資料型別的 key <small id="kAt"></small></h3><div class="bars" id="types"></div></div>
+      <div class="card"><h3>各用途的記憶體（估計） <small>SCAN＋MEMORY USAGE 抽樣</small></h3><div class="bars" id="groups"></div></div>
+      <div class="card"><h3>Worker（Streams Consumer Group）</h3><table><thead><tr><th>group</th><th class="r">consumer</th><th class="r">pending</th><th class="r">lag</th></tr></thead><tbody id="groupsT"></tbody></table></div>
+      <div class="card"><h3>外部資料同步</h3><table><thead><tr><th>資料</th><th>來源</th><th class="r">筆數</th><th class="r">更新</th></tr></thead><tbody id="data"></tbody></table></div>
+      <div class="card"><h3>進行中的行程</h3><table><thead><tr><th>行程</th><th class="r">在騎的人</th><th></th></tr></thead><tbody id="live"></tbody></table></div>
+      <div class="card"><h3>Redis</h3><table><tbody id="redis"></tbody></table></div>
+    </div>
+  </div>
+</main>
+<script type="module" src="/assets/admin.js"></script>
+</body>
+</html>

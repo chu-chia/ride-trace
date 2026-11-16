@@ -22,6 +22,8 @@ async def trip_ws(ws: WebSocket, tid: str):
         await ws.close(code=4403)
         return
     await ws.accept()
+    await r.incr("stat:ws")                       # 後台：目前的 WebSocket 連線數
+    await r.zadd("online:viewer", {uid: int(__import__("time").time() * 1000)})
     ps = r.pubsub()
     await ps.subscribe(K.live(tid))
     try:
@@ -46,6 +48,7 @@ async def trip_ws(ws: WebSocket, tid: str):
     except Exception as e:  # noqa: BLE001
         log.warning("ws %s 結束：%r", tid, e)
     finally:
+        await r.decr("stat:ws")
         await ps.unsubscribe()
         await ps.aclose()
 

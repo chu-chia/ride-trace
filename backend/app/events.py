@@ -12,12 +12,22 @@ async def emit(tid: str, etype: str, uid: str | None, text: str, ts: int | None 
     fields.update({k: v for k, v in extra.items() if v is not None})
     eid = await r.xadd(K.events(tid), {k: str(v) for k, v in fields.items()})
     msg = {"kind": "event", "id": eid, **fields}
-    await r.publish(K.live(tid), json.dumps(msg, ensure_ascii=False))
+    await publish(tid, msg)
     return msg
+
+
+PUBSUB_TS = "ts:sys:pubsub"
+
+
+async def count_pubsub(n: int = 1):
+    """後台用：每秒 Pub/Sub 訊息數（TimeSeries，同一秒的累加）。"""
+    await r.execute_command("TS.INCRBY", PUBSUB_TS, n, "TIMESTAMP", int(time.time()) * 1000, "RETENTION", 7 * 86400_000,
+                            "LABELS", "metric", "sys", "kind", "pubsub")
 
 
 async def publish(tid: str, msg: dict):
     await r.publish(K.live(tid), json.dumps(msg, ensure_ascii=False))
+    await count_pubsub()
 
 
 def event_from_stream(eid: str, f: dict) -> dict:

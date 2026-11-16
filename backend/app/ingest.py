@@ -106,6 +106,9 @@ async def ingest(uid: str, fix: Fix) -> dict:
                                   "LABELS", "trip", tid, "uid", uid, "kind", "alt")
             p.set(K.hb(tid, uid), now, ex=HEARTBEAT_S)
             p.publish(K.live(tid), json.dumps({"kind": "pos", "uid": uid, **{k: _num(v) if k != "src" else v for k, v in fields.items()}}))
+            p.execute_command("TS.INCRBY", "ts:sys:pubsub", 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000,
+                              "LABELS", "metric", "sys", "kind", "pubsub")
+        p.zadd("online:report", {uid: now})  # 後台「線上人數」：最近 2 分鐘有回報位置的人（ZCOUNT）
         # 交給 worker：行程中的回報（警示、統計），以及所有新的足跡點（熱力圖、點亮鄉鎮）
         if live or fresh:
             p.xadd(K.ingest, {"trip": tid if live else "", "uid": uid, "fp": 1 if fresh else 0, **fields},
