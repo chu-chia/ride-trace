@@ -38,6 +38,9 @@ class K:
     wp = staticmethod(lambda tid, wid: f"trip:{tid}:wp:{wid}")
     arrived = staticmethod(lambda tid, wid: f"trip:{tid}:arrived:{wid}")
     allin = staticmethod(lambda tid, wid: f"trip:{tid}:allin:{wid}")
+    marks = staticmethod(lambda tid: f"trip:{tid}:marks")           # GEO：地圖標註
+    mark = staticmethod(lambda tid, mid: f"trip:{tid}:mark:{mid}")
+    sos = staticmethod(lambda tid: f"trip:{tid}:sos")               # Hash：uid → 還沒解除的 SOS 事件 ID
     lagchk = staticmethod(lambda tid: f"trip:{tid}:lagchk")       # 節流鎖：一個行程 2 秒判斷一次
     ingest = "stream:ingest"
     ts_writes = "ts:sys:writes"

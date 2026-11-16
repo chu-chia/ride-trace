@@ -18,6 +18,8 @@ const EV = {
   regroup: ['跟上', 'var(--ok)', '合', '#30a46c'],
   waypoint: ['集合點', 'var(--muted)', '集', '#8e8e93'], arrive: ['抵達', 'var(--ok)', '到', '#30a46c'],
   allin: ['全員到齊', 'var(--ok)', '齊', '#30a46c'],
+  msg: ['訊息', 'var(--accent)', '訊', '#0a84ff'], mark: ['標註', 'var(--warn)', '註', '#ff9f0a'],
+  sos: ['SOS', 'var(--crit)', 'S', '#ff3b30'], sos_off: ['解除 SOS', 'var(--ok)', '安', '#30a46c'],
 };
 const fmtKm = (km) => (Math.abs(km) < 1 ? Math.round(Math.abs(km) * 1000) + ' m' : Math.abs(km).toFixed(1) + ' km');
 

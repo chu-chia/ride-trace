@@ -33,4 +33,33 @@
 .qx-cam.hit{box-shadow:0 0 0 5px rgba(255,159,10,.55),0 1px 5px rgba(0,0,0,.4)}
 .qx-cam.static{flex:none}
 .qx-pop code{font-size:11px;word-break:break-all}
+/* 快速訊息 */
+.qx-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.qx-presets .btn{padding:10px 6px}
+/* 標註：水滴形，依種類上色 */
+.qx-mark{width:28px;height:28px;border-radius:50% 50% 50% 4px;transform-origin:center;display:grid;place-items:center;background:#8e8e93;box-shadow:0 2px 8px rgba(0,0,0,.4);border:2px solid #fff;cursor:pointer}
+.qx-mark b{font-size:12px;color:#fff;font-weight:800}
+.qx-mark[data-kind="pothole"],.qx-mark[data-kind="rock"]{background:#ff9f0a}
+.qx-mark[data-kind="food"]{background:#ff375f}
+.qx-mark[data-kind="view"]{background:#30b0c7}
+.qx-mark.static{flex:none;border-radius:50%}
+.qx-kinds{display:flex;flex-wrap:wrap;gap:6px}
+.qx-kinds label{cursor:pointer}
+.qx-kinds input{position:absolute;opacity:0;pointer-events:none}
+.qx-kinds span{display:inline-block;padding:6px 12px;border-radius:999px;background:var(--surface-2);font-size:13px}
+.qx-kinds input:checked+span{background:var(--accent);color:#fff;font-weight:600}
+/* SOS：紅色，長按時外圈填滿 */
+.qx-sos{position:relative;height:42px;min-width:56px;padding:0 12px;border:0;border-radius:12px;background:#e5352b;color:#fff;font-weight:800;font-size:13px;cursor:pointer;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+.qx-sos i{position:absolute;inset:0;background:rgba(0,0,0,.28);transform:scaleX(0);transform-origin:left}
+.qx-sos.holding i{transform:scaleX(1);transition:transform 1.5s linear}
+.qx-sos span{position:relative}
+.qx-sos.active{background:#1f9d55}
+.qx-sosbar{position:fixed;z-index:40;top:max(70px,calc(env(safe-area-inset-top,0px) + 60px));left:50%;transform:translateX(-50%);width:min(420px,calc(100% - 24px));display:flex;flex-direction:column;gap:6px}
+.qx-sosrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#e5352b;color:#fff;box-shadow:0 10px 30px rgba(229,53,43,.45);animation:qxpulse 1.2s ease-in-out infinite alternate}
+.qx-sosrow>b{font-size:15px;letter-spacing:.06em}
+.qx-sosrow .grow{flex:1;min-width:0}
+.qx-sosrow .t1{font-weight:700;font-size:14px}
+.qx-sosrow .t2{font-size:12px;opacity:.9}
+.qx-sosrow .btn{background:rgba(255,255,255,.22);color:#fff;padding:7px 12px;font-size:13px}
+@keyframes qxpulse{from{box-shadow:0 6px 20px rgba(229,53,43,.35)}to{box-shadow:0 10px 36px rgba(229,53,43,.8)}}
 @media (max-width:760px){.qx-pop{width:calc(100vw - 88px)}}

@@ -1,7 +1,7 @@
-// 行程頁的 M3 互動功能：集合點、前方測速（之後加快速訊息、標註、SOS）。
+// 行程頁的 M3 互動功能：集合點、前方測速、快速訊息、地圖標註、SOS。
 // 和 trip.js 分開放，避免和畫面設計的改動互相衝突。trip.js 只提供三個掛鉤：
 //   window.qijiM（地圖包裝）、window.qijiState（頁面狀態）、window 的 'qiji:msg' 事件（每則 WebSocket 訊息）
-import { api, $, esc, toast } from '/assets/common.js';
+import { api, $, esc, toast, clock } from '/assets/common.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 const M = window.qijiM, map = window.qijiMap, S = window.qijiState;
@@ -17,6 +17,9 @@ dock.innerHTML = `
   <div class="qx-bar">
     <button class="tool glass" data-open="wp" title="集合點與休息點">集合點</button>
     <button class="tool glass" data-open="cam" title="測速照相查詢">測速</button>
+    <button class="tool glass" data-open="msg" title="快速訊息">訊息</button>
+    <button class="tool glass" data-open="mark" title="地圖標註">標註</button>
+    <button class="qx-sos" id="qxSos" title="長按 1.5 秒發出 SOS"><i></i><span>SOS</span></button>
   </div>`;
 document.body.append(dock);
 const pop = $('#qxPop');
@@ -41,6 +44,9 @@ function render() {
   pop.hidden = !X.open;
   if (X.open === 'wp') renderWpPanel();
   if (X.open === 'cam') renderCamPanel();
+  if (X.open === 'msg') renderMsgPanel();
+  if (X.open === 'mark') renderMarkPanel();
+  if (X.pick && X.pick.mode !== X.open) clearPick();
 }
 
 /* ---------- 集合點 ---------- */
@@ -101,7 +107,7 @@ function renderWpPanel() {
   pop.innerHTML = `
     <div class="qx-head"><b>集合點與休息點</b><span class="small muted">大家都能改；進入半徑就通知全隊</span></div>
     <div class="qx-list">${rows || '<div class="small muted" style="padding:6px 2px">還沒有集合點</div>'}</div>
-    ${X.pick?.lngLat ? `
+    ${X.pick?.mode === 'wp' && X.pick.lngLat ? `
       <form class="qx-form" id="wpForm">
         <input class="input" name="name" placeholder="名稱，例如：武嶺停車場" maxlength="30" required autocomplete="off">
         <div class="qx-inline">
@@ -110,8 +116,8 @@ function renderWpPanel() {
         </div>
         <div class="qx-inline"><button type="button" class="btn" id="wpCancel">取消</button><button class="btn primary">新增</button></div>
       </form>`
-    : `<button class="btn block" id="wpAdd">${X.pick ? '點地圖選擇位置…（再按一次取消）' : '＋ 在地圖上點選新增'}</button>`}`;
-  $('#wpAdd')?.addEventListener('click', () => { X.pick = X.pick ? null : { lngLat: null }; map.getCanvas().style.cursor = X.pick ? 'crosshair' : ''; render(); });
+    : `<button class="btn block" id="wpAdd">${X.pick?.mode === 'wp' ? '點地圖選擇位置…（再按一次取消）' : '＋ 在地圖上點選新增'}</button>`}`;
+  $('#wpAdd')?.addEventListener('click', () => startPick('wp'));
   $('#wpCancel')?.addEventListener('click', () => { clearPick(); render(); });
   $('#wpForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -123,6 +129,13 @@ function renderWpPanel() {
     } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
   });
   $('#wpForm input')?.focus();
+}
+function startPick(mode) {
+  if (X.pick?.mode === mode) { clearPick(); render(); return; }
+  clearPick();
+  X.pick = { mode, lngLat: null };
+  map.getCanvas().style.cursor = 'crosshair';
+  render();
 }
 function clearPick() { X.pick = null; X.pickMarker?.remove(); X.pickMarker = null; map.getCanvas().style.cursor = ''; }
 
@@ -143,6 +156,7 @@ pop.addEventListener('click', async (e) => {
 map.on('click', (e) => {
   if (!X.pick) return;
   X.pick.lngLat = e.lngLat;
+  X.open = X.pick.mode;
   S.lastInteract = Date.now(); M.unfollow();
   X.pickMarker?.remove();
   const el = document.createElement('div'); el.className = 'qx-pin pick'; el.innerHTML = '<b>＋</b>';
@@ -235,13 +249,155 @@ pop.addEventListener('click', (e) => {
   map.easeTo({ center: [+row.dataset.lon, +row.dataset.lat], zoom: 15.5, duration: 900 });
 });
 
+/* ---------- 快速訊息 ---------- */
+const PRESETS = ['加油', '休息一下', '等我', '有狀況', '我先走'];
+async function sendMsg(text) {
+  try { await api(`/api/trips/${tid}/messages`, { method: 'POST', body: { text } }); X.open = null; render(); }
+  catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+}
+function renderMsgPanel() {
+  pop.innerHTML = `
+    <div class="qx-head"><b>快速訊息</b><span class="small muted">全隊都會收到，也會記在回放裡</span></div>
+    <div class="qx-presets">${PRESETS.map((t) => `<button class="btn" data-say="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+    <form class="qx-inline" id="msgForm"><input class="input" name="t" maxlength="40" placeholder="自己打…" autocomplete="off"><button class="btn primary" style="flex:none">送出</button></form>`;
+  $('#msgForm').addEventListener('submit', (e) => { e.preventDefault(); const t = new FormData(e.target).get('t').trim(); if (t) sendMsg(t); });
+}
+pop.addEventListener('click', (e) => { const b = e.target.closest('[data-say]'); if (b) sendMsg(b.dataset.say); });
+
+/* ---------- 地圖標註 ---------- */
+const MARK = { pothole: ['坑洞', '坑'], rock: ['落石', '石'], food: ['美食', '食'], view: ['風景', '景'], other: ['其他', '註'] };
+X.marks = []; X.markPins = new Map();
+function drawMarks() {
+  const seen = new Set();
+  for (const m of X.marks) {
+    seen.add(m.id);
+    let p = X.markPins.get(m.id);
+    if (!p) {
+      const el = document.createElement('div');
+      el.className = 'qx-mark';
+      el.onclick = () => { X.open = 'mark'; render(); };
+      p = { el, marker: new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([m.lon, m.lat]).addTo(map) };
+      X.markPins.set(m.id, p);
+    }
+    p.el.dataset.kind = m.kind;
+    p.el.title = `${m.label}${m.note ? '：' + m.note : ''}（${nameOf(m.by)}）`;
+    p.el.innerHTML = `<b>${MARK[m.kind]?.[1] || '註'}</b>`;
+  }
+  for (const [id, p] of X.markPins) if (!seen.has(id)) { p.marker.remove(); X.markPins.delete(id); }
+}
+async function loadMarks() { try { X.marks = await api(`/api/trips/${tid}/marks`); drawMarks(); } catch { /* 略過 */ } }
+function renderMarkPanel() {
+  const canDel = (m) => m.by === S.me || S.trip?.is_owner;
+  pop.innerHTML = `
+    <div class="qx-head"><b>地圖標註</b><span class="small muted">坑洞、落石會在隊友騎到前方 300 m 時提醒</span></div>
+    <div class="qx-list">${X.marks.map((m) => `<div class="qx-row" data-lon="${m.lon}" data-lat="${m.lat}" data-goto="1">
+      <span class="qx-mark static" data-kind="${m.kind}"><b>${MARK[m.kind]?.[1] || '註'}</b></span>
+      <div class="grow"><div class="t1">${esc(m.label)}${m.note ? '：' + esc(m.note) : ''}</div><div class="t2">${esc(nameOf(m.by))}</div></div>
+      ${canDel(m) ? `<button class="qx-x" data-delmark="${m.id}">刪除</button>` : ''}</div>`).join('') || '<div class="small muted" style="padding:6px 2px">還沒有標註</div>'}</div>
+    ${X.pick?.mode === 'mark' && X.pick.lngLat ? `
+      <form class="qx-form" id="markForm">
+        <div class="qx-kinds">${Object.entries(MARK).map(([k, [n]], i) => `<label><input type="radio" name="kind" value="${k}"${i ? '' : ' checked'}><span>${n}</span></label>`).join('')}</div>
+        <input class="input" name="note" maxlength="40" placeholder="說明（可不填）" autocomplete="off">
+        <div class="qx-inline"><button type="button" class="btn" id="markCancel">取消</button><button class="btn primary">標註</button></div>
+      </form>`
+    : `<div class="qx-inline"><button class="btn" id="markHere">標在我的位置</button><button class="btn" id="markAdd">${X.pick?.mode === 'mark' ? '點地圖…（取消）' : '在地圖上點選'}</button></div>`}`;
+  $('#markAdd')?.addEventListener('click', () => startPick('mark'));
+  $('#markHere')?.addEventListener('click', () => {
+    const me = S.members.get(S.me);
+    if (!me?.pos) { toast('還沒有你的位置，先到「回報」分頁開始定位', { icon: '!', color: '#ff9f0a' }); return; }
+    X.pick = { mode: 'mark', lngLat: { lng: me.pos[0], lat: me.pos[1] } };
+    render();
+  });
+  $('#markCancel')?.addEventListener('click', () => { clearPick(); render(); });
+  $('#markForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      await api(`/api/trips/${tid}/marks`, { method: 'POST', body: { kind: f.get('kind'), note: f.get('note'), lat: X.pick.lngLat.lat, lon: X.pick.lngLat.lng } });
+      clearPick(); render();
+    } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  });
+}
+pop.addEventListener('click', async (e) => {
+  const d = e.target.closest('[data-delmark]');
+  if (d) {
+    e.stopPropagation();
+    if (d.dataset.confirm !== '1') { d.dataset.confirm = '1'; d.textContent = '確定？'; return; }
+    try { await api(`/api/trips/${tid}/marks/${d.dataset.delmark}`, { method: 'DELETE' }); } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+    return;
+  }
+  const g = e.target.closest('[data-goto]');
+  if (g) { S.lastInteract = Date.now(); M.unfollow(); map.easeTo({ center: [+g.dataset.lon, +g.dataset.lat], zoom: Math.max(map.getZoom(), 15.5), duration: 900 }); }
+});
+
+/* ---------- SOS：長按 1.5 秒發出，橫幅一直顯示到本人解除 ---------- */
+const sosBtn = $('#qxSos');
+const banner = document.createElement('div');
+banner.className = 'qx-sosbar';
+banner.hidden = true;
+document.body.append(banner);
+X.sos = [];
+let hold = null;
+function mineSos() { return X.sos.find((e) => e.uid === S.me); }
+function syncSosBtn() { sosBtn.classList.toggle('active', !!mineSos()); sosBtn.querySelector('span').textContent = mineSos() ? '解除' : 'SOS'; }
+sosBtn.addEventListener('pointerdown', (e) => {
+  if (mineSos()) return;
+  e.preventDefault();
+  sosBtn.classList.add('holding');
+  hold = setTimeout(async () => {
+    hold = null; sosBtn.classList.remove('holding');
+    try { await api(`/api/trips/${tid}/sos`, { method: 'POST' }); navigator.vibrate?.(300); }
+    catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  }, 1500);
+});
+const stopHold = () => { if (hold) { clearTimeout(hold); hold = null; sosBtn.classList.remove('holding'); toast('SOS 要按住 1.5 秒才會發出', { icon: 'S', color: '#ff3b30' }); } };
+sosBtn.addEventListener('pointerup', stopHold);
+sosBtn.addEventListener('pointerleave', stopHold);
+sosBtn.addEventListener('click', async () => {
+  if (!mineSos()) return;
+  if (sosBtn.dataset.confirm !== '1') { sosBtn.dataset.confirm = '1'; sosBtn.querySelector('span').textContent = '確定？'; setTimeout(() => { sosBtn.dataset.confirm = ''; syncSosBtn(); }, 3000); return; }
+  sosBtn.dataset.confirm = '';
+  try { await api(`/api/trips/${tid}/sos`, { method: 'DELETE' }); } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+});
+function kmFromMe(lon, lat) {
+  const me = S.members.get(S.me);
+  if (!me?.pos || lon == null) return null;
+  return new maplibregl.LngLat(me.pos[0], me.pos[1]).distanceTo(new maplibregl.LngLat(+lon, +lat)) / 1000;
+}
+function renderSos() {
+  syncSosBtn();
+  banner.hidden = !X.sos.length;
+  banner.innerHTML = X.sos.map((e) => {
+    const km = e.uid === S.me ? null : kmFromMe(e.lon, e.lat);
+    return `<div class="qx-sosrow"><b>SOS</b><div class="grow"><div class="t1">${esc(nameOf(e.uid) || '隊友')} 需要幫忙</div>
+      <div class="t2">${clock(+e.ts)}${km != null ? ` · 距離我 ${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'}` : ''}${e.lat == null ? ' · 沒有位置' : ''}</div></div>
+      ${e.lat != null ? `<button class="btn" data-sosgo="${e.lon},${e.lat}">看位置</button>` : ''}</div>`;
+  }).join('');
+}
+banner.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sosgo]');
+  if (!b) return;
+  const [lon, lat] = b.dataset.sosgo.split(',').map(Number);
+  S.lastInteract = Date.now(); M.unfollow();
+  map.easeTo({ center: [lon, lat], zoom: 16, duration: 900 });
+});
+async function loadSos() { try { X.sos = await api(`/api/trips/${tid}/sos`); renderSos(); } catch { /* 略過 */ } }
+setInterval(() => { if (X.sos.length) renderSos(); }, 5000); // 距離會變
+
 /* ---------- WebSocket 訊息 ---------- */
 addEventListener('qiji:msg', (e) => {
   const msg = e.detail;
   if (msg.kind === 'waypoints') { X.wps = msg.items; drawWps(); if (X.open === 'wp' && !X.pick?.lngLat) render(); }
-  if (msg.kind === 'snapshot') loadWps();
+  if (msg.kind === 'marks') { X.marks = msg.items; drawMarks(); if (X.open === 'mark' && !X.pick?.lngLat) render(); }
+  if (msg.kind === 'hazard' && msg.uid === S.me) {
+    toast(`前方 ${msg.dist_m} m 有${msg.label}${msg.note ? '：' + msg.note : ''}`, { icon: '!', color: '#ff9f0a', sub: `${nameOf(msg.by)} 標註的` });
+  }
+  if (msg.kind === 'event' && (msg.type === 'sos' || msg.type === 'sos_off')) loadSos();
+  if (msg.kind === 'snapshot') { loadWps(); loadMarks(); loadSos(); }
   if (msg.kind === 'speedcam' && msg.uid === S.me) camAlert(msg);
 });
 
 loadWps();
+loadMarks();
+loadSos();
 window.qijiExtra = X; // 除錯用

@@ -169,12 +169,42 @@ async def check_speedcam(tid: str, uid: str, f: dict):
         return
 
 
+HAZARD_AHEAD_M = 300
+HAZARD_LATERAL_M = 60
+HAZARD_TTL = 600
+HAZARD_NAME = {"pothole": "坑洞", "rock": "落石"}
+
+
+async def check_hazard(tid: str, uid: str, f: dict):
+    """隊友標註的坑洞／落石：GEOSEARCH 前方 300 m（同樣用扇形＋橫向距離），只提醒自己，標註的人不提醒。"""
+    try:
+        lat, lon, hd, sp = float(f["lat"]), float(f["lon"]), float(f["heading"]), float(f["speed"])
+    except (KeyError, ValueError):
+        return
+    if sp < CAM_MIN_MS:
+        return
+    near = await r.geosearch(K.marks(tid), longitude=lon, latitude=lat, radius=HAZARD_AHEAD_M, unit="m",
+                             withdist=True, withcoord=True, sort="ASC", count=5)
+    for mid, dist, (mlon, mlat) in near:
+        a = angdiff(hd, bearing_deg(lat, lon, mlat, mlon))
+        if float(dist) > 30 and (a > CAM_SECTOR_DEG or float(dist) * math.sin(math.radians(a)) > HAZARD_LATERAL_M):
+            continue
+        kind, by, note = await r.hmget(K.mark(tid, mid), "kind", "by", "note")
+        if kind not in HAZARD_NAME or by == uid:
+            continue
+        if await r.set(f"hazhit:{tid}:{uid}:{mid}", 1, nx=True, ex=HAZARD_TTL):
+            await events.publish(tid, {"kind": "hazard", "uid": uid, "mid": mid, "label": HAZARD_NAME[kind],
+                                       "note": note or "", "by": by, "dist_m": round(float(dist))})
+        return
+
+
 async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
     """警示類：抵達集合點、前方測速（每筆都查）、落隊（同一批裡同一個行程只判斷一次）。"""
     for _, f in msgs:
         if f.get("trip") and f.get("uid") and "lat" in f:
             await check_arrival(f["trip"], f["uid"], float(f["lat"]), float(f["lon"]), int(f["ts"]))
             await check_speedcam(f["trip"], f["uid"], f)
+            await check_hazard(f["trip"], f["uid"], f)
     trips = dict.fromkeys(f["trip"] for _, f in msgs if f.get("trip"))
     for tid in trips:
         await check_trip_lag(tid)

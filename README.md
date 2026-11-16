@@ -103,13 +103,16 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 | GEO（測速） | `poi:speedcam` 全台約 1,900 個測速點；worker 對每筆回報 `GEOSEARCH … BYRADIUS 1000 m WITHDIST WITHCOORD`，留下行進方向 ±35° 扇形內、離行進方向延長線 100 m 內、而且拍攝方向相符的最近一支 |
 | RediSearch | `idx:speedcam`（Hash `speedcam:{id}`）：縣市／鄉鎮 TAG、速限 NUMERIC、地址中文全文、位置 GEO，一個查詢就能做「南投縣＋速限 40～60＋地址含臺14＋我附近 20 km」 |
 | TTL 去重 | 測速提醒 `SET camhit:{trip}:{uid}:{cam} NX EX 900`：key 還在就代表提醒過，時間到自動解除 |
+| Streams＋Pub/Sub（互動） | 快速訊息、地圖標註、SOS 都寫進 `trip:{id}:events` 並廣播，回放自動帶到；時間用本人裝置回報的 ts |
+| GEO（標註） | `trip:{id}:marks`；坑洞／落石由 worker `GEOSEARCH` 前方 300 m，提醒正騎過去的隊友（標註的人不提醒） |
+| TTL 限流 | 快速訊息 `SET ratelimit:msg:{uid} NX PX 2000`，2 秒內只能發一則 |
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時在 Redis 裡 `SUNION` |
 
 ## 階段
 
 - [x] **M1 核心**：帳號、開團／邀請碼／開始／結束、位置回報（網頁＋Traccar）、即時地圖（深色／衛星／淺色、3D 地形）、失聯偵測、GPX 匯入、模擬器、全年迷霧足跡
 - [x] **M2 回放**：全隊同步、時間軸＋倍速（1～300×）、事件標記可跳轉、跟拍鏡頭（車頭朝上、3D）、依隊員／速度／海拔上色、海拔與速度曲線（TS.MRANGE）、整趟摘要
-- [ ] M3 警示與互動：Worker（consumer group）、落隊、抵達、測速（RediSearch）、訊息、標註、SOS、Telegram
+- [ ] M3 警示與互動：Worker（consumer group）✓、落隊 ✓、抵達 ✓、測速（RediSearch）✓、訊息／標註／SOS ✓；Telegram 推播待做
 - [ ] M4 導航：Valhalla 機車路線、規劃頁、轉彎提示
 - [ ] M5 戰情室、後台、點亮鄉鎮（GEOSHAPE）、熱力圖
 - [ ] M6 部署、UML、簡報、影片
