@@ -4,22 +4,69 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>騎跡</title>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
 <style>
-  /* 背景：頁首後面一張夜色 3D 地圖（自己的軌跡發黃光），往下淡進底色；地圖區固定夜色，字一律淺色 */
-  .bgmap{position:absolute;left:0;right:0;top:0;height:560px;z-index:0;overflow:hidden;background:#07090c;
-         -webkit-mask-image:linear-gradient(#000 50%,transparent 92%);mask-image:linear-gradient(#000 50%,transparent 92%)}
-  .bgmap #bgmap{position:absolute;inset:0}
-  .bgmap::after{content:"";position:absolute;inset:0;background:linear-gradient(rgba(7,9,12,.7),rgba(7,9,12,.35) 34%,rgba(7,9,12,0) 50%);pointer-events:none}
-  .bgmap .maplibregl-ctrl-attrib{display:none}
-  .credit{position:absolute;z-index:1;right:12px;top:8px;font-size:10px;color:rgba(255,255,255,.45)}
   .page{position:relative;z-index:1}
-  .head{color:#f5f5f7;text-shadow:0 1px 12px rgba(0,0,0,.8)}
-  .head .eyebrow{color:rgba(245,245,247,.7)}
-  .bgmap .map-loading{display:none}
+
+  /* ---------- 頂部樣式 1：天色（依時段的天空，往下淡進底色） ---------- */
+  .sky{position:absolute;left:0;right:0;top:0;height:440px;z-index:0;overflow:hidden;
+       background:radial-gradient(60% 55% at 78% 100%,var(--sky-glow),transparent 70%),linear-gradient(var(--sky-top),var(--sky-mid) 55%,var(--sky-low));
+       -webkit-mask-image:linear-gradient(#000 45%,transparent);mask-image:linear-gradient(#000 45%,transparent)}
+  .sky canvas{position:absolute;inset:0;width:100%;height:100%}
+  body[data-hero="sky"] .head{color:#fff;text-shadow:0 1px 10px rgba(0,0,0,.35);padding-top:72px}
+  body[data-hero="sky"] .head .eyebrow{color:rgba(255,255,255,.8)}
+  body[data-hero="sky"] .menu summary .avatar{box-shadow:0 0 0 2px rgba(255,255,255,.85)}
+
+  /* ---------- 頂部樣式 2：年度紀錄 ---------- */
+  .hero-year{display:flex;flex-direction:column;gap:12px;padding:18px 18px 16px}
+  .hy-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+  .hy-head b{display:block;font-size:20px;margin-top:2px}
+  .hy-legend{display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted)}
+  .hy-legend i{width:10px;height:10px;border-radius:2.5px;display:block}
+  .hero-year svg{width:100%;height:auto;display:block}
+  .hero-year svg text{font-size:9.5px;fill:var(--muted)}
+  .hero-year .l0{fill:var(--surface-2)}
+  .hero-year .l1{fill:color-mix(in srgb,var(--accent) 30%,var(--surface-2));background:color-mix(in srgb,var(--accent) 30%,var(--surface-2))}
+  .hero-year .l2{fill:color-mix(in srgb,var(--accent) 55%,var(--surface-2));background:color-mix(in srgb,var(--accent) 55%,var(--surface-2))}
+  .hero-year .l3{fill:color-mix(in srgb,var(--accent) 80%,var(--surface-2));background:color-mix(in srgb,var(--accent) 80%,var(--surface-2))}
+  .hero-year .l4{fill:var(--accent);background:var(--accent)}
+  .hy-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .hy-stats div{display:flex;flex-direction:column;min-width:0}
+  .hy-stats strong{font-size:20px;line-height:1.15}
+  .hy-stats span{font-size:12px;color:var(--muted)}
+
+  /* ---------- 頂部樣式 5：儀表（像機車儀表板，固定夜色） ---------- */
+  .hero-gauge{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:8px;align-items:center;padding:18px 20px;border-radius:24px;color:#f5f5f7;
+              background:radial-gradient(80% 90% at 30% 60%,#1b2330,#0a0d12 75%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+  .hero-gauge .dial{width:100%;height:auto;display:block}
+  .dial .track{fill:none;stroke:rgba(255,255,255,.08);stroke-width:10}
+  .dial .fill{fill:none;stroke:#ff8a3d;stroke-width:10;stroke-linecap:round;filter:drop-shadow(0 0 6px rgba(255,138,61,.6))}
+  .dial .red{fill:none;stroke:#ff453a;stroke-width:4;opacity:.8}
+  .dial .mj{stroke:#f5f5f7;stroke-width:2.2}
+  .dial .mn{stroke:rgba(245,245,247,.45);stroke-width:1.2}
+  .dial text{fill:#c7c7cc;font-size:11px;text-anchor:middle;font-family:var(--num)}
+  .dial .unit{font-size:12px;fill:#8e8e93}
+  .dial #needle{transform-box:view-box;transform-origin:150px 150px}
+  .dial .needle{stroke:#ff8a3d;stroke-width:3.5;stroke-linecap:round;filter:drop-shadow(0 0 4px rgba(255,138,61,.8))}
+  .dial .hub{fill:#2c2c2e;stroke:#ff8a3d;stroke-width:2}
+  .g-side .eyebrow{color:#ffb27a}
+  .g-big{font-size:15px;color:#c7c7cc}
+  .g-big strong{font-size:38px;color:#fff;line-height:1.1}
+  .g-rows{display:grid;gap:6px;margin:10px 0 12px}
+  .g-rows div{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:#aeaeb2;border-bottom:1px solid rgba(255,255,255,.07);padding-bottom:5px}
+  .g-rows b{color:#f5f5f7;font-weight:600}
+  .odo{display:flex;align-items:center;gap:3px;font-size:10px;letter-spacing:.08em;color:#8e8e93}
+  .odo i{font-style:normal;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:16px;color:#f5f5f7;background:#000;border-radius:4px;padding:2px 4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  .odo span:first-child{margin-right:4px}
+  .odo span:last-child{margin-left:4px}
+  @media (max-width:520px){.hero-gauge{grid-template-columns:1fr}.hero-gauge .dial{max-width:300px;margin:0 auto}.hy-stats{grid-template-columns:repeat(2,1fr)}}
+
+  /* 設定：首頁頂部樣式 */
+  .menu .msec{padding:10px 12px 4px;font-size:12px;font-weight:600;color:var(--muted);border-top:1px solid var(--line);margin-top:4px}
+  .menu .pop button[role="menuitemradio"]{display:flex;justify-content:space-between;align-items:center;width:100%}
+  .menu .pop button[aria-checked="true"]::after{content:"✓";color:var(--accent-ink);font-weight:700}
   .page{max-width:640px;gap:16px}
-  .head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-top:96px}
+  .head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-top:8px}
   .head h1{margin:4px 0 0;font-size:30px;line-height:1.15}
 
   /* 帳號選單：頭像點開才有登出 */
@@ -57,12 +104,11 @@
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .row2 form{display:flex;flex-direction:column;gap:10px}
   .row2 .eyebrow{font-size:12px}
-  @media (max-width:440px){.bgmap{height:460px}.head{padding-top:72px}.row2{grid-template-columns:1fr}.fp{height:280px}.fp .nums strong{font-size:19px}.fp b{font-size:21px}}
+  @media (max-width:440px){.row2{grid-template-columns:1fr}.fp{height:280px}.fp .nums strong{font-size:19px}.fp b{font-size:21px}}
 </style>
 </head>
 <body>
-<div class="bgmap" aria-hidden="true"><div id="bgmap"></div></div>
-<div class="credit" id="credit">地圖 © OpenFreeMap · OpenStreetMap · Mapzen/AWS</div>
+<div class="sky" id="sky" hidden aria-hidden="true"><canvas id="stars"></canvas></div>
 <main class="page">
   <header class="head">
     <div><div class="eyebrow" id="today"></div><h1 id="hello">騎跡</h1></div>
@@ -70,10 +116,14 @@
       <summary aria-label="帳號選單" id="me"></summary>
       <div class="pop">
         <div class="who"><b id="meName"></b><span class="small muted" id="meUser"></span></div>
-        <button type="button" id="logout">登出</button>
+        <div class="msec" id="heroLabel">首頁頂部</div>
+        <div role="group" aria-labelledby="heroLabel" id="heroOpts"></div>
+        <button type="button" id="logout" style="border-top:1px solid var(--line);border-radius:0 0 10px 10px;margin-top:4px">登出</button>
       </div>
     </details>
   </header>
+
+  <section id="hero" hidden></section>
 
   <a class="fp" href="/footprint" aria-label="我的足跡：打開全年迷霧地圖">
     <div class="txt">
@@ -106,10 +156,10 @@
   <h2 class="sec">我的行程</h2>
   <div class="list" id="trips"><div class="li"><span class="muted">載入中…</span></div></div>
 </main>
-<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 <script type="module">
 import { api, $, esc, avatar, clock } from '/assets/common.js';
 import { drawFootprint } from '/assets/footmini.js';
+import { HEROES, getHero, setHero, renderHero } from '/assets/homehero.js';
 const ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
 const d = new Date();
 $('#today').textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${'日一二三四五六'[d.getDay()]}`;
@@ -155,8 +205,21 @@ if (pending) join(pending.toUpperCase());
 loadTrips();
 
 // 足跡卡片：數字先出來，縮圖資料比較大（約 5 萬格）隨後畫上
+// 頂部樣式：先畫天色（不用資料），summary 回來再畫其他兩種
+let summary = null, hero = getHero();
+const drawHero = () => renderHero(hero, summary);
+$('#heroOpts').innerHTML = Object.entries(HEROES).map(([k, n]) => `<button type="button" role="menuitemradio" data-h="${k}" aria-checked="${k === hero}">${n}</button>`).join('');
+$('#heroOpts').onclick = (e) => {
+  const b = e.target.closest('[data-h]'); if (!b) return;
+  hero = b.dataset.h; setHero(hero);
+  $('#heroOpts').querySelectorAll('[data-h]').forEach((x) => x.setAttribute('aria-checked', x === b));
+  drawHero();
+};
+drawHero();
+
 api('/api/footprint/summary').then((s) => {
-  import('/assets/homemap.js').then((m) => m.start(s)).catch(() => {}); // 背景地圖失敗不影響首頁
+  summary = s;
+  if (hero !== 'sky') drawHero();
   if (!s.points) {
     $('#fpTitle').textContent = '還沒有足跡';
     $('#fpNums').innerHTML = '<div><span>開始一趟行程，或匯入 GPX，地圖就會一格一格亮起來</span></div>';
