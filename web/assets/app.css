@@ -81,3 +81,5 @@ a.li{color:inherit}
 .rider.lost .dot{background:#8e8e93;border-style:dashed}
 .rider.lost .arrow,.rider.rest .arrow,.rider.done .arrow{display:none}
 .rider.lost .name{color:var(--crit)}
+.rider.gapflag .dot{box-shadow:0 0 0 4px var(--warn),0 2px 8px rgba(0,0,0,.35)}
+.rider.gapflag .name{color:var(--warn)}

@@ -32,6 +32,9 @@ class K:
     ts_speed = staticmethod(lambda tid, uid: f"ts:{tid}:{uid}:speed")
     ts_alt = staticmethod(lambda tid, uid: f"ts:{tid}:{uid}:alt")
     stats = staticmethod(lambda tid, uid: f"trip:{tid}:stats:{uid}")
+    lagflag = staticmethod(lambda tid: f"trip:{tid}:lagflag")     # Hash uid → behind／ahead（目前在警示中）
+    gap = staticmethod(lambda tid: f"trip:{tid}:gap")             # Hash uid → 與全隊中心的距離（km，負＝落後）
+    lagchk = staticmethod(lambda tid: f"trip:{tid}:lagchk")       # 節流鎖：一個行程 2 秒判斷一次
     ingest = "stream:ingest"
     ts_writes = "ts:sys:writes"
 
@@ -86,3 +89,65 @@ redis.call('HINCRBY', KEYS[1], 'points', 1)
 return 1
 """
 update_stats = r.register_script(UPDATE_STATS_LUA)
+
+
+# Worker（alerts group）：落隊判斷（規格 7.4，沒有路線的版本）。
+# 距離：與全隊中心的直線距離。全隊中心＝在線隊友座標的「中位數」
+#   （不用平均：一個人落很後面時，平均會被他拉過去，反而讓其他人看起來離中心很遠）。
+# 前後：大家從同一個地方出發，「已騎里程」（stats group 算的）就近似沿路線的進度，
+#   比中位數多＝前面、少＝後面。山路髮夾彎時行進方向會互相抵消，所以不用方向判斷。
+# 只有兩個人時沒有中位數可言，以里程較多的那位當中心。全隊都停著不判斷（休息站裡走動不該警示）。
+# 進入警示要超過門檻，解除要回到門檻 75% 以內（遲滯），避免在門檻附近一直跳。
+# 「判斷＋改旗標」在同一個 Lua 裡完成，多個 worker 同時判斷同一個行程也只會發一次警示。
+# KEYS: geo, lagflag, 然後每人兩個：state, stats    ARGV: 門檻(公尺), uid1…uidN
+# 回傳：{uid, 帶正負號的距離(公尺，負＝落後), 轉換(0 無／1 落隊／2 衝太前面／3 跟上)} 攤平成一維
+LAG_LUA = """
+local thr = tonumber(ARGV[1])
+local R, moving = {}, false
+for j = 2, #ARGV do
+  local uid = ARGV[j]
+  local st = redis.call('HMGET', KEYS[2 * j - 1], 'status', 'speed')
+  if st[1] == 'ok' then
+    local pos = redis.call('GEOPOS', KEYS[1], uid)[1]
+    if pos then
+      local km = tonumber(redis.call('HGET', KEYS[2 * j], 'km') or '0')
+      table.insert(R, {uid = uid, lon = tonumber(pos[1]), lat = tonumber(pos[2]), km = km})
+      if (tonumber(st[2]) or 0) >= 2 then moving = true end
+    end
+  end
+end
+if #R < 2 then return {} end
+
+local function median(field)
+  local a = {}
+  for _, r in ipairs(R) do table.insert(a, r[field]) end
+  table.sort(a)
+  local n = #a
+  if n % 2 == 1 then return a[(n + 1) / 2] end
+  return (a[n / 2] + a[n / 2 + 1]) / 2
+end
+local clat, clon, ckm = median('lat'), median('lon'), median('km')
+if #R == 2 then
+  local lead = R[1].km >= R[2].km and R[1] or R[2]
+  clat, clon, ckm = lead.lat, lead.lon, lead.km
+end
+local kx, ky = 111320 * math.cos(math.rad(clat)), 110540
+
+local out = {}
+for _, r in ipairs(R) do
+  local dx, dy = (r.lon - clon) * kx, (r.lat - clat) * ky
+  local dist = math.sqrt(dx * dx + dy * dy)
+  local ahead = r.km > ckm
+  local flag = redis.call('HGET', KEYS[2], r.uid)
+  local tr = 0
+  if flag and dist < thr * 0.75 then
+    redis.call('HDEL', KEYS[2], r.uid); tr = 3
+  elseif not flag and moving and dist > thr then
+    if ahead then redis.call('HSET', KEYS[2], r.uid, 'ahead'); tr = 2
+    else redis.call('HSET', KEYS[2], r.uid, 'behind'); tr = 1 end
+  end
+  table.insert(out, r.uid); table.insert(out, math.floor((ahead and dist or -dist) + 0.5)); table.insert(out, tr)
+end
+return out
+"""
+check_lag = r.register_script(LAG_LUA)

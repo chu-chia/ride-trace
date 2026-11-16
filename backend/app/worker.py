@@ -19,13 +19,14 @@ import socket
 
 from redis.exceptions import ResponseError
 
-from .db import K, r, update_stats
+from . import events
+from .db import K, check_lag, r, update_stats
 
 log = logging.getLogger("qiji.worker")
 
 CONSUMER = os.environ.get("WORKER_NAME") or f"{socket.gethostname()}-{os.getpid()}"
 BATCH = 200
-BLOCK_MS = 5000
+BLOCK_MS = 2000  # 要小於 redis-py 8 預設的 socket_timeout（5 秒），否則沒訊息時會 TimeoutError
 CLAIM_IDLE_MS = 60_000
 
 
@@ -65,7 +66,49 @@ def stats_dict(s) -> dict:
             "avg_kmh": round(km / (mv / 3600), 1) if mv > 60 else None}
 
 
-HANDLERS = {"stats": handle_stats}
+LAG_DEFAULT_KM = 2.0
+LAG_EVERY_MS = 2000
+LAG_TEXT = {1: "落隊：離全隊中心 {km} km", 2: "跑太前面：超前全隊中心 {km} km", 3: "已跟上隊伍"}
+LAG_TYPE = {1: "behind", 2: "ahead", 3: "regroup"}
+
+
+async def check_trip_lag(tid: str):
+    """判斷一個行程的落隊。2 秒節流：用 SET NX PX 當鎖，多個 worker 只會有一個去算。"""
+    if not await r.set(K.lagchk(tid), CONSUMER, nx=True, px=LAG_EVERY_MS):
+        return
+    uids = sorted(await r.smembers(K.active(tid)), key=int)
+    if len(uids) < 2:
+        return
+    thr_km = float(await r.hget(K.trip(tid), "lag_km") or LAG_DEFAULT_KM)
+    keys = [K.geo(tid), K.lagflag(tid)]
+    for u in uids:
+        keys += [K.state(tid, u), K.stats(tid, u)]
+    res = await check_lag(keys=keys, args=[int(thr_km * 1000), *uids])
+    if not res:
+        return
+    gaps = {}
+    for i in range(0, len(res), 3):
+        uid, signed_m, tr = res[i], int(res[i + 1]), int(res[i + 2])
+        gaps[uid] = round(signed_m / 1000, 2)
+        if tr:
+            km = f"{abs(signed_m) / 1000:.1f}"
+            await events.emit(tid, LAG_TYPE[tr], uid, LAG_TEXT[tr].format(km=km),
+                              ts=await events.last_fix_ts(tid, uid), gap_km=gaps[uid])
+    await r.delete(K.gap(tid))
+    await r.hset(K.gap(tid), mapping=gaps)
+    flags = await r.hgetall(K.lagflag(tid))
+    await events.publish(tid, {"kind": "gap", "gaps": gaps, "flags": flags, "lag_km": thr_km})
+
+
+async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
+    """警示類：落隊（之後加抵達集合點、前方測速）。同一批裡同一個行程只判斷一次。"""
+    trips = dict.fromkeys(f["trip"] for _, f in msgs if f.get("trip"))
+    for tid in trips:
+        await check_trip_lag(tid)
+    return [i for i, _ in msgs]
+
+
+HANDLERS = {"stats": handle_stats, "alerts": handle_alerts}
 
 
 async def run_group(group: str, handler):

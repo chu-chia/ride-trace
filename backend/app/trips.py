@@ -9,7 +9,7 @@ from redis.exceptions import WatchError
 from . import events
 from .auth import current_uid, public_user
 from .db import K, end_record, r
-from .worker import stats_dict
+from .worker import LAG_DEFAULT_KM, stats_dict
 
 router = APIRouter(prefix="/api/trips")
 INVITE_TTL = 24 * 3600
@@ -118,6 +118,9 @@ async def trip_detail(tid: str, uid: str) -> dict:
     t["me"] = uid
     t["is_owner"] = t.get("owner") == uid
     t["invite_valid"] = bool(await r.exists(K.invite(t.get("invite", ""))))
+    t["lag_km"] = float(t.get("lag_km") or LAG_DEFAULT_KM)
+    t["gaps"] = {k: float(v) for k, v in (await r.hgetall(K.gap(tid))).items()}
+    t["flags"] = await r.hgetall(K.lagflag(tid))
     return t
 
 
@@ -172,6 +175,23 @@ async def end_my_record(tid: str, uid: str = Depends(current_uid)):
     return {"left": left, "ended": bool(ended)}
 
 
+class SettingsIn(BaseModel):
+    lag_km: float
+
+
+@router.patch("/{tid}/settings")
+async def update_settings(tid: str, body: SettingsIn, uid: str = Depends(current_uid)):
+    """建立者調整落隊門檻（規格 4.4：預設 2 km，可調整）。"""
+    t = await trip_or_404(tid)
+    if t.get("owner") != uid:
+        raise HTTPException(403, "只有建立者可以調整")
+    if not 0.5 <= body.lag_km <= 20:
+        raise HTTPException(400, "落隊門檻要在 0.5～20 km 之間")
+    await r.hset(K.trip(tid), "lag_km", body.lag_km)
+    await events.publish(tid, {"kind": "settings", "lag_km": body.lag_km})
+    return {"lag_km": body.lag_km}
+
+
 class KickIn(BaseModel):
     uid: str
 
@@ -187,6 +207,8 @@ async def kick(tid: str, body: KickIn, uid: str = Depends(current_uid)):
         p.srem(K.members(tid), body.uid)
         p.srem(K.active(tid), body.uid)
         p.zrem(K.geo(tid), body.uid)
+        p.hdel(K.lagflag(tid), body.uid)
+        p.hdel(K.gap(tid), body.uid)
         p.delete(K.hb(tid, body.uid))
         p.zrem(K.user_trips(body.uid), tid)
         await p.execute()

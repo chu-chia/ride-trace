@@ -88,6 +88,7 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 | Lua | 結束自己的紀錄：移出 active、最後一人時把行程改成 ended，原子完成 |
 | Streams Consumer Group | `stream:ingest` 由獨立的 worker 容器 `XREADGROUP` 消費；group `stats` 算每人里程／極速／移動時間（`trip:{id}:stats:{uid}`）。處理完才 `XACK`，worker 當掉時用 `XAUTOCLAIM` 接手閒置 60 秒的訊息；`docker compose up -d --scale worker=2` 自動分攤。進度看 `GET /api/system/streams`（`XINFO GROUPS／CONSUMERS`） |
 | Lua（冪等） | worker 更新統計時依 ts 去重，at-least-once 重送不會重算里程 |
+| Lua（落隊判斷） | group `alerts`：`GEOPOS` 取全隊位置，座標中位數當全隊中心、已騎里程判斷前後，超過門檻（預設 2 km，建立者可調）就在 `trip:{id}:lagflag` 設旗標並發事件；回到 75% 以內解除。判斷＋改旗標在同一個 script，多個 worker 同時算也只警示一次；`SET NX PX` 節流每行程 2 秒算一次 |
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時在 Redis 裡 `SUNION` |
 
 ## 階段

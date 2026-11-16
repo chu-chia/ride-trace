@@ -14,7 +14,10 @@ const EV = {
   start: ['開始', 'var(--accent)', '騎', '#0a84ff'], end: ['結束', 'var(--muted)', '終', '#8e8e93'],
   join: ['加入', 'var(--accent)', '入', '#2aabee'], stop: ['結束紀錄', 'var(--muted)', '停', '#8e8e93'],
   kick: ['移出', 'var(--warn)', '出', '#ff9f0a'], create: ['建立', 'var(--muted)', '建', '#8e8e93'],
+  behind: ['落隊', 'var(--warn)', '!', '#ff9f0a'], ahead: ['超前', 'var(--warn)', '前', '#ff9f0a'],
+  regroup: ['跟上', 'var(--ok)', '合', '#30a46c'],
 };
+const fmtKm = (km) => (Math.abs(km) < 1 ? Math.round(Math.abs(km) * 1000) + ' m' : Math.abs(km).toFixed(1) + ' km');
 
 // 預設深色＋3D（山的地形＋城市建築）
 const M = createMap($('#map'), { style: 'dark', zoom: 7, terrain: true });
@@ -79,6 +82,7 @@ function placeMarker(m) {
   m.el.classList.toggle('lost', st === 'lost');
   m.el.classList.toggle('rest', st === 'rest' || st === 'none');
   m.el.classList.toggle('done', st === 'done');
+  m.el.classList.toggle('gapflag', !!S.trip?.flags?.[m.u.uid] && st !== 'done');
   const hd = s.heading != null && s.heading !== '' ? +s.heading : null;
   m.el.querySelector('.arrow').style.transform = `rotate(${(hd ?? 0) - map.getBearing()}deg)`;
   m.el.querySelector('.arrow').style.visibility = hd == null ? 'hidden' : '';
@@ -226,6 +230,8 @@ function renderTeam() {
     const bits = [];
     if (isMe) bits.push('我');
     else if (km != null) bits.push(`距離我 ${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'}`);
+    const gap = S.trip.gaps?.[m.u.uid], flag = S.trip.flags?.[m.u.uid];
+    if (gap != null && Math.abs(gap) >= 0.3 && st !== 'done') bits.push(`${gap < 0 ? '落後' : '超前'}中心 ${fmtKm(gap)}`);
     const k = m.u.stats;
     if (k?.km > 0) bits.push(`騎了 ${k.km < 10 ? k.km.toFixed(1) : Math.round(k.km)} km`);
     if (k?.max_kmh > 0) bits.push(`極速 ${Math.round(k.max_kmh)}`);
@@ -233,7 +239,7 @@ function renderTeam() {
     if (s.seen || s.ts) bits.push(ago(+s.seen || +s.ts));
     const kick = S.trip.is_owner && !isMe ? `<button class="kick" data-kick="${m.u.uid}">移出</button>` : '';
     const right = st === 'ride' || st === 'rest' || st === 'weak' ? `<b class="num">${Math.round((+s.speed || 0) * 3.6)}</b> km/h` : '';
-    return `<div class="li">${avatar(m.u)}<div class="grow"><div class="t1">${esc(m.u.nickname)} <span class="chip ${cls}">${label}</span></div><div class="t2">${esc(bits.join(' · ') || (m.u.active ? '' : '沒有在記錄'))}</div></div><div class="right">${right}${kick}</div></div>`;
+    return `<div class="li">${avatar(m.u)}<div class="grow"><div class="t1">${esc(m.u.nickname)} <span class="chip ${cls}">${label}</span>${flag && st !== 'done' ? ` <span class="chip warn">${flag === 'behind' ? '落隊' : '超前'}</span>` : ''}</div><div class="t2">${esc(bits.join(' · ') || (m.u.active ? '' : '沒有在記錄'))}</div></div><div class="right">${right}${kick}</div></div>`;
   }).join('');
 }
 $('#team').onclick = async (e) => {
@@ -271,7 +277,20 @@ function renderInvite() {
   };
 }
 
-function renderAll() { renderHeader(); renderTeam(); renderEvents(); renderInvite(); }
+// 落隊門檻：建立者可以調整，其他人只看得到
+function renderLag() {
+  const t = S.trip, el = $('#lagSet');
+  const opts = [1, 2, 3, 5, 10].concat(t.lag_km).filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
+  el.innerHTML = t.is_owner
+    ? `落隊警示：離全隊中心超過 <select id="lagKm">${opts.map((v) => `<option value="${v}"${v === t.lag_km ? ' selected' : ''}>${v} km</option>`).join('')}</select>`
+    : `落隊警示：離全隊中心超過 ${t.lag_km} km`;
+  $('#lagKm')?.addEventListener('change', async (e) => {
+    try { await api(`/api/trips/${tid}/settings`, { method: 'PATCH', body: { lag_km: +e.target.value } }); toast(`落隊門檻改成 ${e.target.value} km`); }
+    catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  });
+}
+
+function renderAll() { renderHeader(); renderTeam(); renderEvents(); renderInvite(); renderLag(); }
 setInterval(() => { if (S.trip) { renderHeader(); renderTeam(); S.members.forEach(placeMarker); } }, 1000);
 
 /* ---------- WebSocket ---------- */
@@ -312,6 +331,8 @@ function handle(msg) {
       if (m) { m.state.status = msg.status; if (msg.status === 'done') m.u.active = false; placeMarker(m); renderTeam(); }
       break;
     }
+    case 'gap': S.trip.gaps = msg.gaps; S.trip.flags = msg.flags; S.trip.lag_km = msg.lag_km; S.members.forEach(placeMarker); break;
+    case 'settings': S.trip.lag_km = msg.lag_km; renderLag(); break;
     case 'stats': { const m = S.members.get(msg.uid); if (m) m.u.stats = msg; break; } // 每秒的 renderTeam 會畫出來
     case 'member': upsertMember(msg.user, {}); renderTeam(); break;
     case 'trip':
