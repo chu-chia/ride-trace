@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>回放 · 騎跡</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="/assets/app.css">
+<style>
+  .topbar{position:fixed;z-index:10;top:max(12px,env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));display:flex;align-items:center;gap:12px;padding:8px 14px 8px 8px;border-radius:16px;max-width:calc(100% - 24px)}
+  .topbar a.back{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:20px;color:var(--fg)}
+  .topbar b{font-size:15px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
+  .topbar .sub{font-size:12px;color:var(--muted)}
+  .tools{right:404px;top:max(12px,env(safe-area-inset-top,0px))}
+  .panel{position:fixed;z-index:9;right:12px;top:12px;bottom:12px;width:380px;border-radius:22px;display:flex;flex-direction:column;overflow:hidden}
+  .panel .scroll{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+  .panel .scroll>*{flex-shrink:0}
+  .riders{display:flex;flex-wrap:wrap;gap:6px}
+  .riders button{border:0;border-radius:999px;padding:4px 10px 4px 4px;display:flex;align-items:center;gap:6px;background:var(--surface-2);cursor:pointer;font-size:12.5px}
+  .riders button .avatar{width:24px;height:24px;font-size:10.5px}
+  .riders button.on{box-shadow:inset 0 0 0 2px var(--accent);font-weight:600}
+  .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 8px}
+  .sum div{display:flex;flex-direction:column;min-width:0}
+  .sum b{font-size:19px;font-weight:700;line-height:1.15}
+  .sum span{font-size:11px;color:var(--muted)}
+  .label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin-bottom:6px}
+  canvas.chart{width:100%;height:130px;display:block;cursor:crosshair}
+  .ev{display:grid;grid-template-columns:44px 9px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer}
+  .ev:last-child{border-bottom:0}
+  .ev time{font-size:11.5px;color:var(--muted)}
+  .ev i{width:8px;height:8px;border-radius:50%;background:var(--c);display:block}
+  .timeline{position:fixed;z-index:9;left:12px;right:404px;bottom:12px;border-radius:20px;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+  .tl-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .play{width:42px;height:42px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
+  .tl-time{min-width:118px;display:flex;flex-direction:column;line-height:1.2}
+  .tl-time b{font-size:17px}
+  .tl-time span{font-size:11.5px;color:var(--muted)}
+  .track{position:relative;flex:1;min-width:180px;height:34px}
+  .track input{position:absolute;left:0;right:0;top:12px;width:100%;margin:0;accent-color:var(--accent)}
+  .ticks{position:absolute;left:8px;right:8px;top:0;height:10px}
+  .tick{position:absolute;top:0;width:9px;height:9px;border-radius:50%;background:var(--c);border:0;padding:0;transform:translateX(-50%);cursor:pointer}
+  .tl-row select{border:0;background:var(--surface-2);border-radius:10px;padding:7px 8px;font-size:13px}
+  .legend{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
+  .legend i{display:block;width:110px;height:8px;border-radius:4px}
+  @media (max-width:860px){
+    .panel{left:0;right:0;bottom:0;top:auto;width:auto;height:40dvh;border-radius:22px 22px 0 0}
+    .timeline{left:8px;right:8px;bottom:calc(40dvh + 8px)}
+    .tools{right:12px;top:76px}
+    .timeline{padding:10px 12px;gap:6px}
+    .timeline .seg{min-width:0!important;flex:1}
+    .timeline #cam{flex:1;min-width:0}
+    .timeline .tl-row{gap:8px;flex-wrap:nowrap}
+    .tl-time{min-width:64px}
+    .tl-time b{font-size:15px}
+    .track{min-width:0}
+    .legend{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="mapwrap"><div id="map"></div></div>
+
+<div class="topbar glass">
+  <a class="back" id="back" href="/" aria-label="返回">‹</a>
+  <div style="min-width:0"><b id="tName">回放</b><div class="sub" id="tSub">載入中…</div></div>
+</div>
+
+<div class="tools">
+  <button class="tool glass" id="bStyle">深色</button>
+  <button class="tool glass on" id="b3d">3D</button>
+</div>
+
+<div class="timeline glass">
+  <div class="tl-row">
+    <button class="play" id="play" aria-label="播放"></button>
+    <div class="tl-time"><b class="num" id="clock">--:--</b><span class="num" id="elapsed">+0:00</span></div>
+    <div class="track"><div class="ticks" id="ticks"></div><input type="range" id="range" min="0" max="1" step="1" value="0" aria-label="時間軸"></div>
+    <select id="rate" aria-label="倍速"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="30">30×</option><option value="60" selected>60×</option><option value="120">120×</option><option value="300">300×</option></select>
+  </div>
+  <div class="tl-row">
+    <select id="cam" aria-label="鏡頭"></select>
+    <div class="seg" id="colorBy" style="min-width:220px"><button class="on" data-c="rider">隊員色</button><button data-c="speed">速度</button><button data-c="alt">海拔</button></div>
+    <div class="legend" id="legend" hidden></div>
+  </div>
+</div>
+
+<aside class="panel glass">
+  <div class="scroll">
+    <div class="riders" id="riders"></div>
+    <div class="card">
+      <div class="label" id="sumTitle">整趟摘要</div>
+      <div class="sum" id="sum"></div>
+    </div>
+    <div class="card">
+      <div class="label">目前位置</div>
+      <div class="sum" id="now"></div>
+    </div>
+    <div class="card"><div class="label">海拔（m）</div><canvas class="chart" id="altChart"></canvas></div>
+    <div class="card"><div class="label">速度（km/h，TimeSeries 每段平均）</div><canvas class="chart" id="spdChart"></canvas></div>
+    <div class="card"><div class="label">事件（點一下跳到那個時間）</div><div id="events"></div></div>
+  </div>
+</aside>
+
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script type="module" src="/assets/replay.js"></script>
+</body>
+</html>

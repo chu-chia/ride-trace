@@ -1,0 +1,1005 @@
+<title>騎跡原型</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout：頂部切換列＋中央舞台（手機畫面放在手機框、戰情室／回放用寬版）＋旁邊的說明欄 */
+:root{
+  --bg:#f5f5f7; --surface:#ffffff; --surface-2:#ececf0; --fg:#1d1d1f; --muted:#6e6e73; --line:rgba(0,0,0,.08);
+  --accent:#0071e3; --ok:#1f9d55; --warn:#c96a00; --crit:#e5352b; --bezel:#1d1d1f;
+  --glass:rgba(250,250,252,.82); --glass-2:rgba(255,255,255,.9); --shadow:0 10px 34px rgba(0,0,0,.10);
+  --navbg:#1f2a24; --navfg:#ffffff; --mapframe:#10151b;
+  --font:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei","Inter",sans-serif;
+  --num:"Inter",-apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000000; --surface:#1c1c1e; --surface-2:#2c2c2e; --fg:#f5f5f7; --muted:#98989d; --line:rgba(255,255,255,.10);
+  --accent:#2997ff; --ok:#30d158; --warn:#ff9f0a; --crit:#ff453a; --bezel:#3a3a3c;
+  --glass:rgba(28,28,30,.80); --glass-2:rgba(36,36,38,.92); --shadow:0 10px 34px rgba(0,0,0,.55);
+  --navbg:#1f2a24; --navfg:#ffffff; --mapframe:#10151b; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#000000; --surface:#1c1c1e; --surface-2:#2c2c2e; --fg:#f5f5f7; --muted:#98989d; --line:rgba(255,255,255,.10);
+  --accent:#2997ff; --ok:#30d158; --warn:#ff9f0a; --crit:#ff453a; --bezel:#3a3a3c;
+  --glass:rgba(28,28,30,.80); --glass-2:rgba(36,36,38,.92); --shadow:0 10px 34px rgba(0,0,0,.55);
+  --navbg:#1f2a24; --navfg:#ffffff; --mapframe:#10151b; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--glass)}
+button{font:inherit;color:inherit}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- 頂部 ---------- */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--glass);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--line)}
+.top-in{display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1500px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:17px;letter-spacing:.02em}
+.brand small{font-weight:500;color:var(--muted);font-size:12px;letter-spacing:0}
+.tabs{display:flex;gap:2px;background:var(--surface-2);padding:3px;border-radius:10px;overflow-x:auto;max-width:100%;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{border:0;background:none;font-size:13px;padding:6px 12px;border-radius:8px;white-space:nowrap;cursor:pointer}
+.tabs button.on{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.14);font-weight:600}
+.sim{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.sim b{color:var(--fg);font-weight:600}
+.icon-btn{border:0;background:var(--surface-2);width:30px;height:30px;border-radius:50%;display:grid;place-items:center;cursor:pointer}
+.sim select,.rp-ctrl select{font:inherit;font-size:12px;border:0;background:var(--surface-2);color:var(--fg);border-radius:8px;padding:5px 6px}
+
+main{padding-block:24px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.disclaimer{max-width:1500px;margin:0 auto 18px;font-size:12px;color:var(--muted);text-align:center}
+
+/* ---------- 舞台＋手機框 ---------- */
+.stage{display:flex;gap:32px;justify-content:center;align-items:flex-start;flex-wrap:wrap}
+.phone{width:390px;max-width:100%;height:800px;border-radius:54px;border:11px solid var(--bezel);background:var(--bg);overflow:hidden;position:relative;box-shadow:var(--shadow);flex:none}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
+.scroll{flex:1;overflow-y:auto;padding:22px 18px 24px;display:flex;flex-direction:column;gap:14px}
+@media (max-width:520px){
+  .phone{width:100%;height:calc(100dvh - 150px);min-height:620px;border-width:0;border-radius:22px}
+}
+
+/* ---------- 說明欄 ---------- */
+.notes{width:320px;max-width:100%;display:flex;flex-direction:column;gap:14px;font-size:13.5px}
+.notes h3{margin:0;font-size:12px;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.notes p{margin:0}
+.notes ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.notes .block{display:flex;flex-direction:column;gap:6px}
+.redis{display:flex;flex-direction:column;gap:6px}
+.redis div{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:baseline}
+.redis code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--surface-2);padding:2px 6px;border-radius:6px;white-space:nowrap}
+.redis span{color:var(--muted);font-size:12.5px}
+.notes.wide{width:100%;max-width:1500px;margin:20px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px 32px}
+@media (max-width:760px){.notes{width:100%}}
+
+/* ---------- 共用元件 ---------- */
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.chip.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.chip.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.chip.crit{color:var(--crit);background:color-mix(in srgb,var(--crit) 14%,transparent)}
+.chip.info{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.btn{border:0;border-radius:12px;padding:10px 16px;font-weight:600;font-size:14px;cursor:pointer;background:var(--surface-2)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.big{width:100%;padding:14px;font-size:16px;border-radius:14px}
+.card{background:var(--surface);border-radius:18px;padding:16px}
+.eyebrow{font-size:11px;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.sec{font-size:13px;font-weight:600;color:var(--muted);margin:6px 2px -4px}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--c);color:#fff;display:grid;place-items:center;font-weight:700;font-size:15px;flex:none}
+.avatar.sm{width:30px;height:30px;font-size:13px}
+.list{background:var(--surface);border-radius:18px;overflow:hidden}
+.li{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.li:last-child{border-bottom:0}
+.li .grow{flex:1;min-width:0}
+.li .t1{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.li .t2{font-size:12.5px;color:var(--muted)}
+.li[data-go]{cursor:pointer}
+.seg{display:flex;background:var(--surface-2);padding:3px;border-radius:10px;gap:2px}
+.seg button{flex:1;border:0;background:none;padding:7px 10px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap}
+.seg button.on{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.14);font-weight:600}
+
+/* ---------- 登入 ---------- */
+.login-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;gap:12px;padding:32px 28px}
+.login-wrap h1{margin:4px 0 0;font-size:34px;letter-spacing:.04em}
+.login-wrap form{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+.login-wrap input{font:inherit;font-size:16px;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.linkbtn{border:0;background:none;color:var(--accent);font-size:14px;cursor:pointer;padding:6px}
+
+/* ---------- 首頁 ---------- */
+.home-head{display:flex;justify-content:space-between;align-items:flex-end;padding-top:12px}
+.home-head h1{margin:2px 0 0;font-size:30px}
+.live-card{background:var(--surface);border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px;cursor:pointer}
+.lc-top{display:flex;justify-content:space-between;align-items:center;font-size:12.5px}
+.lc-title{font-size:19px;font-weight:700}
+.lc-progress{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)}
+.bar{flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.avs{display:flex}
+.avs .avatar{margin-left:-6px;border:2px solid var(--surface)}
+.avs .avatar:first-child{margin-left:0}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.action{border:0;background:var(--surface);border-radius:16px;padding:14px;text-align:left;cursor:pointer;font-weight:600;font-size:15px;display:flex;flex-direction:column;gap:2px}
+.action small{font-weight:400;color:var(--muted);font-size:12px}
+.thumb{width:46px;height:46px;border-radius:10px;background:var(--surface-2);flex:none}
+.tabbar{display:flex;justify-content:space-around;padding:8px 0 22px;border-top:1px solid var(--line);background:var(--glass-2)}
+.tabbar button{border:0;background:none;font-size:11px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+.tabbar button.on{color:var(--accent)}
+
+/* ---------- 等候室 ---------- */
+.navbar{display:flex;align-items:center;justify-content:space-between;font-weight:600}
+.navbar button{border:0;background:none;color:var(--accent);cursor:pointer;font-size:15px;padding:0}
+.invite{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.code{font-family:var(--num);font-size:34px;font-weight:700;letter-spacing:.12em}
+#qr{width:132px;height:132px;border-radius:10px;background:#fff}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;align-items:baseline}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;word-break:break-all}
+.switch{width:44px;height:26px;border-radius:13px;background:var(--ok);position:relative;flex:none}
+.switch::after{content:"";position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.switch.off{background:var(--surface-2)}
+.switch.off::after{right:auto;left:2px}
+
+/* ---------- 騎乘頁 ---------- */
+.ride{--sh:200px}
+.ride[data-sheet="peek"]{--sh:200px}
+.ride[data-sheet="half"]{--sh:52%}
+.ride[data-sheet="full"]{--sh:86%}
+.mapcv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.ride-top{position:absolute;top:14px;left:12px;right:12px;display:flex;flex-direction:column;gap:8px;pointer-events:none;z-index:3}
+.navcard{pointer-events:auto;display:flex;gap:12px;align-items:center;background:var(--navbg);color:var(--navfg);border-radius:20px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.navcard .arrow{width:42px;height:42px;flex:none}
+.navcard .dist{font-family:var(--num);font-size:26px;font-weight:700;line-height:1.05}
+.navcard .road{font-size:14px;opacity:.85}
+.navsub{pointer-events:auto;align-self:flex-start;background:var(--glass-2);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-radius:12px;padding:6px 10px;font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.15)}
+.trip-pill{pointer-events:auto;align-self:center;background:var(--glass-2);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.15);display:flex;gap:8px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+.map-tools{position:absolute;right:12px;top:150px;display:flex;flex-direction:column;gap:8px;z-index:3}
+.ride:not(.nav-on) .map-tools{top:64px}
+.tool{width:44px;height:44px;border-radius:12px;border:0;background:var(--glass-2);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer;display:grid;place-items:center;font-size:10px;font-weight:600;gap:0;padding:0}
+.tool.on{color:var(--accent)}
+.tool svg{width:20px;height:20px}
+.sos{position:absolute;left:14px;bottom:calc(var(--sh) + 14px);width:58px;height:58px;border-radius:50%;border:0;background:var(--crit);color:#fff;font-weight:800;font-size:15px;letter-spacing:.04em;cursor:pointer;z-index:4;box-shadow:0 6px 18px rgba(0,0,0,.3);transition:bottom .35s ease;display:grid;place-items:center;touch-action:none;user-select:none;-webkit-user-select:none}
+.sos svg{position:absolute;inset:-5px;width:68px;height:68px;transform:rotate(-90deg);pointer-events:none}
+.sos circle{fill:none;stroke:var(--crit);stroke-width:4;stroke-dasharray:201;stroke-dashoffset:201;transition:stroke-dashoffset .15s}
+.sos.holding circle{stroke-dashoffset:0;transition:stroke-dashoffset 1.2s linear}
+.sos-hint{position:absolute;left:80px;bottom:calc(var(--sh) + 30px);font-size:11px;background:var(--glass-2);padding:3px 8px;border-radius:8px;z-index:4;transition:bottom .35s;pointer-events:none}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:var(--sh);background:var(--glass-2);-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);border-radius:24px 24px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.14);display:flex;flex-direction:column;transition:height .35s ease;z-index:5}
+.handle{border:0;background:none;padding:8px 0 4px;cursor:pointer;display:grid;place-items:center;flex:none}
+.handle::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--muted);opacity:.45}
+.peek{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:2px 18px 10px;flex:none}
+.peek div{display:flex;flex-direction:column}
+.peek b{font-family:var(--num);font-size:24px;font-weight:700;line-height:1.1}
+.peek span{font-size:11.5px;color:var(--muted)}
+.sheet .seg{margin:0 16px 8px;flex:none}
+.sheet-body{flex:1;overflow-y:auto;padding:0 16px 20px;display:flex;flex-direction:column;gap:10px}
+.team .li{padding:10px 12px}
+.lag{font-size:12px;text-align:right;white-space:nowrap}
+.batt{display:inline-flex;align-items:center;gap:3px}
+.quick{display:flex;flex-wrap:wrap;gap:8px}
+.quick button{border:0;background:var(--surface);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.chatlog{display:flex;flex-direction:column;gap:8px}
+.bubble{display:flex;gap:8px;align-items:flex-start;font-size:13.5px}
+.bubble .b{background:var(--surface);border-radius:14px;padding:7px 11px;max-width:80%}
+.bubble .who{font-size:11px;color:var(--muted)}
+.bubble.me{flex-direction:row-reverse}
+.bubble.me .b{background:var(--accent);color:#fff}
+.chatinput{display:flex;gap:8px}
+.chatinput input{flex:1;min-width:0;font:inherit;font-size:14px;padding:9px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.marks{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.marks button{border:0;background:var(--surface);border-radius:14px;padding:12px 4px;font-size:13px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px}
+.marks i{width:12px;height:12px;border-radius:3px;transform:rotate(45deg);background:var(--c)}
+
+/* toast（模擬 Telegram／系統通知） */
+.toasts{position:absolute;left:10px;right:10px;top:10px;display:flex;flex-direction:column;gap:8px;z-index:8;pointer-events:none}
+.toast{background:var(--glass-2);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border-radius:16px;padding:10px 12px;box-shadow:0 10px 28px rgba(0,0,0,.25);display:flex;gap:10px;align-items:flex-start;animation:tin .35s ease}
+.toast .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:13px;flex:none;background:var(--c)}
+.toast .tt{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.toast .tx{font-size:13.5px;font-weight:600}
+@keyframes tin{from{transform:translateY(-12px);opacity:.3}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.toast{animation:none}.sheet,.sos{transition:none}}
+
+/* ---------- 戰情室 ---------- */
+.war{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;max-width:1500px;margin:0 auto}
+.war-map{position:relative;height:min(64vh,620px);min-height:380px;border-radius:22px;overflow:hidden;background:var(--mapframe)}
+.war-head{position:absolute;left:14px;top:14px;right:14px;display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;z-index:2;pointer-events:none}
+.war-title{pointer-events:auto;background:var(--glass-2);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-radius:16px;padding:10px 14px;display:flex;flex-direction:column;gap:2px}
+.war-title b{font-size:16px}
+.war-stats{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.war-stats strong{font-family:var(--num);font-size:16px;color:var(--fg);display:block}
+.war-tools{margin-left:auto;display:flex;gap:8px;pointer-events:auto}
+.war-tools .tool{width:auto;padding:0 12px;height:36px;font-size:12px;display:flex;gap:6px}
+.war-side{grid-row:span 2;display:flex;flex-direction:column;gap:12px;min-width:0}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rcard{background:var(--surface);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.rcard .h{display:flex;align-items:center;gap:8px;min-width:0}
+.rcard .h b{font-size:14px;flex:1;min-width:0}
+.rcard .spd{font-family:var(--num);font-size:26px;font-weight:700;line-height:1}
+.rcard .spd small{font-size:12px;color:var(--muted);font-weight:500;margin-left:3px}
+.rcard .meta{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);gap:6px}
+.rcard.alert{box-shadow:inset 0 0 0 2px var(--warn)}
+.rcard.lost{box-shadow:inset 0 0 0 2px var(--crit)}
+.feed{background:var(--surface);border-radius:18px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;flex:1;min-height:200px;max-height:420px;overflow-y:auto}
+.feed h4,.panel h4{margin:0 0 6px;font-size:12px;color:var(--muted);letter-spacing:.06em}
+.ev{display:grid;grid-template-columns:44px 10px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line)}
+.ev:last-child{border-bottom:0}
+.ev time{font-family:var(--num);font-size:11.5px;color:var(--muted)}
+.ev i{width:8px;height:8px;border-radius:50%;background:var(--c);display:block;transform:translateY(-1px)}
+.panel{background:var(--surface);border-radius:18px;padding:12px 14px}
+.prof{width:100%;height:150px;display:block}
+
+/* ---------- 回放 ---------- */
+.replay{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;max-width:1500px;margin:0 auto}
+.rp-map{position:relative;height:min(58vh,560px);min-height:360px;border-radius:22px;overflow:hidden;background:var(--mapframe)}
+.rp-ctrl{position:absolute;left:12px;top:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;z-index:2}
+.rp-ctrl .seg{background:var(--glass-2);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+.rp-ctrl select{background:var(--glass-2);padding:8px 10px;border-radius:10px;font-size:13px}
+.legend{position:absolute;left:12px;bottom:12px;background:var(--glass-2);border-radius:10px;padding:6px 10px;font-size:11.5px;display:flex;gap:8px;align-items:center;z-index:2}
+.legend .grad{width:90px;height:8px;border-radius:4px}
+.rp-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.sumgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px}
+.sumgrid div{display:flex;flex-direction:column}
+.sumgrid b{font-family:var(--num);font-size:20px;font-weight:700}
+.sumgrid span{font-size:11.5px;color:var(--muted)}
+.towns{display:flex;flex-wrap:wrap;gap:6px}
+.rp-timeline{grid-column:1/-1;background:var(--surface);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.tl-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.tl-row .playbtn{width:40px;height:40px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
+.tl-time{font-family:var(--num);font-size:15px;font-weight:600;min-width:120px}
+.track{position:relative;flex:1;min-width:200px;height:34px}
+.track input{position:absolute;left:0;right:0;top:10px;width:100%;margin:0;accent-color:var(--accent)}
+.ticks{position:absolute;left:8px;right:8px;top:0;height:10px}
+.tick{position:absolute;top:0;width:8px;height:8px;border-radius:50%;background:var(--c);border:0;padding:0;transform:translateX(-50%);cursor:pointer}
+.tl-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}
+.tl-legend span{display:inline-flex;align-items:center;gap:5px}
+.tl-legend i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.rp-charts{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.chart{width:100%;height:170px;display:block}
+@media (max-width:980px){.war,.replay{grid-template-columns:minmax(0,1fr)}.war-side{grid-row:auto}}
+
+/* ---------- 後台 ---------- */
+.admin{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.tile{background:var(--surface);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:4px}
+.tile b{font-family:var(--num);font-size:28px;font-weight:700}
+.tile span{font-size:12px;color:var(--muted)}
+.span2{grid-column:span 2}.span4{grid-column:1/-1}
+.typebar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:8px 0}
+.typebar i{display:block;height:100%;background:var(--c)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;padding:6px 8px;border-bottom:1px solid var(--line)}
+.tbl td{padding:8px;border-bottom:1px solid var(--line)}
+.tbl tr:last-child td{border-bottom:0}
+.tblwrap{overflow-x:auto}
+@media (max-width:860px){.admin{grid-template-columns:repeat(2,minmax(0,1fr))}.span2{grid-column:1/-1}}
+
+/* ---------- 架構 ---------- */
+.arch{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:28px;position:relative}
+.col{display:flex;flex-direction:column;gap:10px;position:relative}
+.col h4{margin:0;font-size:12px;color:var(--muted);letter-spacing:.06em}
+.col:not(:last-child)::after{content:"→";position:absolute;right:-22px;top:46%;font-size:18px;color:var(--muted)}
+.node{background:var(--surface);border-radius:14px;padding:12px;font-size:13px}
+.node b{display:block;font-size:14px;margin-bottom:2px}
+.node.redis-node{box-shadow:inset 0 0 0 2px var(--crit)}
+.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.steps code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--surface-2);padding:1px 6px;border-radius:5px}
+@media (max-width:860px){.flow{grid-template-columns:1fr}.col:not(:last-child)::after{content:"↓";right:auto;left:50%;top:auto;bottom:-24px}}
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="#0071e3"/><path d="M5 19c3-1 4-6 8-7s5 2 8-5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="21" cy="7" r="2.6" fill="#fff"/></svg>
+      騎跡 <small>介面原型 v0.1</small>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-go="login">登入</button>
+      <button data-go="home">首頁</button>
+      <button data-go="lobby">等候室</button>
+      <button data-go="ride">騎乘中</button>
+      <button data-go="warroom">戰情室</button>
+      <button data-go="replay">回放</button>
+      <button data-go="admin">後台</button>
+      <button data-go="arch">架構</button>
+    </nav>
+    <div class="sim" title="原型用的模擬時鐘，控制騎乘中、戰情室的時間流速">
+      模擬 <b class="num" id="simClock">09:45</b>
+      <button class="icon-btn" id="simPlay" aria-label="暫停模擬"></button>
+      <select id="simRate" aria-label="模擬速度"><option value="10">10×</option><option value="30" selected>30×</option><option value="60">60×</option><option value="120">120×</option></select>
+    </div>
+  </div>
+</header>
+
+<main>
+  <p class="disclaimer">原型說明：地圖是示意繪製（正式版改用 MapLibre 3D 真實地圖），6 位隊友的位置都是模擬資料，沿北宜公路從新店騎到礁溪。</p>
+
+  <!-- 登入 -->
+  <section class="view" data-view="login" hidden>
+    <div class="stage">
+      <div class="phone"><div class="screen">
+        <div class="login-wrap">
+          <svg width="64" height="64" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="#0071e3"/><path d="M5 19c3-1 4-6 8-7s5 2 8-5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="21" cy="7" r="2.6" fill="#fff"/></svg>
+          <h1>騎跡</h1>
+          <p class="muted" style="margin:0">車隊即時位置、警示與整趟回放</p>
+          <form id="loginForm">
+            <input id="lgUser" autocomplete="username" placeholder="帳號" value="wei">
+            <input id="lgPass" type="password" autocomplete="current-password" placeholder="密碼" value="ride2026">
+            <button class="btn primary big" type="submit">登入</button>
+          </form>
+          <button class="linkbtn" type="button">還沒有帳號？建立帳號</button>
+        </div>
+      </div></div>
+      <aside class="notes">
+        <div class="block"><h3>這個畫面</h3><p>改成最簡單的帳號＋密碼登入，不接 Google。註冊時設定暱稱和代表色。</p></div>
+        <div class="block"><h3>REDIS</h3><div class="redis">
+          <div><code>SET username:wei uid NX</code><span>註冊時順便防重複帳號</span></div>
+          <div><code>HSET user:{uid}</code><span>暱稱、密碼雜湊、代表色</span></div>
+          <div><code>SET session:{token} EX 2592000</code><span>登入狀態，30 天後自動過期</span></div>
+        </div></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 首頁 -->
+  <section class="view" data-view="home" hidden>
+    <div class="stage">
+      <div class="phone"><div class="screen">
+        <div class="scroll">
+          <div class="home-head">
+            <div><div class="eyebrow">11 月 15 日 星期六</div><h1>早安，阿偉</h1></div>
+            <div class="avatar" style="--c:#0a84ff">偉</div>
+          </div>
+          <div class="live-card" data-go="ride" role="button" tabindex="0">
+            <div class="lc-top"><span class="chip ok"><span class="dot"></span>進行中</span><span class="muted num" id="homeDur">0:45</span></div>
+            <div class="lc-title">北宜公路 礁溪泡湯團</div>
+            <div class="lc-progress"><div class="bar"><i id="homeBar" style="width:40%"></i></div><span class="num" id="homeKm">20.1 / 52 km</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="avs" id="homeAvs"></div>
+              <span class="btn primary" style="padding:8px 14px">回到地圖</span>
+            </div>
+          </div>
+          <div class="row2">
+            <button class="action" data-go="lobby">臨時開團<small>產生邀請碼和 QR</small></button>
+            <button class="action" data-toast="規劃頁沒放進這版原型：點地圖選途經點，或匯入 GPX">規劃行程<small>點選路線或匯入 GPX</small></button>
+          </div>
+          <h2 class="sec">即將出發</h2>
+          <div class="list">
+            <div class="li"><canvas class="thumb" data-seed="3"></canvas><div class="grow"><div class="t1">武嶺日出團</div><div class="t2">11/22（六）03:30 出發 · 已規劃 118 km · 4 人</div></div><span class="chip info">已規劃</span></div>
+          </div>
+          <h2 class="sec">過去紀錄</h2>
+          <div class="list">
+            <div class="li" data-go="replay"><canvas class="thumb" data-seed="5"></canvas><div class="grow"><div class="t1">陽金公路夜騎</div><div class="t2">10/25 · 38.2 km · 1 小時 34 分 · 5 人</div></div></div>
+            <div class="li" data-go="replay"><canvas class="thumb" data-seed="9"></canvas><div class="grow"><div class="t1">東北角濱海公路</div><div class="t2">10/12 · 96.4 km · 3 小時 50 分 · 7 人</div></div></div>
+            <div class="li" data-go="replay"><canvas class="thumb" data-seed="13"></canvas><div class="grow"><div class="t1">石碇千島湖</div><div class="t2">9/28 · 41.0 km · 2 小時 05 分 · 3 人</div></div></div>
+          </div>
+        </div>
+        <nav class="tabbar">
+          <button class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M4 18c3-1 5-8 9-9s5 3 7-3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>行程</button>
+          <button data-toast="足跡頁（點亮鄉鎮、熱力圖）沒放進這版原型"><svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" fill="none"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="2"/></svg>足跡</button>
+          <button data-toast="設定頁沒放進這版原型"><svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="9" r="4" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6" stroke="currentColor" stroke-width="2" fill="none"/></svg>我的</button>
+        </nav>
+        <div class="toasts" data-zone="home"></div>
+      </div></div>
+      <aside class="notes">
+        <div class="block"><h3>這個畫面</h3><p>進行中的行程放最上面，一點就回到地圖。下面是臨時開團、規劃行程、即將出發和過去紀錄。</p></div>
+        <div class="block"><h3>這版沒做</h3><ul><li>行程規劃頁（點選路線／匯入 GPX）</li><li>足跡頁（點亮鄉鎮、熱力圖、累計統計）</li></ul></div>
+        <div class="block"><h3>REDIS</h3><div class="redis">
+          <div><code>ZREVRANGE user:{uid}:trips</code><span>依開始時間列出我的行程</span></div>
+          <div><code>HGETALL trip:{id}</code><span>行程名稱、狀態、人數</span></div>
+          <div><code>FT.SEARCH idx:trip</code><span>搜尋過去行程</span></div>
+        </div></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 等候室 -->
+  <section class="view" data-view="lobby" hidden>
+    <div class="stage">
+      <div class="phone"><div class="screen">
+        <div class="scroll">
+          <div class="navbar"><button data-go="home">‹ 行程</button><span>等候室</span><span style="width:44px"></span></div>
+          <div class="card invite">
+            <div class="eyebrow">邀請碼</div>
+            <div class="code">RK7Q2M</div>
+            <canvas id="qr" width="264" height="264"></canvas>
+            <div class="muted small">今天 23:59 前有效 · 朋友掃 QR 或輸入代碼加入（QR 為示意）</div>
+          </div>
+          <h2 class="sec">成員 6 人</h2>
+          <div class="list" id="lobbyMembers"></div>
+          <h2 class="sec">我的位置來源</h2>
+          <div class="seg" id="srcSeg"><button class="on" data-src="traccar">Traccar Client</button><button data-src="web">網頁定位</button></div>
+          <div class="card" id="srcInfo"></div>
+          <h2 class="sec">通知</h2>
+          <div class="list">
+            <div class="li"><div class="grow"><div class="t1">Telegram</div><div class="t2">已綁定，落隊、失聯、SOS 會傳到 Telegram</div></div><span class="switch"></span></div>
+            <div class="li"><div class="grow"><div class="t1">Web Push</div><div class="t2">iPhone 要先「加入主畫面」才收得到</div></div><span class="switch off"></span></div>
+          </div>
+          <button class="btn primary big" data-go="ride">開始行程</button>
+          <div class="muted small" style="text-align:center">只有建立者可以開始行程和踢人</div>
+        </div>
+      </div></div>
+      <aside class="notes">
+        <div class="block"><h3>這個畫面</h3><p>開團後的集合畫面。每個人在這裡選位置來源：用 Google Maps 導航的人裝 Traccar 在背景回報；用騎跡導航的人直接用網頁定位。</p></div>
+        <div class="block"><h3>REDIS</h3><div class="redis">
+          <div><code>SET invite:RK7Q2M {trip} EX … NX</code><span>邀請碼，到期自動失效</span></div>
+          <div><code>SADD trip:{id}:members</code><span>加入成員</span></div>
+          <div><code>SET device:{token} {uid}</code><span>Traccar 裝置 ID 對應使用者</span></div>
+          <div><code>WATCH trip:{id} → MULTI/EXEC</code><span>開始行程：planned → live，避免兩人同時按</span></div>
+        </div></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 騎乘中 -->
+  <section class="view" data-view="ride" hidden>
+    <div class="stage">
+      <div class="phone"><div class="screen ride nav-on" id="rideScreen" data-sheet="peek">
+        <canvas class="mapcv" id="rideMap"></canvas>
+        <div class="ride-top">
+          <div class="navcard" id="navCard">
+            <svg class="arrow" id="navArrow" viewBox="0 0 42 42"><path id="navArrowPath" d="M21 6l10 12h-6v16h-8V18h-6z" fill="#fff"/></svg>
+            <div><div class="dist" id="navDist">600 公尺</div><div class="road" id="navRoad">右轉 北新路三段</div></div>
+          </div>
+          <div class="navsub num" id="navSub">剩 31.9 km · 預計 10:52 抵達</div>
+          <div class="trip-pill" id="tripPill" hidden><span class="dot"></span><span id="tripPillText">北宜礁溪團 · 0:45</span></div>
+        </div>
+        <div class="map-tools">
+          <button class="tool on" id="btnNav" aria-label="導航開關"><svg viewBox="0 0 24 24"><path d="M12 3l7 18-7-4-7 4z" fill="currentColor"/></svg></button>
+          <button class="tool" id="btnStyle" aria-label="切換地圖風格"><span id="styleLabel">深色</span></button>
+          <button class="tool" id="btnFit" aria-label="顯示全隊"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" stroke-width="2" fill="none"/></svg></button>
+        </div>
+        <button class="sos" id="sosBtn" aria-label="長按發出 SOS">SOS<svg viewBox="0 0 68 68"><circle cx="34" cy="34" r="32"/></svg></button>
+        <div class="sos-hint">長按 1.2 秒</div>
+        <div class="sheet">
+          <button class="handle" id="sheetHandle" aria-label="展開或收合"></button>
+          <div class="peek">
+            <div><b id="pkSpeed">0</b><span>km/h 我的速度</span></div>
+            <div><b id="pkKm">0</b><span>km 已騎</span></div>
+            <div><b id="pkOnline">6/6</b><span>隊友在線</span></div>
+          </div>
+          <div class="seg" id="sheetSeg"><button class="on" data-tab="team">隊友</button><button data-tab="chat">訊息</button><button data-tab="mark">標註</button></div>
+          <div class="sheet-body">
+            <div data-tab-body="team"><div class="list team" id="teamList"></div></div>
+            <div data-tab-body="chat" hidden style="display:flex;flex-direction:column;gap:10px">
+              <div class="quick" id="quick"><button>加油</button><button>休息一下</button><button>等我</button><button>有狀況</button><button>我先走</button></div>
+              <div class="chatlog" id="chatlog"></div>
+              <form class="chatinput" id="chatForm"><input id="chatInput" placeholder="休息時再打字…"><button class="btn primary" type="submit">送出</button></form>
+            </div>
+            <div data-tab-body="mark" hidden style="display:flex;flex-direction:column;gap:10px">
+              <div class="muted small">在我目前的位置加一個標註，全隊地圖會同步出現，回放時也看得到。</div>
+              <div class="marks" id="markBtns">
+                <button data-mark="坑洞" style="--c:var(--warn)"><i></i>坑洞</button>
+                <button data-mark="落石" style="--c:var(--crit)"><i></i>落石</button>
+                <button data-mark="美食" style="--c:var(--ok)"><i></i>美食</button>
+                <button data-mark="風景" style="--c:var(--accent)"><i></i>風景</button>
+              </div>
+              <div class="list" id="markList"></div>
+            </div>
+          </div>
+        </div>
+        <div class="toasts" data-zone="ride"></div>
+      </div></div>
+      <aside class="notes">
+        <div class="block"><h3>這個畫面</h3><p>騎乘中的手機主畫面：全螢幕地圖＋底部抽屜。導航是選配，右上第一顆按鈕可以關掉，改成看全隊。</p></div>
+        <div class="block"><h3>可以試</h3><ul>
+          <li>點抽屜上緣的把手，切換三種高度</li>
+          <li>「訊息」送快速訊息，「標註」加坑洞或風景</li>
+          <li>長按左下 SOS 1.2 秒</li>
+          <li>右邊按鈕：導航開關、地圖風格、顯示全隊</li>
+          <li>把上方模擬速度調到 120×，約 1 分鐘會看到大熊落隊、米米失聯的通知</li>
+        </ul></div>
+        <div class="block"><h3>REDIS</h3><div class="redis">
+          <div><code>GEOADD trip:{id}:geo</code><span>每 2～3 秒更新自己的位置</span></div>
+          <div><code>GEODIST / GEOSEARCH</code><span>跟隊友的距離、前方測速點</span></div>
+          <div><code>SUBSCRIBE trip:{id}:live</code><span>隊友移動、訊息即時推到畫面</span></div>
+          <div><code>SET hb:{trip}:{uid} EX 90</code><span>心跳過期就觸發失聯</span></div>
+          <div><code>XADD trip:{id}:events</code><span>訊息、標註、SOS 都進事件流</span></div>
+        </div></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 戰情室 -->
+  <section class="view" data-view="warroom" hidden>
+    <div class="war">
+      <div class="war-map">
+        <canvas class="mapcv" id="warMap"></canvas>
+        <div class="war-head">
+          <div class="war-title"><b>北宜公路 礁溪泡湯團</b>
+            <div class="war-stats"><div>經過時間<strong id="wDur">0:45</strong></div><div>全隊進度<strong id="wProg">40%</strong></div><div>在線<strong id="wOnline">6/6</strong></div><div>現在<strong id="wClock">09:45</strong></div></div>
+          </div>
+          <div class="war-tools">
+            <button class="tool" id="warStyle"><span id="warStyleLabel">深色</span></button>
+            <button class="tool" id="pipBtn"><svg viewBox="0 0 24 24" style="width:16px;height:16px"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg>小視窗</button>
+          </div>
+        </div>
+        <div class="toasts" data-zone="war" style="left:auto;right:14px;top:auto;bottom:14px;width:320px;max-width:calc(100% - 28px)"></div>
+      </div>
+      <aside class="war-side">
+        <div class="cards" id="warCards"></div>
+        <div class="feed"><h4>事件</h4><div id="warFeed"></div></div>
+      </aside>
+      <div class="panel"><h4>行程進度與海拔</h4><canvas class="prof" id="warProf"></canvas></div>
+    </div>
+    <aside class="notes wide">
+      <div class="block"><h3>這個畫面</h3><p>電腦大螢幕用。地圖自動縮放到包住全隊，鏡頭緩慢擺動；右邊是隊員卡片和事件流，下方是每個人在路線上的位置和海拔。「小視窗」在電腦版 Chrome／Edge 可以把地圖浮出來。</p></div>
+      <div class="block"><h3>REDIS</h3><div class="redis">
+        <div><code>PSUBSCRIBE trip:*:live</code><span>所有位置與事件即時進來</span></div>
+        <div><code>HGETALL trip:{id}:state:{uid}</code><span>卡片上的速度、電量、狀態</span></div>
+        <div><code>XREVRANGE trip:{id}:events + - COUNT 20</code><span>事件流最新 20 筆</span></div>
+      </div></div>
+      <div class="block"><h3>背後的 worker</h3><div class="redis">
+        <div><code>XREADGROUP alerts stream:ingest</code><span>落隊、抵達、測速判斷</span></div>
+        <div><code>EVALSHA dedup</code><span>同一個警示 5 分鐘內不重複推播</span></div>
+      </div></div>
+    </aside>
+  </section>
+
+  <!-- 回放 -->
+  <section class="view" data-view="replay" hidden>
+    <div class="replay">
+      <div class="rp-map">
+        <canvas class="mapcv" id="rpMap"></canvas>
+        <div class="rp-ctrl">
+          <select id="rpFollow" aria-label="鏡頭跟隨"></select>
+          <div class="seg" id="rpColor"><button class="on" data-c="rider">隊員色</button><button data-c="speed">速度</button><button data-c="alt">海拔</button></div>
+        </div>
+        <div class="legend" id="rpLegend" hidden></div>
+      </div>
+      <aside class="rp-side">
+        <div class="card"><h4 class="eyebrow" style="margin:0 0 10px" id="sumTitle">整趟摘要 · 阿偉</h4>
+          <div class="sumgrid" id="sumGrid"></div>
+        </div>
+        <div class="card"><h4 class="eyebrow" style="margin:0 0 8px">經過的鄉鎮</h4>
+          <div class="towns"><span class="chip">新北 新店區</span><span class="chip">新北 石碇區</span><span class="chip">新北 坪林區</span><span class="chip">宜蘭 頭城鎮</span><span class="chip">宜蘭 礁溪鄉</span></div>
+        </div>
+        <div class="card"><h4 class="eyebrow" style="margin:0 0 8px">游標所在</h4><div class="sumgrid" id="curGrid"></div></div>
+      </aside>
+      <div class="rp-timeline">
+        <div class="tl-row">
+          <button class="playbtn" id="rpPlay" aria-label="播放"></button>
+          <div class="tl-time"><span id="rpClock">09:00</span> <span class="muted small" id="rpDur">+0:00</span></div>
+          <div class="track"><div class="ticks" id="rpTicks"></div><input type="range" id="rpRange" min="0" max="8400" step="5" value="0" aria-label="時間軸"></div>
+          <select id="rpRate" aria-label="倍速"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="30">30×</option><option value="60" selected>60×</option></select>
+        </div>
+        <div class="tl-legend"><span style="--c:var(--crit)"><i></i>警示／SOS</span><span style="--c:var(--ok)"><i></i>抵達</span><span style="--c:var(--accent)"><i></i>訊息</span><span style="--c:var(--warn)"><i></i>標註／測速</span><span class="muted">點時間軸上的圓點可以跳到那個時間</span></div>
+      </div>
+      <div class="rp-charts">
+        <div class="panel"><h4>海拔剖面</h4><canvas class="chart" id="rpAlt"></canvas></div>
+        <div class="panel"><h4>速度曲線（km/h）</h4><canvas class="chart" id="rpSpd"></canvas></div>
+      </div>
+    </div>
+    <aside class="notes wide">
+      <div class="block"><h3>這個畫面</h3><p>騎完之後整隊同步回放。選一個隊友就會切成跟拍鏡頭（車頭朝上），軌跡可以依速度或海拔上色。</p></div>
+      <div class="block"><h3>REDIS</h3><div class="redis">
+        <div><code>XRANGE track:{trip}:{uid} - +</code><span>依時間取出完整軌跡</span></div>
+        <div><code>TS.RANGE … AGGREGATION avg 60000</code><span>速度、海拔曲線降成每分鐘一點</span></div>
+        <div><code>XRANGE trip:{id}:events</code><span>時間軸上的事件圓點</span></div>
+      </div></div>
+    </aside>
+  </section>
+
+  <!-- 後台 -->
+  <section class="view" data-view="admin" hidden>
+    <div class="admin">
+      <div class="tile"><span>Redis 記憶體</span><b class="num">41.6 MB</b><span>上限 2 GB · AOF＋RDB</span></div>
+      <div class="tile"><span>Key 數量</span><b class="num">1,286</b><span>DBSIZE</span></div>
+      <div class="tile"><span>在線裝置</span><b class="num" id="adOnline">6</b><span>心跳 key 存活數</span></div>
+      <div class="tile"><span>進行中行程</span><b class="num">1</b><span>狀態為 live</span></div>
+      <div class="panel span2"><h4>每秒寫入（TimeSeries ts:sys:writes）</h4><canvas class="chart" id="adSpark"></canvas></div>
+      <div class="panel span2"><h4>資料型別占用</h4>
+        <div class="typebar" id="typeBar"></div>
+        <div class="tl-legend" id="typeLegend"></div>
+        <h4 style="margin-top:16px">Consumer group（stream:ingest）</h4>
+        <div class="tblwrap"><table class="tbl"><thead><tr><th>群組</th><th>工作</th><th>待處理</th></tr></thead><tbody>
+          <tr><td>alerts</td><td>落隊、失聯、抵達、測速</td><td class="num">0</td></tr>
+          <tr><td>stats</td><td>里程、爬升、鄉鎮</td><td class="num">2</td></tr>
+          <tr><td>heat</td><td>熱力圖格點</td><td class="num">0</td></tr>
+        </tbody></table></div>
+      </div>
+      <div class="panel span4"><h4>外部資料同步</h4>
+        <div class="tblwrap"><table class="tbl"><thead><tr><th>資料</th><th>來源</th><th>最後更新</th><th>狀態</th></tr></thead><tbody>
+          <tr><td>測速執法設置點</td><td>警政署開放資料</td><td>11/01 03:00</td><td><span class="chip ok">正常</span></td></tr>
+          <tr><td>道路事件（封路、施工）</td><td>交通部 TDX</td><td>30 秒前</td><td><span class="chip ok">正常</span></td></tr>
+          <tr><td>鄉鎮天氣預報</td><td>中央氣象署</td><td>12 分鐘前</td><td><span class="chip ok">正常</span></td></tr>
+          <tr><td>台灣路網</td><td>OpenStreetMap（Valhalla）</td><td>11/03</td><td><span class="chip warn">建議每月更新</span></td></tr>
+        </tbody></table></div>
+      </div>
+    </div>
+    <aside class="notes wide">
+      <div class="block"><h3>這個畫面</h3><p>給自己看的系統狀態，也是簡報時展示「Redis 裡到底存了什麼」的地方。</p></div>
+      <div class="block"><h3>REDIS</h3><div class="redis">
+        <div><code>INFO memory / DBSIZE</code><span>記憶體與 key 數量</span></div>
+        <div><code>TS.RANGE ts:sys:writes</code><span>每秒寫入量</span></div>
+        <div><code>XINFO GROUPS stream:ingest</code><span>每個 worker 的待處理數</span></div>
+      </div></div>
+    </aside>
+  </section>
+
+  <!-- 架構 -->
+  <section class="view" data-view="arch" hidden>
+    <div class="arch">
+      <div class="flow">
+        <div class="col"><h4>位置來源</h4>
+          <div class="node"><b>Traccar Client</b>背景回報，用 Google Maps 導航時用</div>
+          <div class="node"><b>騎跡網頁</b>用騎跡導航時，網頁在前景直接定位</div>
+          <div class="node"><b>GPS 模擬器</b>讀 GPX 模擬 N 個人，開發和展示用</div>
+        </div>
+        <div class="col"><h4>伺服器（家裡 Windows＋Docker）</h4>
+          <div class="node"><b>FastAPI</b>REST＋WebSocket，透過 Tailscale Funnel 對外</div>
+          <div class="node"><b>Worker</b>Streams consumer group：警示、統計、熱力圖</div>
+          <div class="node"><b>Valhalla</b>機車路線計算（避開國道）＋轉彎指示</div>
+        </div>
+        <div class="col"><h4>Redis 8</h4>
+          <div class="node redis-node"><b>即時</b>GEO、Hash、TTL 心跳、Pub/Sub</div>
+          <div class="node redis-node"><b>紀錄</b>Streams 軌跡與事件、TimeSeries 曲線</div>
+          <div class="node redis-node"><b>查詢</b>RediSearch 測速點與鄉鎮（GEOSHAPE）、RedisJSON 路線</div>
+        </div>
+        <div class="col"><h4>輸出</h4>
+          <div class="node"><b>手機騎乘頁</b>地圖、導航、隊友、SOS</div>
+          <div class="node"><b>戰情室／回放／後台</b>電腦大螢幕</div>
+          <div class="node"><b>Telegram Bot</b>落隊、失聯、SOS 推播</div>
+        </div>
+      </div>
+      <div class="card">
+        <h4 class="eyebrow" style="margin:0 0 10px">一筆 GPS 回報經過的步驟</h4>
+        <ol class="steps">
+          <li>手機送出位置 <code>POST /api/track</code></li>
+          <li>FastAPI 用一個 Pipeline 寫入：<code>XADD track</code> <code>GEOADD geo</code> <code>HSET state</code> <code>TS.ADD</code> <code>SET hb EX 90</code> <code>XADD stream:ingest</code> <code>PUBLISH live</code></li>
+          <li>WebSocket 收到 Pub/Sub 訊息，全隊畫面同步移動</li>
+          <li>Worker 用 <code>XREADGROUP</code> 讀到這筆，判斷落隊、抵達、前方測速</li>
+          <li>需要通知時先跑 Lua 去重，再送 Telegram</li>
+          <li>如果 90 秒沒有下一筆，心跳 key 過期，Keyspace Notification 觸發失聯警示</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const W=1100,L=52,DT=5,T_END=8400,START=9*3600;
+let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
+
+/* ================= 路線 ================= */
+const CTRL=[[110,690],[165,640],[210,585],[248,522],[300,470],[362,440],[410,398],[445,350],[500,318],[562,300],[622,268],[682,228],[742,200],[802,182],[862,164],[925,140]];
+function catmull(pts,seg){const out=[];for(let i=0;i<pts.length-1;i++){const p0=pts[Math.max(0,i-1)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(pts.length-1,i+2)];for(let j=0;j<seg;j++){const t=j/seg,t2=t*t,t3=t2*t;const f=k=>0.5*((2*p1[k])+(-p0[k]+p2[k])*t+(2*p0[k]-5*p1[k]+4*p2[k]-p3[k])*t2+(-p0[k]+3*p1[k]-3*p2[k]+p3[k])*t3);out.push([f(0),f(1)]);}}out.push(pts[pts.length-1]);return out;}
+const RAW=catmull(CTRL,26);
+const ROUTE=RAW.map((p,i)=>{const n=RAW.length,s=i/(n-1);const a=RAW[Math.max(0,i-1)],b=RAW[Math.min(n-1,i+1)];const dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy)||1;const m=(s>0.16&&s<0.86)?Math.sin((s-0.16)/0.70*Math.PI):0;const off=m*10*Math.sin(s*120);return [p[0]-dy/len*off,p[1]+dx/len*off];});
+const CUM=[0];for(let i=1;i<ROUTE.length;i++)CUM.push(CUM[i-1]+Math.hypot(ROUTE[i][0]-ROUTE[i-1][0],ROUTE[i][1]-ROUTE[i-1][1]));
+const TOTAL=CUM[CUM.length-1],UPK=TOTAL/L;
+function pointAt(d){const target=clamp(d,0,L)*UPK;let lo=0,hi=CUM.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(CUM[m]<=target)lo=m;else hi=m;}const seg=(CUM[hi]-CUM[lo])||1,f=(target-CUM[lo])/seg,a=ROUTE[lo],b=ROUTE[hi];return {x:a[0]+(b[0]-a[0])*f,y:a[1]+(b[1]-a[1])*f,i:lo};}
+function headingAt(d){const a=pointAt(Math.min(d,L-0.5)),b=pointAt(Math.min(d,L-0.5)+0.5);return Math.atan2(b.y-a.y,b.x-a.x);}
+const ALT=[[0,30],[6,120],[12,300],[20,470],[26,230],[31,410],[36,560],[42,380],[46,120],[50,30],[52,15]];
+function altAt(d){d=clamp(d,0,L);let i=0;while(i<ALT.length-2&&ALT[i+1][0]<d)i++;const [d0,a0]=ALT[i],[d1,a1]=ALT[i+1];const base=a0+(a1-a0)*(d-d0)/(d1-d0);return base+((d>4&&d<48)?9*Math.sin(d*2.3):0);}
+const PLACES=[{d:0,name:'新店',sub:'出發'},{d:12,name:'石碇'},{d:26,name:'坪林休息站',wp:'休'},{d:36,name:'北宜最高點',sub:'560 m'},{d:46,name:'頭城'},{d:52,name:'礁溪',wp:'終'}];
+const CAMS=[{d:7,limit:50},{d:18,limit:40},{d:40,limit:40},{d:48.5,limit:50}];
+const TURNS=[{d:0.6,dir:'right',text:'右轉',road:'北新路三段'},{d:3.2,dir:'straight',text:'直行',road:'台9線 北宜公路'},{d:25.8,dir:'right',text:'右轉進入',road:'坪林休息站'},{d:26.3,dir:'left',text:'左轉回到',road:'台9線'},{d:46.4,dir:'straight',text:'直行',road:'台9線 往礁溪'},{d:50.6,dir:'left',text:'左轉',road:'礁溪路五段'},{d:52,dir:'arrive',text:'抵達',road:'湯圍溝公園'}];
+
+/* ================= 隊友（模擬資料） ================= */
+const RIDERS=[
+ {id:'wei',name:'阿偉',me:true,color:'#0a84ff',base:31.6,phase:0.3,delay:20,b0:86,bd:22},
+ {id:'kai',name:'小凱',color:'#ff9f0a',base:33.4,phase:1.7,delay:0,b0:92,bd:18},
+ {id:'zhe',name:'阿哲',color:'#30d158',base:32.1,phase:2.9,delay:10,b0:71,bd:25},
+ {id:'mimi',name:'米米',color:'#bf5af2',base:31.9,phase:4.1,delay:35,b0:64,bd:30,gap:[4560,4860]},
+ {id:'bear',name:'大熊',color:'#ff375f',base:31.0,phase:5.2,delay:50,b0:55,bd:34,slow:34},
+ {id:'yun',name:'小芸',color:'#5ac8fa',base:32.6,phase:0.9,delay:28,b0:97,bd:15},
+];
+const NSTEP=Math.floor(T_END/DT)+1;
+RIDERS.forEach(r=>{r.D=new Float32Array(NSTEP);r.V=new Float32Array(NSTEP);let d=0,restEnd=-1,rested=false;
+ for(let k=0;k<NSTEP;k++){const t=k*DT;let v=0;
+  if(t>=r.delay&&d<L){
+   if(!rested&&d>=26){rested=true;restEnd=Math.max(3900,t+300);}
+   if(rested&&t<restEnd)v=0;
+   else{const slope=altAt(d+0.3)-altAt(d);v=r.base*(1+0.12*Math.sin(t/97+r.phase)+0.05*Math.sin(t/23+r.phase*2));if(slope>8)v*=0.86;if(slope<-8)v*=1.04;if(r.slow&&d>r.slow)v*=0.66;}
+  }
+  r.D[k]=d;r.V[k]=v;d=Math.min(L,d+v*DT/3600);
+ }
+ r.restAt=-1;r.endAt=-1;for(let k=0;k<NSTEP;k++){if(r.restAt<0&&r.D[k]>=26)r.restAt=k*DT;if(r.endAt<0&&r.D[k]>=L-0.001)r.endAt=k*DT;}
+});
+function sampleR(r,t){const f=clamp(t/DT,0,NSTEP-1.0001),k=Math.floor(f),a=f-k;return {d:r.D[k]+(r.D[k+1]-r.D[k])*a,v:r.V[k]+(r.V[k+1]-r.V[k])*a};}
+function median(a){if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2;}
+function stateAt(t){
+ const arr=RIDERS.map((r,i)=>{
+  let tt=t,offFor=0;if(r.gap&&t>=r.gap[0]&&t<r.gap[1]){tt=r.gap[0];offFor=t-r.gap[0];}
+  const {d,v}=sampleR(r,tt),k=Math.floor(tt/DT);let still=0;for(let j=k;j>=0&&j>k-14&&r.V[j]<2;j--)still++;
+  let status='ride';
+  if(d>=L-0.01)status='done';else if(offFor>90)status='lost';else if(offFor>0)status='weak';else if(tt<r.delay)status='wait';else if(still>=12)status='rest';
+  const p=pointAt(d);
+  return {r,i,d,v:offFor>0?0:v,status,offFor,x:p.x,y:p.y,hd:headingAt(d),alt:altAt(d),batt:Math.round(r.b0-r.bd*Math.min(1,t/T_END))};
+ });
+ const center=median(arr.filter(s=>s.status!=='lost').map(s=>s.d));
+ arr.forEach(s=>{s.lag=center-s.d;});
+ return {t,arr,center,me:arr[0]};
+}
+
+/* ================= 事件 ================= */
+const EV_COLOR={alert:'var(--crit)',sos:'var(--crit)',arrive:'var(--ok)',msg:'var(--accent)',mark:'var(--warn)',cam:'var(--warn)',road:'var(--crit)',weather:'var(--accent)',sys:'var(--muted)'};
+const EV_LABEL={alert:'警示',sos:'SOS',arrive:'抵達',msg:'訊息',mark:'標註',cam:'測速',road:'路況',weather:'天氣',sys:'系統'};
+function posOf(r,t){const p=pointAt(sampleR(r,t).d);return {x:p.x,y:p.y};}
+const EVENTS=(function(){const ev=[];const push=(t,type,who,text,extra)=>ev.push(Object.assign({t,type,who,text},extra||{}));
+ const R=Object.fromEntries(RIDERS.map(r=>[r.id,r]));
+ push(0,'sys',null,'行程開始，6 位成員出發');
+ RIDERS.forEach(r=>{if(r.restAt>=0)push(r.restAt,'arrive',r,'抵達 坪林休息站');if(r.endAt>=0)push(r.endAt,'arrive',r,'抵達終點 礁溪');});
+ push(Math.max(...RIDERS.map(r=>r.restAt))+5,'sys',null,'全員到齊 坪林休息站');
+ if(RIDERS.every(r=>r.endAt>=0))push(Math.max(...RIDERS.map(r=>r.endAt))+5,'sys',null,'全員抵達礁溪，行程自動結束');
+ const bear=R.bear;for(let k=0;k<NSTEP;k++){const m=median(RIDERS.map(r=>r.D[k]));if(m-bear.D[k]>2){push(k*DT,'alert',bear,'落後全隊中心 2.0 km');push(k*DT+70,'msg',bear,'等我一下，上坡騎不動');break;}}
+ const mimi=R.mimi;push(mimi.gap[0]+90,'alert',mimi,'失聯：90 秒沒有回報位置');push(mimi.gap[1],'sys',mimi,'恢復連線，補傳 5 分鐘軌跡');
+ const bt=Math.round((bear.b0-25)/bear.bd*T_END);push(bt,'alert',bear,'手機電量剩 25%');
+ const me=R.wei;CAMS.forEach(c=>{for(let k=0;k<NSTEP;k++){const gap=c.d-me.D[k];if(gap<=1&&gap>0){push(k*DT,'cam',me,'前方 1 km 測速照相，限速 '+c.limit);break;}}});
+ push(1500,'mark',R.kai,'標註：坑洞',Object.assign({mk:'坑洞'},posOf(R.kai,1500)));
+ push(2100,'msg',R.zhe,'加油');
+ push(2600,'weather',null,'前方坪林路段 10:00 起降雨機率 60%');
+ push(3500,'msg',R.yun,'飲料買好了，快來拿');
+ push(3880,'msg',R.kai,'出發囉');
+ push(4300,'msg',mimi,'前面起霧，慢慢騎');
+ push(5200,'mark',R.yun,'標註：風景 宜蘭平原觀景台',Object.assign({mk:'風景'},posOf(R.yun,5200)));
+ push(6200,'road',null,'TDX：台9線 51K 道路施工，單線通車');
+ return ev.sort((a,b)=>a.t-b.t);
+})();
+
+/* ================= 狀態 ================= */
+const S={liveT:2700,rate:30,playing:true,view:'ride',nav:true,mapStyle:null,warStyle:'dark',sheetTab:'team',
+ replayT:3000,replayPlaying:false,replayRate:60,follow:-1,colorBy:'rider',userEvents:[],pipMV:null,src:'traccar'};
+function isDark(){const a=document.documentElement.getAttribute('data-theme');if(a)return a==='dark';return matchMedia('(prefers-color-scheme: dark)').matches;}
+S.mapStyle=isDark()?'dark':'light';
+const STYLE_NAME={dark:'深色',sat:'衛星',light:'淺色'},STYLES=['dark','sat','light'];
+function allEvents(tmax){return EVENTS.concat(S.userEvents).filter(e=>e.t<=tmax).sort((a,b)=>a.t-b.t);}
+const pad2=n=>String(n).padStart(2,'0');
+const clock=t=>{const s=Math.floor(START+t);return pad2(Math.floor(s/3600)%24)+':'+pad2(Math.floor(s/60)%60);};
+const dur=t=>{t=Math.max(0,Math.floor(t));return Math.floor(t/3600)+':'+pad2(Math.floor(t/60)%60);};
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* ================= 地圖場景 ================= */
+const PAL={
+ dark:{bg:'#10151b',hill:'rgba(140,175,210,0.06)',contour:'rgba(140,175,210,0.13)',water:'#0b2233',coast:'#1b4058',river:'#1d4a66',town:'#1d2630',minor:'#2a3440',road:'#4a5663',casing:'#0a0e12',route:'#64d2ff',done:'#2f6d88',label:'#dde3ea',halo:'rgba(16,21,27,.9)',cam:'#ff453a'},
+ light:{bg:'#eef1ea',hill:'rgba(96,128,82,0.09)',contour:'rgba(96,128,82,0.22)',water:'#a8d4f0',coast:'#86c0e6',river:'#8cc3e6',town:'#e0ded7',minor:'#ffffff',road:'#f6c85a',casing:'#d6a33a',route:'#0071e3',done:'#8ab8ec',label:'#2c2c2e',halo:'rgba(255,255,255,.92)',cam:'#e5352b'},
+ sat:{bg:'#2d3a26',hill:'rgba(10,18,8,0.22)',contour:null,water:'#0f2a3d',coast:'#1d4560',river:'#244f66',town:'#7a776d',minor:'rgba(225,220,200,.32)',road:'rgba(245,240,225,.78)',casing:'rgba(0,0,0,.35)',route:'#64d2ff',done:'#3a7d99',label:'#ffffff',halo:'rgba(0,0,0,.6)',cam:'#ff453a'}
+};
+seed=11;
+const MOUNTS=[];while(MOUNTS.length<48){const s=0.08+rnd()*0.84,p=ROUTE[Math.floor(s*(ROUTE.length-1))],a=rnd()*6.283,dd=30+rnd()*190;const x=p[0]+Math.cos(a)*dd,y=p[1]+Math.sin(a)*dd;if(x>960)continue;MOUNTS.push({x,y,r:28+rnd()*80,e:0.45+rnd()*0.5,a:rnd()*3.14});}
+const PATCHES=[];const PCOL=['#3b4a30','#28351f','#46553a','#56603f','#33422a','#4d4a36','#3f5134'];for(let i=0;i<260;i++)PATCHES.push({x:rnd()*1000,y:rnd()*800,r:10+rnd()*45,e:0.4+rnd()*0.6,a:rnd()*3.14,c:PCOL[Math.floor(rnd()*PCOL.length)]});
+const MINOR=[];for(let i=0;i<26;i++){const k=Math.floor(rnd()*ROUTE.length);let [x,y]=ROUTE[k],a=rnd()*6.283;const pts=[[x,y]];for(let j=0;j<8;j++){a+=(rnd()-.5)*1.0;x+=Math.cos(a)*26;y+=Math.sin(a)*26;pts.push([x,y]);}MINOR.push(pts);}
+const RIVER=[];for(let i=Math.floor(ROUTE.length*0.06);i<ROUTE.length*0.55;i+=3){const a=RAW[Math.max(0,i-1)],b=RAW[Math.min(RAW.length-1,i+1)],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy)||1,o=38+12*Math.sin(i/9);RIVER.push([RAW[i][0]+dy/len*o,RAW[i][1]-dx/len*o]);}
+const TOWNS=[];[0,26,46,52].forEach(d=>{const c=pointAt(d);for(let i=0;i<46;i++){const a=rnd()*6.283,rr=Math.sqrt(rnd())*(d===26?18:42);TOWNS.push({x:c.x+Math.cos(a)*rr,y:c.y+Math.sin(a)*rr,w:3+rnd()*6,h:3+rnd()*6});}});
+const OCEAN=[];for(let y=-3000;y<=3800;y+=20){const yy=clamp(y,-200,1000);OCEAN.push([1000+26*Math.sin(yy/70)+(yy<0?0:0),y]);}OCEAN.push([5000,3800],[5000,-3000]);
+
+class MapView{
+ constructor(cv,win){this.cv=cv;this.ctx=cv.getContext('2d');this.cam={cx:500,cy:400,s:1,rot:0};this.tg=null;this.oy=0.5;this.w=0;this.h=0;this.win=win||window;
+  const RO=this.win.ResizeObserver||ResizeObserver;try{new RO(()=>this.resize()).observe(cv);}catch(e){}this.resize();}
+ resize(){const w=this.cv.clientWidth,h=this.cv.clientHeight,dpr=Math.min(2,this.win.devicePixelRatio||1);this.w=w;this.h=h;this.dpr=dpr;this.cv.width=Math.max(1,Math.round(w*dpr));this.cv.height=Math.max(1,Math.round(h*dpr));}
+ target(cx,cy,s,rot,oy){this.tg={cx,cy,s,rot,oy};if(!this.inited){Object.assign(this.cam,{cx,cy,s,rot});this.oy=oy;this.inited=true;}}
+ step(k){const t=this.tg;if(!t)return;const c=this.cam;c.cx+=(t.cx-c.cx)*k;c.cy+=(t.cy-c.cy)*k;c.s=Math.exp(Math.log(c.s)+(Math.log(t.s)-Math.log(c.s))*k);let dr=t.rot-c.rot;while(dr>Math.PI)dr-=2*Math.PI;while(dr<-Math.PI)dr+=2*Math.PI;c.rot+=dr*k*0.7;this.oy+=(t.oy-this.oy)*k;}
+ toS(x,y){const c=this.cam,dx=(x-c.cx)*c.s,dy=(y-c.cy)*c.s,co=Math.cos(c.rot),si=Math.sin(c.rot);return [this.w/2+dx*co-dy*si,this.h*this.oy+dx*si+dy*co];}
+ fit(pts,pad,minSpan,availH){const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);const h=availH||this.h;const s=Math.min((this.w-2*pad)/Math.max(minSpan,x1-x0),(h-2*pad)/Math.max(minSpan,y1-y0));return {cx:(x0+x1)/2,cy:(y0+y1)/2,s:clamp(s,0.3,14)};}
+}
+
+function pathPts(ctx,pts){ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));}
+function drawWorld(mv,pal,opt){
+ const ctx=mv.ctx,c=mv.cam,px=v=>v/c.s;
+ ctx.setTransform(mv.dpr,0,0,mv.dpr,0,0);ctx.fillStyle=pal.bg;ctx.fillRect(0,0,mv.w,mv.h);
+ ctx.save();ctx.translate(mv.w/2,mv.h*mv.oy);ctx.rotate(c.rot);ctx.scale(c.s,c.s);ctx.translate(-c.cx,-c.cy);
+ if(opt.style==='sat'){PATCHES.forEach(p=>{ctx.fillStyle=p.c;ctx.beginPath();ctx.ellipse(p.x,p.y,p.r,p.r*p.e,p.a,0,6.283);ctx.fill();});}
+ MOUNTS.forEach(m=>{ctx.fillStyle=pal.hill;ctx.beginPath();ctx.ellipse(m.x,m.y,m.r,m.r*m.e,m.a,0,6.283);ctx.fill();
+  if(pal.contour){ctx.strokeStyle=pal.contour;ctx.lineWidth=px(1);[1,0.74,0.5,0.28].forEach(f=>{ctx.beginPath();ctx.ellipse(m.x+f*4,m.y-f*3,m.r*f,m.r*m.e*f,m.a,0,6.283);ctx.stroke();});}});
+ ctx.fillStyle=pal.water;pathPts(ctx,OCEAN);ctx.closePath();ctx.fill();ctx.strokeStyle=pal.coast;ctx.lineWidth=px(2);ctx.stroke();
+ ctx.beginPath();ctx.ellipse(1062,215,15,8,0.3,0,6.283);ctx.fillStyle=opt.style==='sat'?'#3b4a30':pal.town;ctx.fill();
+ ctx.strokeStyle=pal.river;ctx.lineWidth=px(3.5);ctx.lineCap='round';ctx.lineJoin='round';pathPts(ctx,RIVER);ctx.stroke();
+ ctx.fillStyle=pal.town;TOWNS.forEach(b=>ctx.fillRect(b.x,b.y,b.w,b.h));
+ ctx.strokeStyle=pal.minor;ctx.lineWidth=px(2.2);MINOR.forEach(m=>{pathPts(ctx,m);ctx.stroke();});
+ const rp=ROUTE;ctx.strokeStyle=pal.casing;ctx.lineWidth=px(8);pathPts(ctx,rp);ctx.stroke();ctx.strokeStyle=pal.road;ctx.lineWidth=px(5.5);ctx.stroke();
+ if(opt.plan){ctx.strokeStyle=pal.route;ctx.lineWidth=px(6);ctx.globalAlpha=0.95;pathPts(ctx,rp);ctx.stroke();ctx.globalAlpha=1;
+  if(opt.doneD>0){const p=pointAt(opt.doneD);ctx.strokeStyle=pal.done;pathPts(ctx,rp.slice(0,p.i+1).concat([[p.x,p.y]]));ctx.stroke();}}
+ if(opt.tracks)drawTracks(ctx,px,opt.tracks);
+ ctx.restore();
+ // 螢幕座標：地點、測速、標註
+ ctx.font='600 12px '+css('--font');ctx.textAlign='center';ctx.lineJoin='round';
+ PLACES.forEach(p=>{const q=pointAt(p.d),[X,Y]=mv.toS(q.x,q.y);if(X<-60||X>mv.w+60||Y<-40||Y>mv.h+40)return;
+  if(p.wp){ctx.fillStyle=p.wp==='休'?'#30a46c':'#e5352b';roundRect(ctx,X-11,Y-30,22,22,6);ctx.fill();ctx.beginPath();ctx.moveTo(X-4,Y-9);ctx.lineTo(X+4,Y-9);ctx.lineTo(X,Y-3);ctx.fill();ctx.fillStyle='#fff';ctx.font='700 12px '+css('--font');ctx.fillText(p.wp,X,Y-15);ctx.font='600 12px '+css('--font');}
+  const ly=p.wp?Y-36:Y-12;ctx.strokeStyle=pal.halo;ctx.lineWidth=3.5;ctx.strokeText(p.name,X+(p.wp?0:0),ly);ctx.fillStyle=pal.label;ctx.fillText(p.name,X,ly);
+  if(p.sub){ctx.font='500 10.5px '+css('--font');ctx.strokeText(p.sub,X,ly+13);ctx.fillText(p.sub,X,ly+13);ctx.font='600 12px '+css('--font');}});
+ CAMS.forEach(cm=>{const q=pointAt(cm.d),[X,Y]=mv.toS(q.x,q.y);if(X<-20||X>mv.w+20||Y<-20||Y>mv.h+20)return;const r=c.s>2.5?10:6;ctx.beginPath();ctx.arc(X+r+6,Y,r,0,6.283);ctx.fillStyle='#fff';ctx.fill();ctx.lineWidth=r>7?3:2;ctx.strokeStyle=pal.cam;ctx.stroke();if(r>7){ctx.fillStyle='#111';ctx.font='700 9.5px '+css('--num');ctx.fillText(cm.limit,X+r+6,Y+3.5);}});
+ if(opt.marks)opt.marks.forEach(m=>{const [X,Y]=mv.toS(m.x,m.y);if(X<-20||X>mv.w+20||Y<-20||Y>mv.h+20)return;const col=m.mk==='坑洞'?'#ff9f0a':m.mk==='落石'?'#ff453a':m.mk==='美食'?'#30d158':'#0a84ff';ctx.save();ctx.translate(X,Y);ctx.rotate(Math.PI/4);ctx.fillStyle=col;ctx.fillRect(-6,-6,12,12);ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.strokeRect(-6,-6,12,12);ctx.restore();if(c.s>3){ctx.font='600 11px '+css('--font');ctx.strokeStyle=pal.halo;ctx.lineWidth=3;ctx.strokeText(m.mk,X,Y-12);ctx.fillStyle=pal.label;ctx.fillText(m.mk,X,Y-12);}});
+}
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function speedColor(v){const f=clamp(v/45,0,1);return 'hsl('+(220-220*f)+',85%,'+(55)+'%)';}
+function altColor(a){const f=clamp(a/560,0,1);return 'hsl('+(150-120*f)+',70%,'+(45+10*f)+'%)';}
+function drawTracks(ctx,px,tr){
+ const kEnd=Math.floor(tr.t/DT);
+ RIDERS.forEach((r,ri)=>{const k0=Math.floor(r.delay/DT);if(kEnd<=k0)return;const hl=tr.follow<0||tr.follow===ri;ctx.globalAlpha=hl?0.95:0.28;
+  const off=(ri-2.5)*1.6;
+  const P=k=>{const p=pointAt(r.D[k]);return [p.x+off,p.y+off*0.4];};
+  if(tr.colorBy==='rider'){ctx.strokeStyle=r.color;ctx.lineWidth=px(hl?4:2.5);ctx.beginPath();for(let k=k0;k<=kEnd;k+=2){const [x,y]=P(k);k===k0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.stroke();}
+  else{const B=12,buckets=Array.from({length:B},()=>[]);for(let k=k0;k<kEnd;k+=2){const k2=Math.min(kEnd,k+2);const val=tr.colorBy==='speed'?r.V[k]:altAt(r.D[k]);const f=tr.colorBy==='speed'?clamp(val/45,0,0.999):clamp(val/560,0,0.999);buckets[Math.floor(f*B)].push([P(k),P(k2)]);}
+   ctx.lineWidth=px(hl?4.5:2.5);buckets.forEach((segs,b)=>{if(!segs.length)return;ctx.strokeStyle=tr.colorBy==='speed'?speedColor((b+0.5)/B*45):altColor((b+0.5)/B*560);ctx.beginPath();segs.forEach(([a,c])=>{ctx.moveTo(a[0],a[1]);ctx.lineTo(c[0],c[1]);});ctx.stroke();});}
+ });ctx.globalAlpha=1;
+}
+function drawRiders(mv,st,opt){
+ const ctx=mv.ctx,pal=PAL[opt.style];
+ const items=st.arr.map(s=>{let x=s.x,y=s.y;if(s.status==='rest'&&Math.abs(s.d-26)<0.3){const a=s.i*1.047;x+=Math.cos(a)*5;y+=Math.sin(a)*5;}else if(s.status==='done'){const a=s.i*1.047;x+=Math.cos(a)*5;y+=Math.sin(a)*5;}else{const n=s.hd+Math.PI/2;x+=Math.cos(n)*(s.i-2.5)*1.4;y+=Math.sin(n)*(s.i-2.5)*1.4;}const [X,Y]=mv.toS(x,y);return {s,X,Y};});
+ items.sort((a,b)=>(a.s.r.me?1:0)-(b.s.r.me?1:0));
+ items.forEach(({s,X,Y})=>{if(X<-40||X>mv.w+40||Y<-40||Y>mv.h+40)return;
+  const lost=s.status==='lost',col=lost?'#8e8e93':s.r.color,R=opt.big?15:13;
+  if(s.r.me){ctx.beginPath();ctx.arc(X,Y,R+9,0,6.283);ctx.fillStyle='rgba(10,132,255,.18)';ctx.fill();}
+  if(s.status!=='rest'&&s.status!=='done'&&!lost){const a=s.hd+mv.cam.rot;ctx.save();ctx.translate(X,Y);ctx.rotate(a);ctx.beginPath();ctx.moveTo(R+8,0);ctx.lineTo(R+1,-5.5);ctx.lineTo(R+1,5.5);ctx.closePath();ctx.fillStyle=col;ctx.fill();ctx.restore();}
+  if(s.lag>2&&!lost){ctx.beginPath();ctx.arc(X,Y,R+5,0,6.283);ctx.strokeStyle='#ff9f0a';ctx.lineWidth=3;ctx.stroke();}
+  ctx.beginPath();ctx.arc(X,Y,R,0,6.283);ctx.fillStyle=col;ctx.fill();ctx.lineWidth=2.5;ctx.strokeStyle='#fff';if(lost)ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#fff';ctx.font='700 '+(opt.big?14:12.5)+'px '+css('--font');ctx.textAlign='center';ctx.fillText(s.r.name.slice(-1),X,Y+4.5);
+  if(opt.names){const label=s.r.name+(lost?' 失聯':s.status==='rest'?' 休息':'');ctx.font='600 11.5px '+css('--font');const w=ctx.measureText(label).width+12;ctx.fillStyle=pal.halo;roundRect(ctx,X-w/2,Y+R+5,w,18,9);ctx.fill();ctx.fillStyle=lost?'#ff453a':pal.label;ctx.fillText(label,X,Y+R+18);}
+ });
+}
+
+/* ================= 共用小工具 ================= */
+const STATUS={ride:['騎乘中','ok'],rest:['休息中','info'],weak:['訊號弱','warn'],lost:['失聯','crit'],done:['已抵達','ok'],wait:['未出發','']};
+const chip=st=>{const [t,c]=STATUS[st];return '<span class="chip '+c+'">'+t+'</span>';};
+const av=(r,sm)=>'<div class="avatar'+(sm?' sm':'')+'" style="--c:'+r.color+'">'+r.name.slice(-1)+'</div>';
+const battSvg=b=>'<span class="batt"><svg width="18" height="10" viewBox="0 0 18 10"><rect x=".5" y=".5" width="15" height="9" rx="2" fill="none" stroke="currentColor" opacity=".5"/><rect x="16" y="3" width="1.5" height="4" rx=".5" fill="currentColor" opacity=".5"/><rect x="2" y="2" width="'+(12*b/100).toFixed(1)+'" height="6" rx="1" fill="'+(b<=25?'var(--crit)':'currentColor')+'"/></svg>'+b+'%</span>';
+function prep(cv){const dpr=Math.min(2,window.devicePixelRatio||1),w=cv.clientWidth,h=cv.clientHeight;if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);return {ctx,w,h};}
+function toast(zone,ev){$$('[data-zone="'+zone+'"]').forEach(z=>{const el=document.createElement('div');el.className='toast';const who=ev.who?ev.who.name+' ':'';const iconBg=ev.type==='sos'||ev.type==='alert'||ev.type==='road'?'#ff3b30':ev.type==='cam'?'#ff9f0a':ev.type==='arrive'?'#30a46c':'#2aabee';const iconTx=ev.type==='cam'?'速':ev.type==='sos'?'!':ev.type==='road'?'路':ev.type==='weather'?'雨':ev.type==='arrive'?'到':'騎';el.innerHTML='<div class="ic" style="--c:'+iconBg+'">'+iconTx+'</div><div style="min-width:0"><div class="tt"><span>騎跡 · '+(EV_LABEL[ev.type]||'')+'</span><span>'+(ev.t!=null?clock(ev.t):'')+'</span></div><div class="tx">'+who+ev.text+'</div></div>';z.prepend(el);while(z.children.length>2)z.lastChild.remove();setTimeout(()=>el.remove(),4800);});}
+function plainToast(text){const zone=S.view==='ride'?'ride':S.view==='warroom'?'war':'home';toast(zone,{type:'sys',text,t:null});}
+
+/* ================= 視圖切換 ================= */
+const VIEWS=['login','home','lobby','ride','warroom','replay','admin','arch'];
+function show(){let v=(location.hash||'').slice(1);if(!VIEWS.includes(v))v='ride';S.view=v;$$('.view').forEach(e=>e.hidden=e.dataset.view!==v);$$('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.go===v));if(v==='replay')S.replayDirty=true;if(v==='admin')drawSpark();if(v==='home')drawThumbs();}
+window.addEventListener('hashchange',show);
+document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g){e.preventDefault();location.hash=g.dataset.go;return;}const t=e.target.closest('[data-toast]');if(t)plainToast(t.dataset.toast);});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'){const g=e.target.closest&&e.target.closest('[data-go][role="button"]');if(g)location.hash=g.dataset.go;}});
+$('#loginForm').addEventListener('submit',e=>{e.preventDefault();location.hash='home';});
+
+/* ================= 模擬時鐘 ================= */
+const PLAY='<svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 1.5v9l7.5-4.5z" fill="currentColor"/></svg>',PAUSE='<svg width="12" height="12" viewBox="0 0 12 12"><rect x="2.5" y="1.5" width="2.6" height="9" fill="currentColor"/><rect x="7" y="1.5" width="2.6" height="9" fill="currentColor"/></svg>';
+function syncSimBtn(){$('#simPlay').innerHTML=S.playing?PAUSE:PLAY;$('#simPlay').setAttribute('aria-label',S.playing?'暫停模擬':'繼續模擬');}
+$('#simPlay').onclick=()=>{S.playing=!S.playing;syncSimBtn();};syncSimBtn();
+$('#simRate').onchange=e=>{S.rate=+e.target.value;};
+
+/* ================= 騎乘頁 ================= */
+const rideMV=new MapView($('#rideMap'));
+const rideEl=$('#rideScreen');
+$('#sheetHandle').onclick=()=>{const order=['peek','half','full'];const cur=rideEl.dataset.sheet;rideEl.dataset.sheet=order[(order.indexOf(cur)+1)%3];};
+$('#sheetSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.sheetTab=b.dataset.tab;$$('#sheetSeg button').forEach(x=>x.classList.toggle('on',x===b));$$('[data-tab-body]').forEach(x=>x.hidden=x.dataset.tabBody!==S.sheetTab);if(rideEl.dataset.sheet==='peek')rideEl.dataset.sheet='half';S.chatN=-1;S.markN=-1;};
+function setNav(on){S.nav=on;rideEl.classList.toggle('nav-on',on);$('#btnNav').classList.toggle('on',on);$('#navCard').hidden=!on;$('#navSub').hidden=!on;$('#tripPill').hidden=on;S.fitAll=false;}
+$('#btnNav').onclick=()=>setNav(!S.nav);
+$('#btnFit').onclick=()=>{if(S.nav)setNav(false);S.fitAll=true;};
+$('#btnStyle').onclick=()=>{S.mapStyle=STYLES[(STYLES.indexOf(S.mapStyle)+1)%3];$('#styleLabel').textContent=STYLE_NAME[S.mapStyle];S.replayDirty=true;};
+$('#styleLabel').textContent=STYLE_NAME[S.mapStyle];
+$('#quick').onclick=e=>{const b=e.target.closest('button');if(!b)return;const ev={t:S.liveT,type:'msg',who:RIDERS[0],text:b.textContent};S.userEvents.push(ev);toast('war',ev);S.chatN=-1;};
+$('#chatForm').addEventListener('submit',e=>{e.preventDefault();const v=$('#chatInput').value.trim();if(!v)return;const ev={t:S.liveT,type:'msg',who:RIDERS[0],text:v};S.userEvents.push(ev);$('#chatInput').value='';toast('war',ev);S.chatN=-1;});
+$('#markBtns').onclick=e=>{const b=e.target.closest('button');if(!b)return;const st=stateAt(S.liveT);const ev={t:S.liveT,type:'mark',who:RIDERS[0],text:'標註：'+b.dataset.mark,mk:b.dataset.mark,x:st.me.x+6,y:st.me.y-4};S.userEvents.push(ev);toast('war',ev);S.markN=-1;};
+const sos=$('#sosBtn');let sosT=null;
+sos.addEventListener('pointerdown',e=>{e.preventDefault();sos.classList.add('holding');sosT=setTimeout(()=>{sos.classList.remove('holding');const ev={t:S.liveT,type:'sos',who:RIDERS[0],text:'發出 SOS，位置已傳給全隊'};S.userEvents.push(ev);toast('ride',ev);toast('war',ev);},1200);});
+['pointerup','pointerleave','pointercancel'].forEach(n=>sos.addEventListener(n,()=>{clearTimeout(sosT);sos.classList.remove('holding');}));
+sos.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();const ev={t:S.liveT,type:'sos',who:RIDERS[0],text:'發出 SOS，位置已傳給全隊'};S.userEvents.push(ev);toast('ride',ev);toast('war',ev);}});
+
+function rideCamera(st){const me=st.me;const sheetFrac=rideEl.dataset.sheet==='peek'?0.26:rideEl.dataset.sheet==='half'?0.52:0.86;
+ if(S.nav){const hd=me.hd;rideMV.target(me.x,me.y,rideMV.w/(2.4*UPK),-Math.PI/2-hd,0.56);}
+ else{const pts=st.arr.filter(s=>s.status!=='lost');const avail=rideMV.h*(1-sheetFrac)-70;const f=rideMV.fit(pts,46,60,avail);rideMV.target(f.cx,f.cy,f.s,0,clamp((70+avail/2)/rideMV.h,0.2,0.6));}}
+function marksUpTo(t){return allEvents(t).filter(e=>e.type==='mark'&&e.x!=null);}
+function renderRide(st){if(!rideMV.w)rideMV.resize();if(!rideMV.w)return;rideCamera(st);rideMV.step(0.1);const style=S.mapStyle;drawWorld(rideMV,PAL[style],{style,plan:S.nav,doneD:st.me.d,marks:marksUpTo(st.t)});drawRiders(rideMV,st,{style,names:!S.nav});}
+function rideUI(st){
+ const me=st.me;
+ $('#pkSpeed').textContent=Math.round(me.v);$('#pkKm').textContent=me.d.toFixed(1);
+ const online=st.arr.filter(s=>s.status!=='lost').length;$('#pkOnline').textContent=online+'/6';
+ $('#tripPillText').textContent='北宜礁溪團 · '+dur(st.t);
+ const nt=TURNS.find(x=>x.d>me.d+0.02)||TURNS[TURNS.length-1];const dist=Math.max(0,nt.d-me.d);
+ $('#navDist').textContent=me.status==='done'?'已抵達':dist<1?(Math.max(50,Math.round(dist*1000/50)*50))+' 公尺':dist.toFixed(1)+' 公里';
+ $('#navRoad').textContent=me.status==='rest'?'休息中 · 坪林休息站':nt.text+' '+nt.road;
+ const rot={right:90,left:-90,straight:0,arrive:0}[nt.dir];$('#navArrowPath').setAttribute('transform','rotate('+rot+' 21 21)');
+ const remain=L-me.d;$('#navSub').textContent=me.status==='done'?'已抵達礁溪':'剩 '+remain.toFixed(1)+' km · 預計 '+clock(st.t+remain/30*3600)+' 抵達';
+ const rows=[...st.arr].sort((a,b)=>b.d-a.d).map(s=>{const rel=s.d-me.d;const relTx=s.r.me?'我':(Math.abs(rel)<0.05?'在我旁邊':(rel>0?'前方 ':'後方 ')+Math.abs(rel).toFixed(1)+' km');
+  const lagTx=s.status==='lost'?'<span style="color:var(--crit)">最後位置 '+Math.floor(s.offFor/60)+' 分前</span>':s.lag>2?'<span style="color:var(--warn)">落後中心 '+s.lag.toFixed(1)+' km</span>':'<span class="muted">'+Math.round(s.v)+' km/h</span>';
+  return '<div class="li">'+av(s.r,true)+'<div class="grow"><div class="t1">'+s.r.name+' '+chip(s.status)+'</div><div class="t2">'+relTx+' · '+battSvg(s.batt)+'</div></div><div class="lag">'+lagTx+'</div></div>';}).join('');
+ $('#teamList').innerHTML=rows;
+ const evs=allEvents(st.t);
+ const chats=evs.filter(e=>e.type==='msg');if(S.sheetTab==='chat'&&chats.length!==S.chatN){S.chatN=chats.length;$('#chatlog').innerHTML=chats.slice(-12).map(e=>'<div class="bubble'+(e.who&&e.who.me?' me':'')+'">'+(e.who&&!e.who.me?av(e.who,true):'')+'<div><div class="who">'+(e.who&&!e.who.me?e.who.name+' · ':'')+clock(e.t)+'</div><div class="b">'+esc(e.text)+'</div></div></div>').join('')||'<div class="muted small">還沒有訊息</div>';}
+ const mks=evs.filter(e=>e.type==='mark');if(S.sheetTab==='mark'&&mks.length!==S.markN){S.markN=mks.length;$('#markList').innerHTML=mks.slice().reverse().map(e=>'<div class="li">'+av(e.who,true)+'<div class="grow"><div class="t1">'+esc(e.text.replace('標註：',''))+'</div><div class="t2">'+e.who.name+' · '+clock(e.t)+'</div></div></div>').join('');}
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);}
+
+/* ================= 戰情室 ================= */
+const warMV=new MapView($('#warMap'));
+$('#warStyle').onclick=()=>{S.warStyle=STYLES[(STYLES.indexOf(S.warStyle)+1)%3];$('#warStyleLabel').textContent=STYLE_NAME[S.warStyle];};
+function warCamera(mv,st,now){const pts=st.arr;const f=mv.fit(pts,70,70);mv.target(f.cx,f.cy,f.s,0.1*Math.sin(now/9000),0.5);}
+function renderWarMap(mv,st,now){if(!mv.w)mv.resize();if(!mv.w)return;warCamera(mv,st,now);mv.step(0.06);const style=S.warStyle;drawWorld(mv,PAL[style],{style,plan:true,doneD:0,marks:marksUpTo(st.t)});drawRiders(mv,st,{style,names:true,big:true});}
+function warUI(st){
+ $('#wDur').textContent=dur(st.t);$('#wProg').textContent=Math.round(st.center/L*100)+'%';$('#wOnline').textContent=st.arr.filter(s=>s.status!=='lost').length+'/6';$('#wClock').textContent=clock(st.t);
+ $('#warCards').innerHTML=st.arr.map(s=>'<div class="rcard'+(s.status==='lost'?' lost':s.lag>2?' alert':'')+'"><div class="h">'+av(s.r,true)+'<b>'+s.r.name+'</b>'+chip(s.status)+'</div><div class="spd">'+Math.round(s.v)+'<small>km/h</small></div><div class="meta"><span class="num">'+s.d.toFixed(1)+' km</span>'+battSvg(s.batt)+'</div><div class="meta"><span>'+(s.lag>2?'<span style="color:var(--warn)">落後 '+s.lag.toFixed(1)+' km</span>':'海拔 '+Math.round(s.alt)+' m')+'</span></div></div>').join('');
+ const evs=allEvents(st.t).slice(-14).reverse();
+ $('#warFeed').innerHTML=evs.map(e=>'<div class="ev"><time>'+clock(e.t)+'</time><i style="--c:'+EV_COLOR[e.type]+'"></i><span>'+(e.who?'<b>'+e.who.name+'</b> ':'')+esc(e.text)+'</span></div>').join('');
+ drawProfile($('#warProf'),{riders:st.arr});
+}
+function drawProfile(cv,opt){
+ const {ctx,w,h}=prep(cv);if(!w)return;const strip=!!opt.riders;const pl=40,pr=14,pt=strip?40:12,pb=22;
+ const X=d=>pl+(w-pl-pr)*d/L,Y=a=>pt+(h-pt-pb)*(1-a/650);
+ const muted=css('--muted'),line=css('--line'),acc=css('--accent'),fg=css('--fg');
+ ctx.font='11px '+css('--num');ctx.fillStyle=muted;ctx.strokeStyle=line;ctx.lineWidth=1;ctx.textAlign='right';
+ [0,200,400,600].forEach(a=>{ctx.beginPath();ctx.moveTo(pl,Y(a));ctx.lineTo(w-pr,Y(a));ctx.stroke();ctx.fillText(a+' m',pl-6,Y(a)+4);});
+ ctx.beginPath();ctx.moveTo(X(0),Y(0));for(let d=0;d<=L;d+=0.25)ctx.lineTo(X(d),Y(altAt(d)));ctx.lineTo(X(L),Y(0));ctx.closePath();ctx.globalAlpha=0.16;ctx.fillStyle=acc;ctx.fill();ctx.globalAlpha=1;
+ ctx.beginPath();for(let d=0;d<=L;d+=0.25)d?ctx.lineTo(X(d),Y(altAt(d))):ctx.moveTo(X(d),Y(altAt(d)));ctx.strokeStyle=acc;ctx.lineWidth=2;ctx.stroke();
+ ctx.textAlign='center';ctx.fillStyle=muted;ctx.font='11px '+css('--font');
+ PLACES.forEach(p=>{ctx.fillText(p.name.replace('休息站',''),clamp(X(p.d),pl+16,w-pr-16),h-6);});
+ if(opt.cursorD!=null){const x=X(opt.cursorD);ctx.strokeStyle=fg;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(x,pt);ctx.lineTo(x,h-pb);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(x,Y(altAt(opt.cursorD)),5,0,6.283);ctx.fillStyle=opt.cursorColor||acc;ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();}
+ if(strip){const y=16;ctx.strokeStyle=css('--surface-2');ctx.lineWidth=6;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(X(0),y);ctx.lineTo(X(L),y);ctx.stroke();ctx.strokeStyle=acc;ctx.beginPath();ctx.moveTo(X(0),y);ctx.lineTo(X(Math.max(...opt.riders.map(s=>s.d))),y);ctx.stroke();ctx.lineCap='butt';
+  PLACES.filter(p=>p.wp).forEach(p=>{ctx.fillStyle=p.wp==='休'?'#30a46c':'#e5352b';ctx.fillRect(X(p.d)-1,y-9,2,18);});
+  const sorted=[...opt.riders].sort((a,b)=>a.d-b.d);let lastX=-99,stack=0;
+  sorted.forEach(s=>{let x=X(s.d);stack=(x-lastX<14)?stack+1:0;lastX=x;const yy=y+(stack%2?0:0)-(stack>0?0:0);ctx.beginPath();ctx.arc(x,yy,7,0,6.283);ctx.fillStyle=s.status==='lost'?'#8e8e93':s.r.color;ctx.fill();ctx.strokeStyle=css('--surface');ctx.lineWidth=2;ctx.stroke();
+   ctx.beginPath();ctx.moveTo(x,y+8);ctx.lineTo(x,Y(altAt(s.d)));ctx.strokeStyle=s.r.color;ctx.globalAlpha=0.35;ctx.lineWidth=1;ctx.stroke();ctx.globalAlpha=1;ctx.beginPath();ctx.arc(x,Y(altAt(s.d)),3,0,6.283);ctx.fillStyle=s.r.color;ctx.fill();});}
+}
+
+/* ================= 小視窗（Document PiP） ================= */
+$('#pipBtn').onclick=async()=>{
+ if(!('documentPictureInPicture' in window)){toast('war',{type:'sys',text:'這個瀏覽器不支援小視窗，電腦版 Chrome／Edge 116 以上可以用',t:null});return;}
+ try{const pw=await window.documentPictureInPicture.requestWindow({width:440,height:320});
+  pw.document.body.style.cssText='margin:0;background:#10151b';const cv=pw.document.createElement('canvas');cv.style.cssText='width:100vw;height:100vh;display:block';pw.document.body.append(cv);
+  const mv=new MapView(cv,pw);pw.addEventListener('resize',()=>mv.resize());S.pipMV=mv;pw.addEventListener('pagehide',()=>{S.pipMV=null;});
+ }catch(e){toast('war',{type:'sys',text:'目前的檢視環境不允許開小視窗，正式網站可以用',t:null});}
+};
+
+/* ================= 回放 ================= */
+const rpMV=new MapView($('#rpMap'));
+$('#rpFollow').innerHTML='<option value="-1">鏡頭：全隊</option>'+RIDERS.map((r,i)=>'<option value="'+i+'">跟拍：'+r.name+'</option>').join('');
+$('#rpFollow').onchange=e=>{S.follow=+e.target.value;S.replayDirty=true;};
+$('#rpColor').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.colorBy=b.dataset.c;$$('#rpColor button').forEach(x=>x.classList.toggle('on',x===b));const lg=$('#rpLegend');lg.hidden=S.colorBy==='rider';if(S.colorBy==='speed')lg.innerHTML='0<span class="grad" style="background:linear-gradient(90deg,'+[0,15,30,45].map(speedColor).join(',')+')"></span>45 km/h';if(S.colorBy==='alt')lg.innerHTML='0<span class="grad" style="background:linear-gradient(90deg,'+[0,180,360,560].map(altColor).join(',')+')"></span>560 m';S.replayDirty=true;};
+$('#rpRange').max=T_END;
+$('#rpRange').oninput=e=>{S.replayT=+e.target.value;S.replayDirty=true;};
+$('#rpRate').onchange=e=>{S.replayRate=+e.target.value;};
+function syncRpBtn(){$('#rpPlay').innerHTML=S.replayPlaying?PAUSE.replace(/12/g,'16'):PLAY.replace(/12/g,'16');$('#rpPlay').setAttribute('aria-label',S.replayPlaying?'暫停':'播放');}
+$('#rpPlay').onclick=()=>{if(S.replayT>=T_END)S.replayT=0;S.replayPlaying=!S.replayPlaying;syncRpBtn();};syncRpBtn();
+$('#rpTicks').innerHTML=EVENTS.filter(e=>e.type!=='sys').map(e=>{const col=e.type==='alert'||e.type==='road'||e.type==='sos'?'var(--crit)':e.type==='arrive'?'var(--ok)':e.type==='msg'||e.type==='weather'?'var(--accent)':'var(--warn)';return '<button class="tick" style="left:'+(e.t/T_END*100)+'%;--c:'+col+'" title="'+clock(e.t)+' '+(e.who?e.who.name+' ':'')+esc(e.text)+'" data-t="'+e.t+'"></button>';}).join('');
+$('#rpTicks').onclick=e=>{const b=e.target.closest('.tick');if(!b)return;S.replayT=Math.max(0,+b.dataset.t-20);S.replayDirty=true;};
+function summary(ri){const r=RIDERS[ri];let moving=0,climb=0,maxA=0,prev=altAt(0);for(let k=0;k<NSTEP;k++){if(r.V[k]>3)moving+=DT;const a=altAt(r.D[k]);if(a>prev)climb+=a-prev;prev=a;maxA=Math.max(maxA,a);}const total=(r.endAt>0?r.endAt:T_END)-r.delay;return {km:r.D[NSTEP-1],total,moving,avg:r.D[NSTEP-1]/(moving/3600),climb,maxA,rest:Math.round((Math.max(3900,r.restAt+300)-r.restAt)/60)};}
+const SUMS=RIDERS.map((r,i)=>summary(i));
+function rpUI(){const fi=S.follow<0?0:S.follow,r=RIDERS[fi],sm=SUMS[fi];
+ $('#sumTitle').textContent='整趟摘要 · '+r.name;
+ $('#sumGrid').innerHTML=[[sm.km.toFixed(1),'km 總里程'],[dur(sm.total),'總時間'],[dur(sm.moving),'騎乘時間'],[sm.avg.toFixed(1),'km/h 平均（不含停車）'],[Math.round(sm.climb),'m 累積爬升'],[Math.round(sm.maxA),'m 最高點'],['1 次','休息（坪林 '+sm.rest+' 分）'],['0','次 SOS']].map(([a,b])=>'<div><b>'+a+'</b><span>'+b+'</span></div>').join('');
+ const {d,v}=sampleR(r,S.replayT);$('#curGrid').innerHTML=[[Math.round(v),'km/h 速度'],[Math.round(altAt(d)),'m 海拔'],[d.toFixed(1),'km 里程'],[clock(S.replayT),'時間']].map(([a,b])=>'<div><b>'+a+'</b><span>'+b+'</span></div>').join('');
+ $('#rpClock').textContent=clock(S.replayT);$('#rpDur').textContent='+'+dur(S.replayT);$('#rpRange').value=S.replayT;
+ drawProfile($('#rpAlt'),{cursorD:d,cursorColor:r.color});drawSpeed($('#rpSpd'),fi);}
+function drawSpeed(cv,fi){const {ctx,w,h}=prep(cv);if(!w)return;const pl=34,pr=10,pt=10,pb=22,X=t=>pl+(w-pl-pr)*t/T_END,Y=v=>pt+(h-pt-pb)*(1-v/50);
+ const muted=css('--muted'),line=css('--line');ctx.font='11px '+css('--num');ctx.fillStyle=muted;ctx.strokeStyle=line;ctx.lineWidth=1;ctx.textAlign='right';
+ [0,25,50].forEach(v=>{ctx.beginPath();ctx.moveTo(pl,Y(v));ctx.lineTo(w-pr,Y(v));ctx.stroke();ctx.fillText(v,pl-6,Y(v)+4);});
+ ctx.textAlign='center';for(let t=0;t<=T_END;t+=1800)ctx.fillText(clock(t),clamp(X(t),pl+16,w-pr-16),h-6);
+ RIDERS.forEach((r,ri)=>{const hl=S.follow<0||ri===fi;ctx.globalAlpha=hl?(S.follow<0?0.75:1):0.18;ctx.strokeStyle=r.color;ctx.lineWidth=ri===fi&&S.follow>=0?2.2:1.3;ctx.beginPath();for(let k=0;k<NSTEP;k+=12){let s=0,n=0;for(let j=k;j<Math.min(NSTEP,k+12);j++){s+=r.V[j];n++;}const t=k*DT;k?ctx.lineTo(X(t),Y(s/n)):ctx.moveTo(X(t),Y(s/n));}ctx.stroke();});ctx.globalAlpha=1;
+ const x=X(S.replayT);ctx.strokeStyle=css('--fg');ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(x,pt);ctx.lineTo(x,h-pb);ctx.stroke();ctx.setLineDash([]);}
+function renderReplay(){if(!rpMV.w)rpMV.resize();if(!rpMV.w)return;const st=stateAt(S.replayT);
+ if(S.follow>=0){const s=st.arr[S.follow];rpMV.target(s.x,s.y,rpMV.w/(5*UPK),-Math.PI/2-s.hd,0.6);}else{const f=rpMV.fit(st.arr,60,90);rpMV.target(f.cx,f.cy,f.s,0,0.52);}
+ rpMV.step(0.12);const style=S.mapStyle;drawWorld(rpMV,PAL[style],{style,plan:false,tracks:{t:S.replayT,follow:S.follow,colorBy:S.colorBy},marks:EVENTS.filter(e=>e.type==='mark'&&e.t<=S.replayT)});drawRiders(rpMV,st,{style,names:true});}
+
+/* ================= 等候室、首頁、後台 ================= */
+$('#lobbyMembers').innerHTML=RIDERS.map((r,i)=>'<div class="li">'+av(r,true)+'<div class="grow"><div class="t1">'+r.name+(i===1?' <span class="chip">建立者</span>':'')+(r.me?' <span class="chip info">我</span>':'')+'</div><div class="t2">'+(i%3===2?'網頁定位':'Traccar Client')+'</div></div>'+(i===3?'<span class="chip warn">設定中</span>':'<span class="chip ok">已就緒</span>')+'</div>').join('');
+const SRC={traccar:'<dl class="kv"><dt>伺服器網址</dt><dd>https://qiji.tail-xxxx.ts.net</dd><dt>裝置 ID</dt><dd>qj_8f3k2m9xw4</dd><dt>建議設定</dt><dd style="font-family:inherit">間隔 3 秒、距離 20 m、離線暫存開啟</dd></dl><p class="muted small" style="margin:10px 0 0">裝好 Traccar Client 後貼上這兩個值。鎖螢幕或切去 Google Maps 導航都會繼續回報。</p>',web:'<p style="margin:0;font-size:14px">直接用這個網頁定位，不用裝 App。</p><p class="muted small" style="margin:8px 0 0">網頁要一直開在前景，螢幕會保持常亮。適合用騎跡導航的人；用 Google Maps 導航請改選 Traccar。</p>'};
+$('#srcInfo').innerHTML=SRC.traccar;
+$('#srcSeg').onclick=e=>{const b=e.target.closest('button');if(!b)return;$$('#srcSeg button').forEach(x=>x.classList.toggle('on',x===b));$('#srcInfo').innerHTML=SRC[b.dataset.src];};
+(function drawQR(){const cv=$('#qr'),ctx=cv.getContext('2d'),N=29,s=cv.width/(N+4);ctx.fillStyle='#fff';ctx.fillRect(0,0,cv.width,cv.height);ctx.fillStyle='#111';seed=42;const fin=(x,y)=>{ctx.fillRect((x+2)*s,(y+2)*s,7*s,7*s);ctx.fillStyle='#fff';ctx.fillRect((x+3)*s,(y+3)*s,5*s,5*s);ctx.fillStyle='#111';ctx.fillRect((x+4)*s,(y+4)*s,3*s,3*s);};for(let y=0;y<N;y++)for(let x=0;x<N;x++){const inF=(x<8&&y<8)||(x>N-9&&y<8)||(x<8&&y>N-9);if(!inF&&rnd()<0.47)ctx.fillRect((x+2)*s,(y+2)*s,s,s);}fin(0,0);fin(N-7,0);fin(0,N-7);})();
+$('#homeAvs').innerHTML=RIDERS.map(r=>av(r,true)).join('');
+function drawThumbs(){$$('canvas.thumb').forEach(cv=>{const {ctx,w,h}=prep(cv);seed=+cv.dataset.seed*97;ctx.strokeStyle=css('--accent');ctx.lineWidth=2.4;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();let x=8,y=h-10;ctx.moveTo(x,y);for(let i=0;i<7;i++){x+= (w-16)/7;y=clamp(y-(rnd()*12-2),8,h-8);ctx.lineTo(x,y);}ctx.stroke();ctx.fillStyle=css('--accent');ctx.beginPath();ctx.arc(x,y,3,0,6.283);ctx.fill();});}
+function homeUI(st){$('#homeDur').textContent=dur(st.t);$('#homeBar').style.width=(st.center/L*100).toFixed(1)+'%';$('#homeKm').textContent=st.center.toFixed(1)+' / 52 km';}
+const TYPES=[['Streams',58,'#0a84ff'],['TimeSeries',22,'#30d158'],['Hash',8,'#ff9f0a'],['JSON',4,'#bf5af2'],['GEO',3,'#ff375f'],['其他',5,'#8e8e93']];
+$('#typeBar').innerHTML=TYPES.map(([n,p,c])=>'<i style="width:'+p+'%;--c:'+c+'"></i>').join('');
+$('#typeLegend').innerHTML=TYPES.map(([n,p,c])=>'<span style="--c:'+c+'"><i></i>'+n+' '+p+'%</span>').join('');
+const SPARK=[];seed=5;for(let i=0;i<90;i++)SPARK.push(14+rnd()*6+(i>60?4:0));
+function drawSpark(){const cv=$('#adSpark');const {ctx,w,h}=prep(cv);if(!w)return;const pl=30,pr=8,pt=8,pb=20,X=i=>pl+(w-pl-pr)*i/(SPARK.length-1),Y=v=>pt+(h-pt-pb)*(1-v/30);const acc=css('--accent');ctx.font='11px '+css('--num');ctx.fillStyle=css('--muted');ctx.strokeStyle=css('--line');ctx.textAlign='right';[0,10,20,30].forEach(v=>{ctx.beginPath();ctx.moveTo(pl,Y(v));ctx.lineTo(w-pr,Y(v));ctx.stroke();ctx.fillText(v,pl-6,Y(v)+4);});ctx.textAlign='left';ctx.fillText('90 秒前',pl,h-5);ctx.textAlign='right';ctx.fillText('現在',w-pr,h-5);
+ ctx.beginPath();SPARK.forEach((v,i)=>i?ctx.lineTo(X(i),Y(v)):ctx.moveTo(X(i),Y(v)));ctx.lineTo(X(SPARK.length-1),Y(0));ctx.lineTo(X(0),Y(0));ctx.closePath();ctx.globalAlpha=0.15;ctx.fillStyle=acc;ctx.fill();ctx.globalAlpha=1;ctx.beginPath();SPARK.forEach((v,i)=>i?ctx.lineTo(X(i),Y(v)):ctx.moveTo(X(i),Y(v)));ctx.strokeStyle=acc;ctx.lineWidth=2;ctx.stroke();const lx=X(SPARK.length-1),ly=Y(SPARK[SPARK.length-1]);ctx.beginPath();ctx.arc(lx,ly,4,0,6.283);ctx.fillStyle=acc;ctx.fill();ctx.fillStyle=css('--fg');ctx.textAlign='right';ctx.fillText(SPARK[SPARK.length-1].toFixed(1)+' 次/秒',lx-8,ly-8);}
+
+/* ================= 主迴圈 ================= */
+let last=performance.now(),uiAcc=1,sparkAcc=0;
+function frame(now){const dt=Math.min(0.1,(now-last)/1000);last=now;
+ if(S.playing){const prev=S.liveT;S.liveT+=dt*S.rate;if(S.liveT>T_END){S.liveT=600;S.userEvents=[];S.chatN=-1;S.markN=-1;}else{EVENTS.forEach(e=>{if(e.t>prev&&e.t<=S.liveT&&['alert','cam','road','weather','sos'].includes(e.type)){if(S.view==='ride'&&(e.type!=='cam'||S.nav))toast('ride',e);if(S.view==='warroom'&&e.type!=='cam')toast('war',e);}});}}
+ if(S.replayPlaying){S.replayT=Math.min(T_END,S.replayT+dt*S.replayRate);S.replayDirty=true;if(S.replayT>=T_END){S.replayPlaying=false;syncRpBtn();}}
+ $('#simClock').textContent=clock(S.liveT);
+ const st=stateAt(S.liveT);uiAcc+=dt;
+ if(S.view==='ride'){renderRide(st);if(uiAcc>0.25)rideUI(st);}
+ if(S.view==='warroom'){renderWarMap(warMV,st,now);if(uiAcc>0.25)warUI(st);}
+ if(S.pipMV)renderWarMap(S.pipMV,st,now);
+ if(S.view==='replay'){renderReplay();if(S.replayDirty&&uiAcc>0.1){rpUI();S.replayDirty=false;}}
+ if(S.view==='home'&&uiAcc>0.25)homeUI(st);
+ if(S.view==='admin'){sparkAcc+=dt;if(sparkAcc>1){sparkAcc=0;SPARK.shift();SPARK.push(14+Math.random()*6+st.arr.filter(s=>s.status==='ride').length*0.6);drawSpark();$('#adOnline').textContent=st.arr.filter(s=>s.status!=='lost').length;}}
+ if(uiAcc>0.25)uiAcc=0;
+ requestAnimationFrame(frame);}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{S.replayDirty=true;});
+show();requestAnimationFrame(frame);
+})();
+</script>

@@ -1,0 +1,52 @@
+services:
+  redis:
+    image: redis:8.2
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --save
+      - "300 10"
+      - --notify-keyspace-events
+      - Ex
+    ports:
+      - "6390:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  api:
+    build: ./backend
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      WEB_DIR: /web
+    volumes:
+      - ./web:/web:ro
+    ports:
+      - "8750:8750"
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # 路線引擎：地圖比對（把 GPS 點對到道路上）、之後的機車導航。
+  # 第一次啟動會下載台灣 OSM（約 330 MB）並建立路網，約 10～30 分鐘。
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:3.9.2
+    environment:
+      tile_urls: https://download.geofabrik.de/asia/taiwan-latest.osm.pbf
+      serve_tiles: "True"
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "False"
+      force_rebuild: "False"
+    ports:
+      - "8752:8002"
+    volumes:
+      - ./data/valhalla:/custom_files
+    restart: unless-stopped
+
+volumes:
+  # 用 named volume，Windows Docker Desktop 上 AOF 寫入比 bind mount 快很多
+  redis-data:

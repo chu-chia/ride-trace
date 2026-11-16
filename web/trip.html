@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>行程 · 騎跡</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="/assets/app.css">
+<style>
+  .topbar{position:fixed;z-index:10;top:max(12px,env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));display:flex;align-items:center;gap:12px;padding:8px 14px 8px 8px;border-radius:16px;max-width:calc(100% - 24px)}
+  .topbar a.back{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:20px;color:var(--fg)}
+  .topbar b{font-size:15px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+  .topbar .sub{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+  .tools{right:max(12px,env(safe-area-inset-right,0px));top:max(12px,env(safe-area-inset-top,0px))}
+  .panel{position:fixed;z-index:9;right:12px;top:72px;bottom:12px;width:380px;border-radius:22px;display:flex;flex-direction:column;overflow:hidden}
+  .tools{right:404px}
+  .panel .handle{display:none}
+  .banner{margin:14px 14px 0;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--accent) 12%,transparent);font-size:13.5px;display:flex;flex-direction:column;gap:10px}
+  .panel .seg{margin:12px 14px 8px;flex:none}
+  .body{flex:1;overflow-y:auto;padding:4px 14px 16px;display:flex;flex-direction:column;gap:10px}
+  .li .right{text-align:right;font-size:12px;white-space:nowrap}
+  .li .kick{border:0;background:none;color:var(--crit);font-size:12px;cursor:pointer;padding:4px}
+  .ev{display:grid;grid-template-columns:42px 9px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)}
+  .ev:last-child{border-bottom:0}
+  .ev time{font-size:11.5px;color:var(--muted)}
+  .ev i{width:8px;height:8px;border-radius:50%;background:var(--c);display:block}
+  .code{font-size:34px;font-weight:700;letter-spacing:.14em;text-align:center}
+  #qr{display:grid;place-items:center;background:#fff;border-radius:12px;padding:10px;width:180px;margin:0 auto}
+  #qr img,#qr svg{display:block;width:160px;height:160px}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;align-items:baseline;margin:0}
+  .kv dt{color:var(--muted)}
+  .kv dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;word-break:break-all}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 14px 0}
+  .stats div{display:flex;flex-direction:column}
+  .stats b{font-size:22px;font-weight:700;line-height:1.1}
+  .stats span{font-size:11.5px;color:var(--muted)}
+  @media (max-width:760px){
+    .panel{left:0;right:0;bottom:0;top:auto;width:auto;height:46dvh;border-radius:22px 22px 0 0;padding-bottom:env(safe-area-inset-bottom,0px);transition:height .3s}
+    .panel.small{height:150px}
+    .panel .handle{display:grid;place-items:center;border:0;background:none;padding:8px 0 0;cursor:pointer}
+    .panel .handle::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--muted);opacity:.45}
+    .tools{right:12px;top:76px}
+    .topbar b{max-width:52vw}
+  }
+</style>
+</head>
+<body>
+<div class="mapwrap"><div id="map"></div></div>
+
+<div class="topbar glass">
+  <a class="back" href="/" aria-label="回首頁">‹</a>
+  <div style="min-width:0"><b id="tName">行程</b><div class="sub"><span id="tStatus" class="chip">載入中</span><span class="num" id="tTimer"></span></div></div>
+</div>
+
+<div class="tools">
+  <button class="tool glass" id="bStyle" title="切換地圖風格">深色</button>
+  <button class="tool glass" id="b3d" title="3D 地形">3D</button>
+  <button class="tool glass on" id="bAll" title="自動顯示全隊">全隊</button>
+  <button class="tool glass" id="bMe" title="跟著我">跟我</button>
+  <a class="tool glass" id="bReplay" title="回放到目前為止的紀錄" style="color:var(--fg)">回放</a>
+</div>
+
+<aside class="panel glass" id="panel">
+  <button class="handle" id="handle" aria-label="展開或收合"></button>
+  <div class="stats">
+    <div><b class="num" id="sOnline">0/0</b><span>隊友在線</span></div>
+    <div><b class="num" id="sSpeed">–</b><span>km/h 我的速度</span></div>
+    <div><b class="num" id="sAlt">–</b><span>m 我的海拔</span></div>
+  </div>
+  <div class="banner" id="banner" hidden></div>
+  <div class="seg" id="tabs"><button class="on" data-t="team">隊友</button><button data-t="events">事件</button><button data-t="invite">邀請</button><button data-t="report">回報</button></div>
+  <div class="body" data-b="team"><div class="list" id="team"></div></div>
+  <div class="body" data-b="events" hidden><div id="events"></div></div>
+  <div class="body" data-b="invite" hidden>
+    <div class="card" style="display:flex;flex-direction:column;gap:10px;text-align:center">
+      <div class="eyebrow">邀請碼</div>
+      <div class="code num" id="code">——</div>
+      <div id="qr"></div>
+      <div class="small muted" id="codeNote">朋友掃 QR 或在首頁輸入邀請碼加入</div>
+      <button class="btn" id="copyLink">複製邀請連結</button>
+    </div>
+  </div>
+  <div class="body" data-b="report" hidden>
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">用這支手機的網頁定位</div>
+      <div class="small muted">網頁要一直開在畫面上，螢幕會保持常亮。適合用騎跡看地圖的人；要用 Google Maps 導航請改用下面的 Traccar。手機上要用 HTTPS 網址才能定位。</div>
+      <button class="btn primary" id="gpsBtn">開始回報我的位置</button>
+      <div class="small muted" id="gpsInfo"></div>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow">Traccar Client（背景回報）</div>
+      <dl class="kv"><dt>伺服器網址</dt><dd id="trUrl"></dd><dt>裝置 ID</dt><dd id="trId">…</dd><dt>建議設定</dt><dd style="font-family:inherit">間隔 3 秒、距離 20 公尺、離線暫存開啟</dd></dl>
+      <div class="small muted">裝好 Traccar Client 後填這兩個值。鎖螢幕或切到 Google Maps 導航都會繼續回報。</div>
+    </div>
+    <button class="btn danger block" id="endBtn" hidden>結束我的紀錄</button>
+  </div>
+</aside>
+
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script type="module" src="/assets/trip.js"></script>
+</body>
+</html>
