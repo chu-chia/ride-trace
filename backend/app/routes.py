@@ -63,6 +63,7 @@ def parse_gmaps(url: str) -> list[dict]:
     out = []
     for i, s in enumerate(segs):
         name = s.replace("+", " ").strip()
+        name = re.sub(r"\s+\d{3,6}\S*.*$", "", name)  # Google 會在地名後面接「郵遞區號＋地址」，只留地名
         m = COORD.match(name)
         if m:
             out.append({"lat": float(m.group(1)), "lon": float(m.group(2)), "name": ""})
@@ -136,8 +137,19 @@ def turn_text(m: dict) -> tuple[str, str]:
     act = TURN.get(t, "繼續")
     if t in (26,) and m.get("roundabout_exit_count"):
         act = f"進入圓環，第 {m['roundabout_exit_count']} 個出口"
-    street = "／".join((m.get("street_names") or m.get("begin_street_names") or [])[:2])
-    return act, street
+    names = (m.get("street_names") or m.get("begin_street_names") or [])[:2]
+    return act, "／".join(road_name(n, names) for n in names)
+
+
+def road_name(n: str, all_names: list[str]) -> str:
+    """OSM 的道路編號只寫數字：1～99 是省道（台3、台7甲），100～199 是縣道。名稱裡有「高速」的是國道，不補。"""
+    if any("高速" in x for x in all_names):
+        return n
+    m = re.fullmatch(r"(\d{1,3})([甲乙丙丁戊己庚]?)", n)
+    if not m:
+        return n
+    num = int(m.group(1))
+    return f"台{n}" if num < 100 else f"縣道{n}" if num < 200 else n
 
 
 async def valhalla_route(points: list[dict], avoid_highways: bool) -> dict:
