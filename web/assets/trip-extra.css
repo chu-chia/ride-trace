@@ -1,0 +1,30 @@
+/* 行程頁 M3 互動功能（trip-extra.js）。和 app.css／trip.html 分開，避免和畫面設計的改動衝突。 */
+.qx-dock{position:fixed;z-index:8;left:max(12px,env(safe-area-inset-left,0px));bottom:max(12px,env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-width:calc(100% - 24px)}
+.qx-bar{display:flex;gap:8px;flex-wrap:wrap}
+.qx-bar .tool.on{background:var(--accent);color:#fff}
+.qx-pop{width:min(340px,calc(100vw - 24px));max-height:min(60vh,520px);overflow-y:auto;border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.qx-head{display:flex;flex-direction:column;gap:2px}
+.qx-head b{font-size:15px}
+.qx-list{display:flex;flex-direction:column}
+.qx-row{display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.qx-row:last-child{border-bottom:0}
+.qx-row .grow{flex:1;min-width:0}
+.qx-row .t1{font-size:13.5px;font-weight:600;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.qx-row .t2{font-size:12px;color:var(--muted)}
+.qx-kind{font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;color:#1d1d1f;background:#ffd60a}
+.qx-kind[data-kind="rest"]{background:#64d2ff}
+.qx-x{border:0;background:none;color:var(--crit);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:8px;flex:none}
+.qx-x:hover{background:color-mix(in srgb,var(--crit) 10%,transparent)}
+.qx-form{display:flex;flex-direction:column;gap:8px}
+.qx-form .input{padding:9px 11px;font-size:14px}
+.qx-inline{display:flex;gap:8px}
+.qx-inline>*{flex:1}
+
+/* 地圖上的集合點：注意不要設 position（MapLibre 的標記靠 position:absolute 定位） */
+.qx-pin{display:flex;align-items:center;gap:5px;padding:3px 9px 3px 3px;border-radius:999px;background:var(--glass);box-shadow:0 2px 10px rgba(0,0,0,.35);white-space:nowrap;cursor:pointer;font-size:12px;font-weight:600;color:var(--fg)}
+.qx-pin b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;color:#1d1d1f;background:#ffd60a}
+.qx-pin[data-kind="rest"] b{background:#64d2ff}
+.qx-pin.all b{background:#30d158;color:#fff}
+.qx-pin.pick{padding:3px}
+.qx-pin.pick b{background:var(--accent);color:#fff}
+@media (max-width:760px){.qx-pop{width:calc(100vw - 88px)}}

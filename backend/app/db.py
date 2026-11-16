@@ -34,6 +34,10 @@ class K:
     stats = staticmethod(lambda tid, uid: f"trip:{tid}:stats:{uid}")
     lagflag = staticmethod(lambda tid: f"trip:{tid}:lagflag")     # Hash uid → behind／ahead（目前在警示中）
     gap = staticmethod(lambda tid: f"trip:{tid}:gap")             # Hash uid → 與全隊中心的距離（km，負＝落後）
+    waypoints = staticmethod(lambda tid: f"trip:{tid}:waypoints")   # GEO：集合點／休息點
+    wp = staticmethod(lambda tid, wid: f"trip:{tid}:wp:{wid}")
+    arrived = staticmethod(lambda tid, wid: f"trip:{tid}:arrived:{wid}")
+    allin = staticmethod(lambda tid, wid: f"trip:{tid}:allin:{wid}")
     lagchk = staticmethod(lambda tid: f"trip:{tid}:lagchk")       # 節流鎖：一個行程 2 秒判斷一次
     ingest = "stream:ingest"
     ts_writes = "ts:sys:writes"
@@ -151,3 +155,19 @@ end
 return out
 """
 check_lag = r.register_script(LAG_LUA)
+
+
+# Worker（alerts group）：某人進入集合點半徑。
+# SADD 回傳 1 才是「第一次抵達」；再檢查 active 的人是不是都在 arrived 裡（SDIFF 為空），
+# 是的話用 SET NX 搶「全員到齊」旗標。全部在一個 script 裡，兩個 worker 同時處理最後兩個人也只會發一次。
+# KEYS: arrived, active, allin    ARGV: uid
+# 回傳：{是否第一次抵達, 是否剛好全員到齊}
+ARRIVE_LUA = """
+local new = redis.call('SADD', KEYS[1], ARGV[1])
+local all = 0
+if redis.call('SCARD', KEYS[2]) > 0 and #redis.call('SDIFF', KEYS[2], KEYS[1]) == 0 then
+  if redis.call('SET', KEYS[3], '1', 'NX') then all = 1 end
+end
+return {new, all}
+"""
+arrive = r.register_script(ARRIVE_LUA)

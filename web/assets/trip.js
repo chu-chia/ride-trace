@@ -16,6 +16,8 @@ const EV = {
   kick: ['移出', 'var(--warn)', '出', '#ff9f0a'], create: ['建立', 'var(--muted)', '建', '#8e8e93'],
   behind: ['落隊', 'var(--warn)', '!', '#ff9f0a'], ahead: ['超前', 'var(--warn)', '前', '#ff9f0a'],
   regroup: ['跟上', 'var(--ok)', '合', '#30a46c'],
+  waypoint: ['集合點', 'var(--muted)', '集', '#8e8e93'], arrive: ['抵達', 'var(--ok)', '到', '#30a46c'],
+  allin: ['全員到齊', 'var(--ok)', '齊', '#30a46c'],
 };
 const fmtKm = (km) => (Math.abs(km) < 1 ? Math.round(Math.abs(km) * 1000) + ' m' : Math.abs(km).toFixed(1) + ' km');
 
@@ -24,6 +26,7 @@ const M = createMap($('#map'), { style: 'dark', zoom: 7, terrain: true });
 const map = M.map;
 map.setPitch(55);
 window.qijiMap = map; // 方便在主控台除錯
+window.qijiM = M; // trip-extra.js（M3 互動功能）用
 const S = { trip: null, me: null, members: new Map(), events: [], follow: 'all', lastInteract: 0, nearby: {}, gps: null, wake: null, trailDirty: true };
 window.qijiState = S; // 除錯用
 
@@ -308,6 +311,7 @@ function connect() {
 }
 
 function handle(msg) {
+  window.dispatchEvent(new CustomEvent('qiji:msg', { detail: msg })); // 給 trip-extra.js
   switch (msg.kind) {
     case 'snapshot': {
       const t = msg.trip;

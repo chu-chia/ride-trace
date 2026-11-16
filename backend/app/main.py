@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, footprint, ingest, live, replay, system, trips
+from . import auth, footprint, ingest, live, replay, system, trips, waypoints
 from .db import r
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="騎跡 API", lifespan=lifespan)
-for mod in (auth, trips, replay, ingest, live, footprint, system):
+for mod in (auth, trips, replay, ingest, live, footprint, system, waypoints):
     app.include_router(mod.router)
 
 

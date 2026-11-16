@@ -20,7 +20,7 @@ import socket
 from redis.exceptions import ResponseError
 
 from . import events
-from .db import K, check_lag, r, update_stats
+from .db import K, arrive, check_lag, r, update_stats
 
 log = logging.getLogger("qiji.worker")
 
@@ -100,8 +100,36 @@ async def check_trip_lag(tid: str):
     await events.publish(tid, {"kind": "gap", "gaps": gaps, "flags": flags, "lag_km": thr_km})
 
 
+WP_SEARCH_M = 2000  # 集合點半徑上限，GEOSEARCH 先用這個範圍撈，再逐一比對各自的半徑
+
+
+async def check_arrival(tid: str, uid: str, lat: float, lon: float, ts: int):
+    """GEOSEARCH 找我附近的集合點，進入半徑就算抵達（每人每點只通知一次）。"""
+    near = await r.geosearch(K.waypoints(tid), longitude=lon, latitude=lat, radius=WP_SEARCH_M, unit="m",
+                             withdist=True, sort="ASC")
+    changed = False
+    for wid, dist in near:
+        w = await r.hmget(K.wp(tid, wid), "name", "kind", "radius_m")
+        if w[0] is None or float(dist) > float(w[2] or 150):
+            continue
+        new, all_in = await arrive(keys=[K.arrived(tid, wid), K.active(tid), K.allin(tid, wid)], args=[uid])
+        place = "休息點" if w[1] == "rest" else "集合點"
+        if new:
+            changed = True
+            await events.emit(tid, "arrive", uid, f"抵達{place}「{w[0]}」", ts=ts, wid=wid)
+        if all_in:
+            changed = True
+            await events.emit(tid, "allin", None, f"全員到齊：{place}「{w[0]}」", ts=ts, wid=wid)
+    if changed:
+        from .waypoints import broadcast  # 延後 import：waypoints → trips → worker 會循環
+        await broadcast(tid)
+
+
 async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
-    """警示類：落隊（之後加抵達集合點、前方測速）。同一批裡同一個行程只判斷一次。"""
+    """警示類：抵達集合點（每筆都查）、落隊（同一批裡同一個行程只判斷一次）。"""
+    for _, f in msgs:
+        if f.get("trip") and f.get("uid") and "lat" in f:
+            await check_arrival(f["trip"], f["uid"], float(f["lat"]), float(f["lon"]), int(f["ts"]))
     trips = dict.fromkeys(f["trip"] for _, f in msgs if f.get("trip"))
     for tid in trips:
         await check_trip_lag(tid)
