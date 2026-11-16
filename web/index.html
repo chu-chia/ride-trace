@@ -8,15 +8,19 @@
 <style>
   .page{position:relative;z-index:1}
 
-  /* ---------- 頂部樣式 1：天色（依時段的天空，往下淡進底色） ---------- */
-  .sky{position:absolute;left:0;right:0;top:0;height:440px;z-index:0;overflow:hidden;
-       background:radial-gradient(60% 55% at 78% 100%,var(--sky-glow),transparent 70%),linear-gradient(var(--sky-top),var(--sky-mid) 55%,var(--sky-low));
-       -webkit-mask-image:linear-gradient(#000 45%,transparent);mask-image:linear-gradient(#000 45%,transparent)}
-  .sky canvas{position:absolute;inset:0;width:100%;height:100%}
-  body[data-hero="sky"] .head{color:#fff;text-shadow:0 1px 10px rgba(0,0,0,.35);padding-top:72px}
-  body[data-hero="sky"] .head .eyebrow{color:rgba(255,255,255,.8)}
-  body[data-hero="sky"] .menu summary .avatar{box-shadow:0 0 0 2px rgba(255,255,255,.85)}
+  /* ---------- 首頁背景（homebg.js，頭像選單切換） ---------- */
+  .bg{z-index:0;pointer-events:none;overflow:hidden}
+  .bg canvas{position:absolute;inset:0;width:100%;height:100%}
+  .bg.full{position:fixed;inset:0}
+  /* 頁首型：只佔上面一截，往下淡進底色 */
+  .bg.top{position:absolute;left:0;right:0;top:0;height:440px;-webkit-mask-image:linear-gradient(#000 45%,transparent);mask-image:linear-gradient(#000 45%,transparent)}
+  .bgcap{position:fixed;z-index:0;left:0;right:0;bottom:10px;text-align:center;font-size:11px;color:var(--muted);opacity:.8;pointer-events:none}
+  body[data-bg="sky"] .head,body[data-bg="dash"] .head{color:#fff;text-shadow:0 1px 10px rgba(0,0,0,.35);padding-top:72px}
+  body[data-bg="sky"] .head .eyebrow,body[data-bg="dash"] .head .eyebrow{color:rgba(255,255,255,.8)}
+  body[data-bg="sky"] .menu summary .avatar{box-shadow:0 0 0 2px rgba(255,255,255,.85)}
+  body[data-bg="dash"] .head{padding-top:110px}
 
+  /* 以下兩種卡片元件（homehero.js）目前沒有放上首頁，樣式先留著 */
   /* ---------- 頂部樣式 2：年度紀錄 ---------- */
   .hero-year{display:flex;flex-direction:column;gap:12px;padding:18px 18px 16px}
   .hy-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
@@ -108,7 +112,8 @@
 </style>
 </head>
 <body>
-<div class="sky" id="sky" hidden aria-hidden="true"><canvas id="stars"></canvas></div>
+<div class="bg" id="bg" aria-hidden="true"><canvas id="bgc"></canvas></div>
+<div class="bgcap" id="bgcap" aria-hidden="true"></div>
 <main class="page">
   <header class="head">
     <div><div class="eyebrow" id="today"></div><h1 id="hello">騎跡</h1></div>
@@ -116,14 +121,12 @@
       <summary aria-label="帳號選單" id="me"></summary>
       <div class="pop">
         <div class="who"><b id="meName"></b><span class="small muted" id="meUser"></span></div>
-        <div class="msec" id="heroLabel">首頁頂部</div>
-        <div role="group" aria-labelledby="heroLabel" id="heroOpts"></div>
+        <div class="msec" id="bgLabel">首頁背景</div>
+        <div role="group" aria-labelledby="bgLabel" id="bgOpts"></div>
         <button type="button" id="logout" style="border-top:1px solid var(--line);border-radius:0 0 10px 10px;margin-top:4px">登出</button>
       </div>
     </details>
   </header>
-
-  <section id="hero" hidden></section>
 
   <a class="fp" href="/footprint" aria-label="我的足跡：打開全年迷霧地圖">
     <div class="txt">
@@ -159,7 +162,7 @@
 <script type="module">
 import { api, $, esc, avatar, clock } from '/assets/common.js';
 import { drawFootprint } from '/assets/footmini.js';
-import { HEROES, getHero, setHero, renderHero } from '/assets/homehero.js';
+import { BGS, getBg, setBg, renderBg, setData } from '/assets/homebg.js';
 const ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
 const d = new Date();
 $('#today').textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${'日一二三四五六'[d.getDay()]}`;
@@ -205,21 +208,19 @@ if (pending) join(pending.toUpperCase());
 loadTrips();
 
 // 足跡卡片：數字先出來，縮圖資料比較大（約 5 萬格）隨後畫上
-// 頂部樣式：先畫天色（不用資料），summary 回來再畫其他兩種
-let summary = null, hero = getHero();
-const drawHero = () => renderHero(hero, summary);
-$('#heroOpts').innerHTML = Object.entries(HEROES).map(([k, n]) => `<button type="button" role="menuitemradio" data-h="${k}" aria-checked="${k === hero}">${n}</button>`).join('');
-$('#heroOpts').onclick = (e) => {
-  const b = e.target.closest('[data-h]'); if (!b) return;
-  hero = b.dataset.h; setHero(hero);
-  $('#heroOpts').querySelectorAll('[data-h]').forEach((x) => x.setAttribute('aria-checked', x === b));
-  drawHero();
+// 首頁背景：先畫（天色、流線不用資料），summary 回來再補上要資料的那幾種
+let bg = getBg();
+$('#bgOpts').innerHTML = Object.entries(BGS).map(([k, n]) => `<button type="button" role="menuitemradio" data-b="${k}" aria-checked="${k === bg}">${n}</button>`).join('');
+$('#bgOpts').onclick = (e) => {
+  const b = e.target.closest('[data-b]'); if (!b) return;
+  bg = b.dataset.b; setBg(bg);
+  $('#bgOpts').querySelectorAll('[data-b]').forEach((x) => x.setAttribute('aria-checked', x === b));
+  renderBg(bg);
 };
-drawHero();
+renderBg(bg);
 
 api('/api/footprint/summary').then((s) => {
-  summary = s;
-  if (hero !== 'sky') drawHero();
+  setData({ summary: s });
   if (!s.points) {
     $('#fpTitle').textContent = '還沒有足跡';
     $('#fpNums').innerHTML = '<div><span>開始一趟行程，或匯入 GPX，地圖就會一格一格亮起來</span></div>';

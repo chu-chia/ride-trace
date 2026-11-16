@@ -1,89 +1,18 @@
-// 首頁頂部三種樣式（設定裡切換，記在這台瀏覽器）：
-//   sky   天色：背景是依時段變化的天空（清晨、白天、傍晚、深夜＋星星）
-//   year  年度紀錄：最近一年每天騎多少的格子圖
-//   gauge 儀表：機車儀表板，指針指本月里程，下面一排里程表數字
+// 首頁卡片元件（之後整理首頁元件時再放上去，目前沒有使用）：
+//   renderYear  年度紀錄：最近一年每天騎多少的格子圖
+//   renderGauge 儀表：機車儀表板，指針指本月里程，下面一排里程表數字
 // 資料都來自 /api/footprint/summary 的 days（{YYYYMMDD: km}）。
 import { $, esc } from '/assets/common.js';
 
-export const HEROES = { sky: '天色', year: '年度紀錄', gauge: '儀表' };
-const KEY = 'qiji.homeHero';
-export function getHero() {
-  try { const v = localStorage.getItem(KEY); return HEROES[v] ? v : 'sky'; } catch { return 'sky'; }
-}
-export function setHero(v) { try { localStorage.setItem(KEY, v); } catch { /* 無痕模式存不了就算了 */ } }
-
-const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const pad2 = (n) => String(n).padStart(2, '0');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // 台灣時間
 const tw = (ms = Date.now()) => new Date(ms + (new Date(ms).getTimezoneOffset() + 480) * 60000);
 const key = (d) => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
 const fmt = (n) => Math.round(n).toLocaleString();
 
-let stop = null; // 換樣式時把上一個的動畫停掉
-export function renderHero(kind, summary) {
-  stop?.(); stop = null;
-  document.body.dataset.hero = kind;
-  $('#sky').hidden = kind !== 'sky';
-  const box = $('#hero');
-  box.hidden = kind === 'sky';
-  box.innerHTML = '';
-  if (kind === 'sky') stop = sky();
-  else if (kind === 'year') year(box, summary);
-  else stop = gauge(box, summary);
-}
-
-/* ---------------- 1. 天色 ---------------- */
-// 每個時段：天頂、中段、地平線三個顏色，以及太陽／月亮的光暈
-const PHASES = {
-  dawn: { top: '#0b1a3f', mid: '#47407a', low: '#f2925a', glow: 'rgba(255,170,90,.55)', stars: 0.35, label: '清晨' },
-  day: { top: '#1f5fbf', mid: '#4c93e6', low: '#a9d3f7', glow: 'rgba(255,250,220,.45)', stars: 0, label: '白天' },
-  dusk: { top: '#211a4d', mid: '#8a3f73', low: '#f08a55', glow: 'rgba(255,140,80,.55)', stars: 0.2, label: '傍晚' },
-  night: { top: '#02050d', mid: '#08122d', low: '#16244d', glow: 'rgba(170,190,255,.18)', stars: 1, label: '深夜' },
-};
-const phaseOf = (h) => (h >= 4 && h < 7 ? 'dawn' : h >= 7 && h < 16 ? 'day' : h >= 16 && h < 19 ? 'dusk' : 'night');
-
-function sky() {
-  const el = $('#sky'), cv = $('#stars');
-  let raf = 0;
-  const paint = () => {
-    const p = PHASES[phaseOf(tw().getHours())];
-    el.style.setProperty('--sky-top', p.top);
-    el.style.setProperty('--sky-mid', p.mid);
-    el.style.setProperty('--sky-low', p.low);
-    el.style.setProperty('--sky-glow', p.glow);
-    el.dataset.phase = phaseOf(tw().getHours());
-    // 星星：位置用固定亂數種子，每次打開都一樣；亮度慢慢閃
-    const dpr = Math.min(2, devicePixelRatio || 1), W = el.clientWidth, H = el.clientHeight;
-    cv.width = W * dpr; cv.height = H * dpr;
-    const g = cv.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    let seed = 11;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const stars = Array.from({ length: Math.round((W * H) / 2600) }, () => ({ x: rnd() * W, y: rnd() * H * 0.75, r: 0.4 + rnd() * 1.1, ph: rnd() * 6.28, sp: 0.6 + rnd() * 1.6 }));
-    cancelAnimationFrame(raf);
-    const frame = (t) => {
-      g.clearRect(0, 0, W, H);
-      if (p.stars) {
-        for (const s of stars) {
-          const tw2 = reduce ? 0.8 : 0.55 + 0.45 * Math.sin(t / 1000 * s.sp + s.ph);
-          g.globalAlpha = p.stars * tw2 * (1 - s.y / (H * 0.9));
-          g.fillStyle = '#fff';
-          g.beginPath(); g.arc(s.x, s.y, s.r, 0, 6.29); g.fill();
-        }
-      }
-      if (!reduce && p.stars) raf = requestAnimationFrame(frame);
-    };
-    raf = requestAnimationFrame(frame);
-  };
-  paint();
-  const onResize = () => { clearTimeout(onResize.t); onResize.t = setTimeout(paint, 150); };
-  addEventListener('resize', onResize);
-  const tick = setInterval(paint, 5 * 60 * 1000); // 開著不關也會跟著天色變
-  return () => { cancelAnimationFrame(raf); removeEventListener('resize', onResize); clearInterval(tick); };
-}
-
 /* ---------------- 2. 年度紀錄 ---------------- */
-function year(box, s) {
+export function renderYear(box, s) {
   const days = s?.days || {};
   const today = tw();
   const W = box.clientWidth || 600;
@@ -128,7 +57,7 @@ function year(box, s) {
 }
 
 /* ---------------- 5. 儀表 ---------------- */
-function gauge(box, s) {
+export function renderGauge(box, s) {
   const days = s?.days || {};
   const now = tw();
   const ym = `${now.getFullYear()}${pad2(now.getMonth() + 1)}`;
