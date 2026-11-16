@@ -62,4 +62,22 @@
 .qx-sosrow .t2{font-size:12px;opacity:.9}
 .qx-sosrow .btn{background:rgba(255,255,255,.22);color:#fff;padding:7px 12px;font-size:13px}
 @keyframes qxpulse{from{box-shadow:0 6px 20px rgba(229,53,43,.35)}to{box-shadow:0 10px 36px rgba(229,53,43,.8)}}
+/* 全隊進度條 */
+.qx-prog{width:min(420px,calc(100vw - 24px));border-radius:16px;padding:10px 14px 14px}
+.qx-prog-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:12.5px;margin-bottom:10px}
+.qx-prog-h b{font-size:13px}
+.qx-prog-h span{color:var(--muted);text-align:right}
+.qx-track{position:relative;height:6px;border-radius:3px;background:color-mix(in srgb,var(--accent) 22%,var(--surface-2));margin:0 6px}
+.qx-tick{position:absolute;top:-5px;width:3px;height:16px;margin-left:-1.5px;border-radius:2px;background:#ffd60a}
+.qx-tick[data-kind="rest"]{background:#64d2ff}
+.qx-dot{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--c);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);transition:left 1s linear}
+.qx-dot.me{width:18px;height:18px;margin:-9px 0 0 -9px;z-index:1}
+.qx-dot.off{border-color:#ff9f0a}
+.qx-dot.static{position:static;display:inline-block;margin:0;flex:none}
+/* 我的下一個轉彎（左上，回上一頁按鈕下面） */
+.qx-turn{position:fixed;z-index:8;left:max(12px,env(safe-area-inset-left,0px));top:calc(max(12px,env(safe-area-inset-top,0px)) + 64px);display:flex;align-items:center;gap:12px;padding:10px 16px 10px 10px;border-radius:16px;max-width:min(360px,calc(100vw - 90px))}
+.qx-turn>b{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:26px;background:var(--accent);color:#fff;flex:none}
+.qx-turn.off>b{background:#ff9f0a}
+.qx-turn .d{font-size:17px;font-weight:700}
+.qx-turn .s{font-size:12.5px;color:var(--muted)}
 @media (max-width:760px){.qx-pop{width:calc(100vw - 88px)}}

@@ -41,6 +41,9 @@ class K:
     marks = staticmethod(lambda tid: f"trip:{tid}:marks")           # GEO：地圖標註
     mark = staticmethod(lambda tid, mid: f"trip:{tid}:mark:{mid}")
     sos = staticmethod(lambda tid: f"trip:{tid}:sos")               # Hash：uid → 還沒解除的 SOS 事件 ID
+    route = staticmethod(lambda rid: f"route:{rid}")                # RedisJSON：路線
+    progress = staticmethod(lambda tid: f"trip:{tid}:progress")     # Hash：uid → 沿路線里程（km）
+    offroute = staticmethod(lambda tid: f"trip:{tid}:offroute")     # Hash：uid → 偏離路線中（只通知一次）
     lagchk = staticmethod(lambda tid: f"trip:{tid}:lagchk")       # 節流鎖：一個行程 2 秒判斷一次
     ingest = "stream:ingest"
     ts_writes = "ts:sys:writes"
@@ -98,27 +101,30 @@ return 1
 update_stats = r.register_script(UPDATE_STATS_LUA)
 
 
-# Worker（alerts group）：落隊判斷（規格 7.4，沒有路線的版本）。
-# 距離：與全隊中心的直線距離。全隊中心＝在線隊友座標的「中位數」
-#   （不用平均：一個人落很後面時，平均會被他拉過去，反而讓其他人看起來離中心很遠）。
-# 前後：大家從同一個地方出發，「已騎里程」（stats group 算的）就近似沿路線的進度，
-#   比中位數多＝前面、少＝後面。山路髮夾彎時行進方向會互相抵消，所以不用方向判斷。
-# 只有兩個人時沒有中位數可言，以里程較多的那位當中心。全隊都停著不判斷（休息站裡走動不該警示）。
+# Worker（alerts group）：落隊判斷（規格 7.4）。
+# 有路線（ARGV[2]=1）：用「沿路線里程」（worker 把每個人投影到路線上算出來的），中位數當中心，差多少就是落後多少。
+#   山路彎道多時直線距離會失真，沿路線才準。
+# 沒路線：與全隊中心的直線距離，中心＝在線隊友座標的「中位數」（不用平均：落很後面的人會把平均拉過去）；
+#   前後用「已騎里程」（stats group 算的）判斷，大家從同一個地方出發時就近似沿路線的進度。
+# 只有兩個人時沒有中位數可言，以比較前面的那位當中心。全隊都停著不判斷（休息站裡走動不該警示）。
 # 進入警示要超過門檻，解除要回到門檻 75% 以內（遲滯），避免在門檻附近一直跳。
 # 「判斷＋改旗標」在同一個 Lua 裡完成，多個 worker 同時判斷同一個行程也只會發一次警示。
-# KEYS: geo, lagflag, 然後每人兩個：state, stats    ARGV: 門檻(公尺), uid1…uidN
+# KEYS: geo, lagflag, progress, 然後每人兩個：state, stats    ARGV: 門檻(公尺), 是否用路線(1/0), uid1…uidN
 # 回傳：{uid, 帶正負號的距離(公尺，負＝落後), 轉換(0 無／1 落隊／2 衝太前面／3 跟上)} 攤平成一維
 LAG_LUA = """
 local thr = tonumber(ARGV[1])
+local useRoute = ARGV[2] == '1'
 local R, moving = {}, false
-for j = 2, #ARGV do
-  local uid = ARGV[j]
-  local st = redis.call('HMGET', KEYS[2 * j - 1], 'status', 'speed')
+for n = 3, #ARGV do
+  local uid = ARGV[n]
+  local k = 2 * (n - 3) + 4
+  local st = redis.call('HMGET', KEYS[k], 'status', 'speed')
   if st[1] == 'ok' then
     local pos = redis.call('GEOPOS', KEYS[1], uid)[1]
-    if pos then
-      local km = tonumber(redis.call('HGET', KEYS[2 * j], 'km') or '0')
-      table.insert(R, {uid = uid, lon = tonumber(pos[1]), lat = tonumber(pos[2]), km = km})
+    local rk = useRoute and tonumber(redis.call('HGET', KEYS[3], uid)) or nil
+    if pos and (rk or not useRoute) then
+      local km = tonumber(redis.call('HGET', KEYS[k + 1], 'km') or '0')
+      table.insert(R, {uid = uid, lon = tonumber(pos[1]), lat = tonumber(pos[2]), km = useRoute and rk or km})
       if (tonumber(st[2]) or 0) >= 2 then moving = true end
     end
   end
@@ -142,8 +148,13 @@ local kx, ky = 111320 * math.cos(math.rad(clat)), 110540
 
 local out = {}
 for _, r in ipairs(R) do
-  local dx, dy = (r.lon - clon) * kx, (r.lat - clat) * ky
-  local dist = math.sqrt(dx * dx + dy * dy)
+  local dist
+  if useRoute then
+    dist = math.abs(r.km - ckm) * 1000
+  else
+    local dx, dy = (r.lon - clon) * kx, (r.lat - clat) * ky
+    dist = math.sqrt(dx * dx + dy * dy)
+  end
   local ahead = r.km > ckm
   local flag = redis.call('HGET', KEYS[2], r.uid)
   local tr = 0

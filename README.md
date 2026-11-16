@@ -4,7 +4,7 @@
 
 接手的 agent 請先讀 `AGENTS.md`。
 
-目前進度：**M1 核心、M2 回放**（見下方「階段」）。
+目前進度：**M1 核心、M2 回放、M3 警示與互動（Telegram 除外）、M4 導航**（見下方「階段」）。
 
 ## 啟動
 
@@ -106,6 +106,9 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 | Streams＋Pub/Sub（互動） | 快速訊息、地圖標註、SOS 都寫進 `trip:{id}:events` 並廣播，回放自動帶到；時間用本人裝置回報的 ts |
 | GEO（標註） | `trip:{id}:marks`；坑洞／落石由 worker `GEOSEARCH` 前方 300 m，提醒正騎過去的隊友（標註的人不提醒） |
 | TTL 限流 | 快速訊息 `SET ratelimit:msg:{uid} NX PX 2000`，2 秒內只能發一則 |
+| RedisJSON | `route:{id}` 存整條路線（途經點、幾千個座標、累計里程、轉彎指示、摘要）；`JSON.GET route:{id} $.summary $.points` 只取需要的部分，worker 也只取 `$.coords $.cum_km`，不必整包讀出來再解析 |
+| Lua（路線版落隊） | 有路線時，worker 先把每個人投影到路線上得到「沿路線里程」（`trip:{id}:progress`），落隊 Lua 改用里程中位數當中心：山路髮夾彎直線只差 400 m、沿路線其實落後 3 km 的情況也抓得到 |
+| Hash＋HSETNX／HDEL | 偏離路線（離路線 > 150 m）`HSETNX trip:{id}:offroute` 回傳 1 才通知，回到 60 m 內 `HDEL` 回傳 1 才通知「回到路線」 |
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時在 Redis 裡 `SUNION` |
 
 ## 階段
@@ -113,6 +116,6 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 - [x] **M1 核心**：帳號、開團／邀請碼／開始／結束、位置回報（網頁＋Traccar）、即時地圖（深色／衛星／淺色、3D 地形）、失聯偵測、GPX 匯入、模擬器、全年迷霧足跡
 - [x] **M2 回放**：全隊同步、時間軸＋倍速（1～300×）、事件標記可跳轉、跟拍鏡頭（車頭朝上、3D）、依隊員／速度／海拔上色、海拔與速度曲線（TS.MRANGE）、整趟摘要
 - [ ] M3 警示與互動：Worker（consumer group）✓、落隊 ✓、抵達 ✓、測速（RediSearch）✓、訊息／標註／SOS ✓；Telegram 推播待做
-- [ ] M4 導航：Valhalla 機車路線、規劃頁、轉彎提示
+- [x] **M4 導航**：Google Maps 連結匯入、Valhalla 機車路線（避開國道）、規劃頁 `/plan`、路線存 RedisJSON、沿路線進度與全隊進度條、預估抵達、轉彎提示、偏離路線、路線版落隊
 - [ ] M5 戰情室、後台、點亮鄉鎮（GEOSHAPE）、熱力圖
 - [ ] M6 部署、UML、簡報、影片

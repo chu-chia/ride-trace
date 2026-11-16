@@ -17,6 +17,7 @@ import math
 import logging
 import os
 import socket
+import time
 
 from redis.exceptions import ResponseError
 
@@ -71,6 +72,7 @@ def stats_dict(s) -> dict:
 LAG_DEFAULT_KM = 2.0
 LAG_EVERY_MS = 2000
 LAG_TEXT = {1: "落隊：離全隊中心 {km} km", 2: "跑太前面：超前全隊中心 {km} km", 3: "已跟上隊伍"}
+LAG_TEXT_ROUTE = {1: "落隊：沿路線落後全隊中心 {km} km", 2: "跑太前面：沿路線超前全隊中心 {km} km", 3: "已跟上隊伍"}
 LAG_TYPE = {1: "behind", 2: "ahead", 3: "regroup"}
 
 
@@ -82,10 +84,11 @@ async def check_trip_lag(tid: str):
     if len(uids) < 2:
         return
     thr_km = float(await r.hget(K.trip(tid), "lag_km") or LAG_DEFAULT_KM)
-    keys = [K.geo(tid), K.lagflag(tid)]
+    use_route = bool(await r.hget(K.trip(tid), "route"))
+    keys = [K.geo(tid), K.lagflag(tid), K.progress(tid)]
     for u in uids:
         keys += [K.state(tid, u), K.stats(tid, u)]
-    res = await check_lag(keys=keys, args=[int(thr_km * 1000), *uids])
+    res = await check_lag(keys=keys, args=[int(thr_km * 1000), 1 if use_route else 0, *uids])
     if not res:
         return
     gaps = {}
@@ -94,12 +97,12 @@ async def check_trip_lag(tid: str):
         gaps[uid] = round(signed_m / 1000, 2)
         if tr:
             km = f"{abs(signed_m) / 1000:.1f}"
-            await events.emit(tid, LAG_TYPE[tr], uid, LAG_TEXT[tr].format(km=km),
+            await events.emit(tid, LAG_TYPE[tr], uid, (LAG_TEXT_ROUTE if use_route else LAG_TEXT)[tr].format(km=km),
                               ts=await events.last_fix_ts(tid, uid), gap_km=gaps[uid])
     await r.delete(K.gap(tid))
     await r.hset(K.gap(tid), mapping=gaps)
     flags = await r.hgetall(K.lagflag(tid))
-    await events.publish(tid, {"kind": "gap", "gaps": gaps, "flags": flags, "lag_km": thr_km})
+    await events.publish(tid, {"kind": "gap", "gaps": gaps, "flags": flags, "lag_km": thr_km, "by_route": use_route})
 
 
 WP_SEARCH_M = 2000  # 集合點半徑上限，GEOSEARCH 先用這個範圍撈，再逐一比對各自的半徑
@@ -198,10 +201,85 @@ async def check_hazard(tid: str, uid: str, f: dict):
         return
 
 
+# ---------- 沿路線進度 ----------
+ROUTES: dict[str, tuple] = {}     # tid → (rid, coords, cum_km, 載入時間)
+LAST_IDX: dict[tuple, int] = {}   # (tid, uid) → 上次投影到的線段（下次先在附近找）
+LAST_PUB: dict[tuple, float] = {}
+OFF_ROUTE_M = 150                 # 離路線超過 150 m 算偏離
+BACK_ROUTE_M = 60                 # 回到 60 m 內算回到路線（遲滯）
+PROGRESS_PUB_S = 1.5
+
+
+async def load_route(tid: str):
+    rid = await r.hget(K.trip(tid), "route")
+    if not rid:
+        ROUTES.pop(tid, None)
+        return None
+    cached = ROUTES.get(tid)
+    if cached and cached[0] == rid and time.time() - cached[3] < 30:
+        return cached
+    res = await r.json().get(K.route(rid), "$.coords", "$.cum_km")  # 只取需要的兩個欄位
+    if not res or not res["$.coords"]:
+        return None
+    ROUTES[tid] = (rid, res["$.coords"][0], res["$.cum_km"][0], time.time())
+    return ROUTES[tid]
+
+
+def project(coords, cum, lat, lon, hint=None):
+    """把點投影到路線（折線）上，回傳 (沿路線 km, 離路線 m, 線段 index)。先在上次位置附近找，找不到才全段掃。"""
+    kx, ky = 111320 * math.cos(math.radians(lat)), 110540
+
+    def scan(lo, hi):
+        best = (float("inf"), 0, 0.0)
+        for i in range(max(0, lo), min(len(coords) - 1, hi)):
+            ax, ay = (coords[i][0] - lon) * kx, (coords[i][1] - lat) * ky
+            bx, by = (coords[i + 1][0] - lon) * kx, (coords[i + 1][1] - lat) * ky
+            dx, dy = bx - ax, by - ay
+            L2 = dx * dx + dy * dy
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / L2))
+            px, py = ax + t * dx, ay + t * dy
+            d = px * px + py * py
+            if d < best[0]:
+                best = (d, i, t)
+        return best
+
+    best = scan(hint - 150, hint + 400) if hint is not None else (float("inf"), 0, 0.0)
+    if best[0] > 300 ** 2:
+        best = scan(0, len(coords))
+    d2, i, t = best
+    km = cum[i] + (cum[i + 1] - cum[i]) * t
+    return km, math.sqrt(d2), i
+
+
+async def check_progress(tid: str, uid: str, f: dict):
+    rt = await load_route(tid)
+    if not rt:
+        return
+    _, coords, cum, _ = rt
+    key = (tid, uid)
+    km, off, i = project(coords, cum, float(f["lat"]), float(f["lon"]), LAST_IDX.get(key))
+    LAST_IDX[key] = i
+    async with r.pipeline(transaction=False) as p:
+        p.hset(K.progress(tid), uid, round(km, 3))
+        p.hset(K.state(tid, uid), mapping={"route_km": round(km, 3), "off_m": round(off)})
+        await p.execute()
+    # 偏離／回到路線：HSETNX／HDEL 的回傳值保證多個 worker 也只通知一次
+    if off > OFF_ROUTE_M:
+        if await r.hsetnx(K.offroute(tid), uid, round(km, 2)):
+            await events.emit(tid, "offroute", uid, f"偏離路線 {round(off)} m", ts=int(f["ts"]))
+    elif off < BACK_ROUTE_M and await r.hdel(K.offroute(tid), uid):
+        await events.emit(tid, "onroute", uid, "回到路線", ts=int(f["ts"]))
+    now = time.time()
+    if now - LAST_PUB.get(key, 0) >= PROGRESS_PUB_S:
+        LAST_PUB[key] = now
+        await events.publish(tid, {"kind": "progress", "uid": uid, "km": round(km, 3), "off_m": round(off)})
+
+
 async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
     """警示類：抵達集合點、前方測速（每筆都查）、落隊（同一批裡同一個行程只判斷一次）。"""
     for _, f in msgs:
         if f.get("trip") and f.get("uid") and "lat" in f:
+            await check_progress(f["trip"], f["uid"], f)  # 先算沿路線里程，落隊判斷會用到
             await check_arrival(f["trip"], f["uid"], float(f["lat"]), float(f["lon"]), int(f["ts"]))
             await check_speedcam(f["trip"], f["uid"], f)
             await check_hazard(f["trip"], f["uid"], f)

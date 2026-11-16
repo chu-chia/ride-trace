@@ -1,4 +1,4 @@
-// 行程頁的 M3 互動功能：集合點、前方測速、快速訊息、地圖標註、SOS。
+// 行程頁的 M3／M4 功能：集合點、前方測速、快速訊息、地圖標註、SOS、路線（進度條、轉彎提示）。
 // 和 trip.js 分開放，避免和畫面設計的改動互相衝突。trip.js 只提供三個掛鉤：
 //   window.qijiM（地圖包裝）、window.qijiState（頁面狀態）、window 的 'qiji:msg' 事件（每則 WebSocket 訊息）
 import { api, $, esc, toast, clock } from '/assets/common.js';
@@ -14,7 +14,9 @@ const dock = document.createElement('div');
 dock.className = 'qx-dock';
 dock.innerHTML = `
   <div class="qx-pop glass" id="qxPop" hidden></div>
+  <div class="qx-prog glass" id="qxProg" hidden></div>
   <div class="qx-bar">
+    <button class="tool glass" data-open="route" title="路線與全隊進度">路線</button>
     <button class="tool glass" data-open="wp" title="集合點與休息點">集合點</button>
     <button class="tool glass" data-open="cam" title="測速照相查詢">測速</button>
     <button class="tool glass" data-open="msg" title="快速訊息">訊息</button>
@@ -46,6 +48,7 @@ function render() {
   if (X.open === 'cam') renderCamPanel();
   if (X.open === 'msg') renderMsgPanel();
   if (X.open === 'mark') renderMarkPanel();
+  if (X.open === 'route') renderRoutePanel();
   if (X.pick && X.pick.mode !== X.open) clearPick();
 }
 
@@ -384,6 +387,104 @@ banner.addEventListener('click', (e) => {
 async function loadSos() { try { X.sos = await api(`/api/trips/${tid}/sos`); renderSos(); } catch { /* 略過 */ } }
 setInterval(() => { if (X.sos.length) renderSos(); }, 5000); // 距離會變
 
+/* ---------- 路線（M4）：路線線條、全隊進度條、我的下一個轉彎 ---------- */
+X.route = null; X.prog = {}; // uid → { km, off }
+const turnCard = document.createElement('div');
+turnCard.className = 'qx-turn glass';
+turnCard.hidden = true;
+document.body.append(turnCard);
+
+const routeGeo = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: X.route?.coords || [] } });
+M.onStyle(() => {
+  if (!map.getSource('qx-route')) map.addSource('qx-route', { type: 'geojson', data: routeGeo() });
+  const before = map.getLayer('trails-casing') ? 'trails-casing' : undefined; // 路線畫在大家的軌跡下面
+  if (!map.getLayer('qx-route-casing')) map.addLayer({ id: 'qx-route-casing', type: 'line', source: 'qx-route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#0b3d91', 'line-width': 9, 'line-opacity': 0.45 } }, before);
+  if (!map.getLayer('qx-route')) map.addLayer({ id: 'qx-route', type: 'line', source: 'qx-route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#64a8ff', 'line-width': 5, 'line-opacity': 0.55 } }, before);
+});
+
+async function loadRoute() {
+  try { const r = await api(`/api/trips/${tid}/route`); X.route = r?.coords ? r : null; } catch { X.route = null; }
+  for (const m of S.members.values()) {
+    const st = m.state || {};
+    if (st.route_km) X.prog[m.u.uid] = { km: +st.route_km, off: +st.off_m || 0 };
+  }
+  map.getSource('qx-route')?.setData(routeGeo());
+  renderProgress();
+  if (X.open === 'route') render();
+}
+
+// 集合點投影到路線上（前端算就好：點數少）
+function routeKmOf(lon, lat) {
+  const c = X.route.coords, cum = X.route.cum_km, kx = Math.cos((lat * Math.PI) / 180);
+  let best = [Infinity, 0];
+  for (let i = 0; i < c.length; i++) {
+    const dx = (c[i][0] - lon) * kx, dy = c[i][1] - lat, d = dx * dx + dy * dy;
+    if (d < best[0]) best = [d, i];
+  }
+  return cum[best[1]];
+}
+// 預估速度：自己有平均速度就用自己的，否則用路線的預估
+function speedKmh(uid) {
+  const avg = S.members.get(uid)?.u.stats?.avg_kmh;
+  return avg && avg > 8 ? avg : X.route ? (X.route.summary.km / Math.max(1, X.route.summary.min)) * 60 : 40;
+}
+const fmtKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(km < 100 ? 1 : 0)} km`);
+const etaClock = (min) => clock(Date.now() + min * 60000);
+
+function renderProgress() {
+  const bar = $('#qxProg');
+  if (!X.route) { bar.hidden = true; turnCard.hidden = true; return; }
+  const total = X.route.cum_km.at(-1);
+  const riders = [...S.members.values()].filter((m) => X.prog[m.u.uid] && m.u.active);
+  const ticks = X.wps.map((w) => ({ w, km: routeKmOf(w.lon, w.lat) }));
+  const me = X.prog[S.me];
+  const left = me ? total - me.km : null;
+  bar.hidden = false;
+  bar.innerHTML = `
+    <div class="qx-prog-h"><b>全隊進度</b><span>${me ? `我 ${fmtKm(me.km)} / ${fmtKm(total)} · 剩 ${fmtKm(left)} · 約 ${etaClock((left / speedKmh(S.me)) * 60)} 到` : `全長 ${fmtKm(total)}`}</span></div>
+    <div class="qx-track">
+      ${ticks.map(({ w, km }) => `<i class="qx-tick" data-kind="${w.kind}" style="left:${(km / total) * 100}%" title="${esc(w.name)} · ${fmtKm(km)}"></i>`).join('')}
+      ${riders.map((m) => `<b class="qx-dot${m.u.uid === S.me ? ' me' : ''}${X.prog[m.u.uid].off > 150 ? ' off' : ''}" style="left:${Math.min(100, (X.prog[m.u.uid].km / total) * 100)}%;--c:${m.u.color}" title="${esc(m.u.nickname)} · ${fmtKm(X.prog[m.u.uid].km)}"></b>`).join('')}
+    </div>`;
+  renderTurn();
+}
+
+const ARROW = { 7: '↑', 8: '↑', 22: '↑', 9: '↗', 10: '↱', 11: '↱', 12: '⤸', 13: '⤹', 14: '↰', 15: '↰', 16: '↖', 23: '↗', 24: '↖', 26: '⟳', 27: '⟳', 4: '⚑', 5: '⚑', 6: '⚑', 36: '⚑' };
+function renderTurn() {
+  const me = X.prog[S.me];
+  if (!X.route || !me || S.trip?.status !== 'live' || !S.members.get(S.me)?.u.active) { turnCard.hidden = true; return; }
+  turnCard.hidden = false;
+  if (me.off > 150) {
+    turnCard.className = 'qx-turn glass off';
+    turnCard.innerHTML = `<b>!</b><div><div class="d">偏離路線 ${fmtKm(me.off / 1000)}</div><div class="s">回到藍色路線上就會繼續提示</div></div>`;
+    return;
+  }
+  const next = X.route.maneuvers.find((m) => m.km > me.km + 0.02 && ![1, 2, 3].includes(m.type));
+  turnCard.className = 'qx-turn glass';
+  if (!next) { turnCard.innerHTML = `<b>⚑</b><div><div class="d">快到終點了</div></div>`; return; }
+  turnCard.innerHTML = `<b>${ARROW[next.type] || '↑'}</b><div><div class="d">${fmtKm(next.km - me.km)} 後 ${esc(next.act)}</div><div class="s">${esc(next.street || '')}</div></div>`;
+}
+
+function renderRoutePanel() {
+  const owner = S.trip?.is_owner;
+  if (!X.route) {
+    pop.innerHTML = `<div class="qx-head"><b>路線</b><span class="small muted">這個行程還沒有路線（臨時開團）：落隊用直線距離判斷</span></div>
+      ${owner ? `<a class="btn primary block" href="/plan?trip=${tid}">規劃路線</a>` : '<div class="small muted">建立者可以在「規劃路線」設定</div>'}`;
+    return;
+  }
+  const s = X.route.summary, total = X.route.cum_km.at(-1);
+  const rows = [...S.members.values()].filter((m) => X.prog[m.u.uid]).sort((a, b) => X.prog[b.u.uid].km - X.prog[a.u.uid].km).map((m) => {
+    const p = X.prog[m.u.uid], left = total - p.km, done = !m.u.active;
+    return `<div class="qx-row"><span class="qx-dot static" style="--c:${m.u.color}"></span><div class="grow"><div class="t1">${esc(m.u.nickname)}${p.off > 150 ? ' <span class="chip warn">偏離路線</span>' : ''}</div>
+      <div class="t2">${fmtKm(p.km)} / ${fmtKm(total)}${done ? ' · 已結束' : ` · 剩 ${fmtKm(left)} · 約 ${etaClock((left / speedKmh(m.u.uid)) * 60)} 到`}</div></div></div>`;
+  }).join('');
+  pop.innerHTML = `
+    <div class="qx-head"><b>路線</b><span class="small muted">${s.km.toFixed(1)} km · 預估 ${Math.floor(s.min / 60)}:${String(s.min % 60).padStart(2, '0')} · ${X.route.avoid_highways ? '避開國道' : '可走國道'} · 落隊改用沿路線距離</span></div>
+    <div class="qx-list">${rows || '<div class="small muted" style="padding:6px 2px">還沒有人開始回報位置</div>'}</div>
+    <a class="btn block" href="/plan?trip=${tid}">${owner ? '修改路線' : '看路線規劃'}</a>`;
+}
+setInterval(() => { if (X.route) { renderProgress(); if (X.open === 'route') renderRoutePanel(); } }, 2000);
+
 /* ---------- WebSocket 訊息 ---------- */
 addEventListener('qiji:msg', (e) => {
   const msg = e.detail;
@@ -393,11 +494,14 @@ addEventListener('qiji:msg', (e) => {
     toast(`前方 ${msg.dist_m} m 有${msg.label}${msg.note ? '：' + msg.note : ''}`, { icon: '!', color: '#ff9f0a', sub: `${nameOf(msg.by)} 標註的` });
   }
   if (msg.kind === 'event' && (msg.type === 'sos' || msg.type === 'sos_off')) loadSos();
-  if (msg.kind === 'snapshot') { loadWps(); loadMarks(); loadSos(); }
+  if (msg.kind === 'snapshot') { loadWps(); loadMarks(); loadSos(); loadRoute(); }
+  if (msg.kind === 'route') { X.prog = {}; loadRoute(); }
+  if (msg.kind === 'progress') { X.prog[msg.uid] = { km: msg.km, off: msg.off_m }; if (msg.uid === S.me) renderTurn(); }
   if (msg.kind === 'speedcam' && msg.uid === S.me) camAlert(msg);
 });
 
 loadWps();
 loadMarks();
 loadSos();
+loadRoute();
 window.qijiExtra = X; // 除錯用
