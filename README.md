@@ -137,6 +137,7 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 | Sorted Set | `heat:{uid}` 熱力圖格子計數（`ZINCRBY`，`ZREVRANGE` 就是最常去的地方）；`online:report` 線上人數（`ZCOUNT` 最近 2 分鐘） |
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時 `SUNION`；`user:{uid}:towns` 點亮的鄉鎮（`SADD` 回傳 1 = 第一次點亮）；`SDIFF` 算誰還沒到集合點 |
 | Hash 快取 | `celltown` 格子 → 鄉鎮（同一格不必每次都查空間索引）；`cache:` 查詢結果 TTL 快取 |
+| SCAN＋TYPE／TTL | 管理後台「維運工具」逐批列出行程相關 key、唯讀檢視 Redis 型別與剩餘效期；SQL 需跨多張表及系統目錄才能取得同樣的資料概況 |
 | cache-aside＋TTL（外部 API） | 交通部 TDX 每月只有 3 點（4,500 次）：`cache:tdx:roadev` 120 秒過期才再抓全台省道事件，`SET lock:tdx:roadev NX EX 30` 只讓一個 worker 去抓（防 cache stampede），重建時寫暫存 key 再 `MULTI`＋`RENAME` 一次換上；`cache:tdx:token` 存 OAuth token；`tdx:usage` 記本月呼叫次數。沒有進行中的行程、沒人開規劃頁時完全不呼叫；氣象署鄉鎮預報同樣 cache-aside（`cache:cwa:{縣市}` 30 分鐘，一次抓回整個縣市） |
 
 ## 階段

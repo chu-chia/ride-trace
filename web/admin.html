@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>管理後台｜騎跡 RideTrace</title>
 <link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <style>
   main{max-width:1180px;margin:0 auto;padding:20px 16px 40px;display:flex;flex-direction:column;gap:14px}
   header{display:flex;align-items:center;gap:12px}
@@ -52,6 +53,23 @@
   .tlog .bad{color:var(--crit-ink)}
   .wx{width:100%;font-size:12.5px}
   .wx td{padding:4px 6px}
+  #opsCard{margin-top:14px;min-width:0}
+  .ops-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .ops-panel{min-width:0;background:var(--surface-2);border-radius:12px;padding:12px}
+  .ops-panel h4{margin:0 0 10px}
+  .ops-row{display:flex;align-items:end;flex-wrap:wrap;gap:8px;margin:8px 0}
+  .ops-row label{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 120px}
+  .ops-row input,.ops-row select{box-sizing:border-box;min-width:0;width:100%;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px}
+  .ops-row button{min-height:36px}
+  .ops-table-wrap{width:100%;overflow-x:auto}
+  .ops-table{min-width:760px}
+  .ops-actions{display:flex;gap:5px;flex-wrap:wrap;min-width:180px}
+  .ops-actions .btn{padding:6px 8px;font-size:12px}
+  .ops-pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;font-size:12px;margin:8px 0}
+  #opsMap{height:220px;width:100%;border-radius:10px;background:var(--surface)}
+  #opsDialog{border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--fg);padding:20px;max-width:min(440px,calc(100vw - 32px))}
+  #opsDialog::backdrop{background:#0009}
+  @media (max-width:860px){.ops-grid{grid-template-columns:1fr}}
   @media (max-width:980px){ .tt{grid-template-columns:1fr} }
   @media (max-width:860px){ .kpis{grid-template-columns:repeat(2,1fr)} .grid{grid-template-columns:1fr} }
   @media (max-width:600px){
@@ -116,9 +134,23 @@
       <div class="card"><h3>進行中的行程</h3><table><thead><tr><th>行程</th><th class="r">在騎的人</th><th></th></tr></thead><tbody id="live"></tbody></table></div>
       <div class="card"><h3>Redis</h3><table><tbody id="redis"></tbody></table></div>
     </div>
+    <div class="card" id="opsCard">
+      <h3>維運工具 <small>管理行程、使用者與 Redis 資料</small></h3>
+      <div class="ops-grid">
+        <section class="ops-panel" style="grid-column:1/-1"><h4>行程管理 <button class="btn" id="opsTripsReload">重新整理</button></h4><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>ID</th><th>名稱</th><th>狀態</th><th>建立者</th><th>成員／進行中</th><th>開始／結束</th><th>操作</th></tr></thead><tbody id="opsTrips"></tbody></table></div></section>
+        <section class="ops-panel"><h4>使用者工具</h4><div class="ops-row"><label>使用者<select id="opsUser"></select></label></div><pre class="ops-pre" id="opsUserInfo"></pre><div class="ops-row"><button class="btn danger" id="opsClearLast">清除最後位置</button><button class="btn danger" id="opsClearActive">清除 active_trip</button></div><div class="ops-row"><label>新暱稱<input id="opsNickname" maxlength="12"></label><button class="btn" id="opsSaveNickname">改暱稱</button></div><div class="ops-row"><label>新密碼<input id="opsPassword" type="password" autocomplete="new-password" minlength="6"></label><button class="btn danger" id="opsResetPassword">重設密碼</button></div></section>
+        <section class="ops-panel"><h4>假位置注入</h4><div id="opsMap" aria-label="點地圖選擇位置"></div><div class="ops-row"><label>緯度<input id="opsLat" type="number" step="any" inputmode="decimal"></label><label>經度<input id="opsLon" type="number" step="any" inputmode="decimal"></label><button class="btn danger" id="opsInject">送出位置</button></div><pre class="ops-pre" id="opsInjectResult">選擇使用者並點地圖或輸入座標。</pre></section>
+        <section class="ops-panel"><h4>Redis 檢視器（唯讀）</h4><div class="ops-row"><label>完整 key<input id="opsRedisKey" placeholder="例如 trip:1"></label><label>SCAN pattern<input id="opsRedisPattern" placeholder="例如 trip:*，最多 200 筆"></label><button class="btn" id="opsRedisSearch">查詢</button></div><div id="opsRedisResult"></div></section>
+        <section class="ops-panel"><h4>系統狀態 <button class="btn" id="opsSystemReload">重新整理</button></h4><pre class="ops-pre" id="opsSystem"></pre></section>
+      </div>
+      <p class="muted" id="opsMessage" role="status"></p>
+    </div>
   </div>
 </main>
+<dialog id="opsDialog" aria-labelledby="opsDialogTitle"><h3 id="opsDialogTitle">確認操作</h3><p id="opsDialogText"></p><div class="ops-row"><button class="btn" id="opsCancel">取消</button><button class="btn danger" id="opsConfirm">確認</button></div></dialog>
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 <script type="module" src="/assets/admin.js"></script>
 <script type="module" src="/assets/admin-test.js"></script>
+<script type="module" src="/assets/admin-ops.js"></script>
 </body>
 </html>
