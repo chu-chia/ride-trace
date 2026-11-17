@@ -30,6 +30,24 @@
   td.r,th.r{text-align:right}
   .muted{color:var(--muted)}
   .denied{padding:40px;text-align:center;color:var(--muted)}
+  /* 測試工具 */
+  .tt{display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:14px}
+  .tt section{display:flex;flex-direction:column;gap:8px;min-width:0}
+  .tt h4{margin:0;font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.04em}
+  .tt label{font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+  .tt select{font:inherit;font-size:13.5px;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:7px 8px;min-width:0}
+  .tt .row{display:flex;gap:8px;flex-wrap:wrap}
+  .tt .evs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .tt .evs button,.tt .btn{font-size:13px;padding:8px 6px}
+  .tt .evs button[data-who="1"]::after{content:" ·人";color:var(--muted);font-size:11px}
+  .tt .hint{font-size:12px;color:var(--muted);line-height:1.5}
+  .tlog{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;font-size:13px}
+  .tlog div{display:grid;grid-template-columns:62px 1fr;gap:8px}
+  .tlog time{color:var(--muted);font-size:12px}
+  .tlog .bad{color:var(--crit-ink)}
+  .wx{width:100%;font-size:12.5px}
+  .wx td{padding:4px 6px}
+  @media (max-width:980px){ .tt{grid-template-columns:1fr} }
   @media (max-width:860px){ .kpis{grid-template-columns:repeat(2,1fr)} .grid{grid-template-columns:1fr} }
 </style>
 </head>
@@ -38,6 +56,35 @@
   <header><a href="/" aria-label="回首頁">‹</a><h1>管理後台</h1><span id="upd">載入中…</span></header>
   <div id="denied" class="denied card" hidden>只有管理者可以看後台</div>
   <div id="app" hidden>
+    <div class="card" id="testCard" style="margin-bottom:14px">
+      <h3>測試工具 <small>按鈕走真的流程：寫進行程事件 → Worker → 推播 → 手機；測試事件都會標記，可以一鍵清掉</small></h3>
+      <div class="tt">
+        <section>
+          <h4>網頁推播</h4>
+          <label>送給誰（括號是開了通知的裝置數）<select id="tPushTo"></select></label>
+          <div class="row"><button class="btn primary" id="tPush">送測試推播</button></div>
+          <div class="hint" id="tPushHint"></div>
+        </section>
+        <section>
+          <h4>行程事件</h4>
+          <div class="row" style="flex-wrap:nowrap">
+            <label style="flex:1.4">行程<select id="tTrip"></select></label>
+            <label style="flex:1">由誰觸發<select id="tWho"></select></label>
+          </div>
+          <div class="evs" id="tEvents"></div>
+          <div class="row"><a class="btn" id="tOpen" target="_blank">打開行程頁</a><button class="btn" id="tClean">清掉這個行程的測試事件</button></div>
+          <div class="hint">標「·人」的要選觸發的人。SOS、失聯、訊息、聊天不會推給觸發的人自己；測速、偏離只推給本人。想在手機收到，就選別人觸發。</div>
+        </section>
+        <section>
+          <h4>外部資料</h4>
+          <div class="hint" id="tTdx"></div>
+          <div class="row"><button class="btn" id="tTdxBtn">立即更新 TDX 路況（用掉 1 次）</button></div>
+          <label>氣象署鄉鎮降雨機率<select id="tCounty"></select></label>
+          <div style="max-height:150px;overflow-y:auto"><table class="wx"><tbody id="tWx"></tbody></table></div>
+        </section>
+      </div>
+      <div class="tlog" id="tLog"><div><time></time><span class="muted">結果會顯示在這裡</span></div></div>
+    </div>
     <div class="kpis">
       <div class="kpi"><b class="num" id="kMem">–</b><span>Redis 記憶體</span></div>
       <div class="kpi"><b class="num" id="kKeys">–</b><span>key 數量</span></div>
@@ -59,5 +106,6 @@
   </div>
 </main>
 <script type="module" src="/assets/admin.js"></script>
+<script type="module" src="/assets/admin-test.js"></script>
 </body>
 </html>

@@ -587,7 +587,7 @@ addEventListener('qiji:msg', (e) => {
   if (msg.kind === 'hazard' && msg.uid === S.me) {
     toast(`前方 ${msg.dist_m} m 有${msg.label}${msg.note ? '：' + msg.note : ''}`, { icon: '!', color: '#ff9f0a', sub: `${nameOf(msg.by)} 標註的` });
   }
-  if (msg.kind === 'event' && (msg.type === 'sos' || msg.type === 'sos_off')) loadSos();
+  if ((msg.kind === 'event' && (msg.type === 'sos' || msg.type === 'sos_off')) || msg.kind === 'sos_refresh') loadSos();
   if (msg.kind === 'snapshot') { loadWps(); loadMarks(); loadSos(); loadRoute(); }
   if (msg.kind === 'route') { X.prog = {}; loadRoute(); }
   if (msg.kind === 'progress') { X.prog[msg.uid] = { km: msg.km, off: msg.off_m }; if (msg.uid === S.me) renderTurn(); }
