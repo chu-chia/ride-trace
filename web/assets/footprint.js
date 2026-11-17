@@ -3,14 +3,20 @@
 import { api, $, $$ } from '/assets/common.js';
 import { swr } from '/assets/swr.js';
 import { createMap } from '/assets/mapbase.js';
+import { initRecords } from '/assets/fp-records.js';
 
 const TAIWAN = [[119.3, 21.85], [122.1, 25.35]];
 const BUCKETS = ['dawn', 'day', 'dusk', 'night'];
 const BUCKET_NAME = { dawn: '清晨', day: '白天', dusk: '傍晚', night: '夜間' };
 const WEEK = '日一二三四五六';
+const TABS = new Set(['footprint', 'towns', 'heat', 'stats']);
+let tab = new URLSearchParams(location.search).get('tab') || 'footprint';
+if (!TABS.has(tab)) tab = 'footprint';
+let rangeMode = 'all';
 
-const M = createMap($('#map'), { style: 'navy', styles: ['navy', 'sat', 'light'], center: [120.95, 23.7], zoom: 7, interactive3d: false });
+const M = createMap($('#map'), { style: 'navy', styles: ['navy', 'dark', 'sat', 'light'], center: [120.95, 23.7], zoom: 7, interactive3d: false });
 const map = M.map;
+const records = initRecords(map, M, () => tab, sidePad);
 const uid = (await api('/api/me')).uid;
 map.keyboard.disableRotation();
 window.qijiMap = map; // 方便用 CDP 驗證鏡頭狀態（其他地圖頁也有）
@@ -52,7 +58,7 @@ function draw() {
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
   ctx.clearRect(0, 0, w, h);
-  if (!$('#optFog').checked) { cv.style.filter = 'none'; return; }
+  if (tab !== 'footprint' || !$('#optFog').checked) { cv.style.filter = 'none'; return; }
   const z = map.getZoom();
   ctx.fillStyle = fogColor(z);
   ctx.fillRect(0, 0, w, h);
@@ -94,12 +100,12 @@ addEventListener('resize', draw);
 
 /* ---------- 軌跡線圖層 ---------- */
 // 黃色在深藍與衛星底圖上都最醒目；淺色底圖改用琥珀色
-const LINE_COLOR = { navy: '#ffe14d', sat: '#ffe14d', light: '#c2410c' };
+const LINE_COLOR = { navy: '#ffe14d', dark: '#ffe14d', sat: '#ffe14d', light: '#c2410c' };
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const isAll = () => F.summary && F.from === F.summary.first && F.to === F.summary.last && F.buckets.size === 4;
 function syncLayers() {
   const vis = (id, on) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
-  const lines = $('#optLines').checked;
+  const lines = tab === 'footprint' && $('#optLines').checked;
   vis('fp-lines', lines); vis('fp-glow', lines);
   // 只看一段時間時，其他時間去過的路淡淡留著當參考（迷霧模式下改由迷霧呈現）
   vis('fp-all', lines && $('#optAll').checked && !$('#optFog').checked && !isAll());
@@ -195,7 +201,7 @@ function loadAllLines() {
 }
 
 function sidePad() {
-  return innerWidth <= 760 ? { top: 40, left: 30, right: 30, bottom: $('#side').offsetHeight + 20 } : { top: 40, bottom: 40, right: 60, left: 440 };
+  return innerWidth <= 760 ? { top: 70, left: 30, right: 30, bottom: $('#side').offsetHeight + 20 } : { top: 40, bottom: 40, right: 60, left: 460 };
 }
 function fitSelection() {
   const f = F.selFlat;
@@ -223,16 +229,12 @@ function setRange(from, to, fit = true) {
 }
 
 function syncChips() {
-  const { first, last } = F.summary;
-  const span = (parse(F.to) - parse(F.from)) / 86400000 + 1;
-  $$('#presets button').forEach((b) => {
-    const p = b.dataset.p;
-    b.classList.toggle('on', p === 'all' ? F.from === first && F.to === last : F.to === last && span === +p);
-  });
+  $$('#presets button').forEach((b) => b.classList.toggle('on', b.dataset.p === rangeMode));
+  $('#customRange').hidden = rangeMode !== 'custom';
   $$('#months button').forEach((b) => {
     const [y, m] = b.dataset.m.split('-').map(Number);
     const a = iso(new Date(y, m - 1, 1)), z = iso(new Date(y, m, 0));
-    b.classList.toggle('on', (F.from === a || F.from === first) && (F.to === z || F.to === last) && F.from.slice(0, 7) === b.dataset.m && F.to.slice(0, 7) === b.dataset.m);
+    b.classList.toggle('on', F.from.slice(0, 7) === b.dataset.m && F.to.slice(0, 7) === b.dataset.m && F.from <= a && F.to >= z);
   });
   $$('#buckets button').forEach((b) => b.classList.toggle('on', F.buckets.has(b.dataset.b)));
 }
@@ -244,52 +246,51 @@ function renderRange() {
   $('#rangeSub').textContent = F.buckets.size === 4 ? '全天' : '只看 ' + [...F.buckets].map((b) => BUCKET_NAME[b]).join('、');
 }
 
-// 每個月一個小月曆，四欄排列；顏色深淺 = 那天騎了多遠
+// 每天一根長條，整段可橫滑；更新選取時保留捲動位置。
 function renderCalendar() {
-  const s = F.summary, cell = 10, gap = 2, colW = 7 * (cell + gap) + 6, head = 16, rowH = head + 6 * (cell + gap) + 10;
-  const max = Math.max(1, ...Object.values(s.days));
-  const months = [];
-  for (let d = parse(s.first.slice(0, 8) + '01'); iso(d) <= s.last; d.setMonth(d.getMonth() + 1)) months.push(new Date(d));
-  let out = '';
-  months.forEach((m, i) => {
-    const ox = (i % 4) * colW, oy = Math.floor(i / 4) * rowH;
-    out += `<text x="${ox}" y="${oy + 11}" font-size="11" font-weight="600" fill="var(--muted)">${m.getFullYear() % 100}/${m.getMonth() + 1}</text>`;
-    const days = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(), lead = m.getDay();
-    for (let dd = 1; dd <= days; dd++) {
-      const day = iso(new Date(m.getFullYear(), m.getMonth(), dd));
-      const p = lead + dd - 1, x = ox + (p % 7) * (cell + gap), y = oy + head + Math.floor(p / 7) * (cell + gap);
-      const outside = day < s.first || day > s.last;
-      const km = s.days[keyOf(day)] || 0;
-      const o = km ? 0.25 + 0.75 * Math.min(1, Math.log10(km + 1) / Math.log10(max + 1)) : 1;
-      const inSel = !outside && day >= F.from && day <= F.to;
-      out += `<rect ${outside ? '' : `data-d="${day}"`} x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2.5" fill="${km ? 'var(--track)' : 'var(--surface-2)'}" fill-opacity="${outside ? 0.35 : o.toFixed(2)}" ${inSel ? 'stroke="var(--fg)" stroke-width="1.3"' : ''}><title>${slash(day)} · ${km ? km.toFixed(1) + ' km' : '沒有紀錄'}</title></rect>`;
-    }
+  if (!F.summary) return;
+  const host = $('#cal'), oldLeft = host.scrollLeft, first = F.summary.first, last = F.summary.last;
+  const days = []; for (let d = first; d <= last; d = addDays(d, 1)) days.push(d);
+  const step = 8, top = 27, baseline = 112, max = Math.max(1, ...Object.values(F.summary.days));
+  let out = `<line x1="0" y1="${baseline}" x2="${days.length * step}" y2="${baseline}" stroke="var(--line)"/>`;
+  days.forEach((day, i) => {
+    const km = F.summary.days[keyOf(day)] || 0, strength = Math.min(1, Math.log1p(km) / Math.log1p(max));
+    const height = km ? Math.max(3, strength * 76) : 2, selected = day >= F.from && day <= F.to;
+    const color = km ? `hsl(${18 + strength * 30} 95% ${43 + strength * 18}%)` : 'var(--muted)';
+    if (day.endsWith('-01') || i === 0) out += `<text x="${i * step}" y="13" fill="var(--muted)" font-size="10">${day.slice(0, 7).replace('-', '/')}</text>`;
+    out += `<rect tabindex="0" role="button" aria-label="${day} ${km.toFixed(1)} 公里" data-d="${day}" data-km="${km.toFixed(1)}" x="${i * step + 1}" y="${baseline - height}" width="5" height="${height}" rx="2" fill="${color}" opacity="${selected ? 1 : .28}" ${selected ? 'stroke="var(--fg)" stroke-width=".4"' : ''}/>`;
   });
-  const wpx = 4 * colW, hpx = Math.ceil(months.length / 4) * rowH;
-  $('#cal').innerHTML = `<svg width="${wpx}" height="${hpx}" viewBox="0 0 ${wpx} ${hpx}" role="img" aria-label="每日里程月曆">${out}</svg>`;
+  host.innerHTML = `<svg width="${days.length * step}" height="125" viewBox="0 0 ${days.length * step} 125" aria-label="每日里程長條圖">${out}</svg>`;
+  host.scrollLeft = oldLeft;
+  if (!host.dataset.ready) { host.scrollLeft = host.scrollWidth; host.dataset.ready = '1'; }
 }
 
 /* ---------- 互動 ---------- */
 $('#cal').onclick = (e) => {
   const d = e.target.closest('rect')?.dataset.d;
   if (!d) return;
+  rangeMode = 'custom';
   if (e.shiftKey && F.anchor) setRange(F.anchor, d);
   else { F.anchor = d; setRange(d, d); }
 };
 $('#presets').onclick = (e) => {
   const p = e.target.closest('button')?.dataset.p;
   if (!p) return;
+  if (!F.summary) return;
+  rangeMode = p;
+  if (p === 'custom') { syncChips(); return; }
   const { first, last } = F.summary;
   setRange(p === 'all' ? first : addDays(last, 1 - +p), last);
 };
 $('#months').onclick = (e) => {
   const m = e.target.closest('button')?.dataset.m;
   if (!m) return;
+  rangeMode = 'custom';
   const [y, mo] = m.split('-').map(Number);
   setRange(iso(new Date(y, mo - 1, 1)), iso(new Date(y, mo, 0)));
 };
-$('#from').onchange = () => setRange($('#from').value, F.to);
-$('#to').onchange = () => setRange(F.from, $('#to').value);
+$('#from').onchange = () => { rangeMode = 'custom'; setRange($('#from').value, F.to); };
+$('#to').onchange = () => { rangeMode = 'custom'; setRange(F.from, $('#to').value); };
 $('#buckets').onclick = (e) => {
   const b = e.target.closest('button')?.dataset.b;
   if (!b) return;
@@ -305,7 +306,7 @@ $('#optFog').onchange = () => { syncLayers(); draw(); };
 $('#play').onclick = async () => {
   if (F.playing) { F.playing = false; return; }
   F.playing = true;
-  $('#play').textContent = '停止播放';
+  $('#play').textContent = '■ 停止播放';
   const { first } = F.summary;
   const months = $$('#months button').map((b) => b.dataset.m);
   map.fitBounds(TAIWAN, { padding: sidePad(), duration: 800 });
@@ -320,7 +321,8 @@ $('#play').onclick = async () => {
     await new Promise((ok) => setTimeout(ok, 1100));
   }
   F.playing = false;
-  $('#play').textContent = '逐月播放：看足跡一個月一個月長出來';
+  rangeMode = 'custom';
+  $('#play').textContent = '▶ 逐月播放';
   syncChips();
   schedule(false);
 };
@@ -380,3 +382,26 @@ refreshStart();
 swr('/api/footprint/summary', { key: uid, onData: applySummary })
   .catch((e) => { $('#overall').textContent = '讀取失敗：' + e.message; })
   .finally(refreshEnd);
+
+// 網址分頁與手機抽屜。
+function setTab(next, writeUrl = true) {
+  if (!TABS.has(next)) return;
+  tab = next;
+  if (writeUrl) { const u = new URL(location.href); if (next === 'footprint') u.searchParams.delete('tab'); else u.searchParams.set('tab', next); history.pushState(null, '', u); }
+  $$('#tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === tab); b.setAttribute('aria-selected', b.dataset.t === tab); });
+  $$('.body').forEach((b) => { b.hidden = b.dataset.b !== tab; });
+  records.applyTab(); syncLayers(); draw();
+  if (innerWidth <= 760) { $('#side').classList.remove('small'); $('#handle').setAttribute('aria-expanded', 'true'); }
+  map.resize();
+}
+$('#tabs').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b) setTab(b.dataset.t); };
+addEventListener('popstate', () => setTab(new URLSearchParams(location.search).get('tab') || 'footprint', false));
+setTab(tab, false);
+$('#handle').onclick = () => { const small = $('#side').classList.toggle('small'); $('#handle').setAttribute('aria-expanded', String(!small)); map.resize(); };
+let startY = null;
+$('#handle').addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
+$('#handle').addEventListener('touchend', (e) => { if (startY === null) return; const dy = e.changedTouches[0].clientY - startY; if (Math.abs(dy) > 25) { $('#side').classList.toggle('small', dy > 0); $('#handle').setAttribute('aria-expanded', String(dy < 0)); map.resize(); } startY = null; });
+const tip = $('#dayTip');
+$('#cal').addEventListener('pointermove', (e) => { const r = e.target.closest('rect[data-d]'); if (!r || e.pointerType === 'touch') { tip.hidden = true; return; } tip.textContent = `${r.dataset.d} · ${r.dataset.km} km`; tip.style.left = `${Math.min(innerWidth - 140, e.clientX + 10)}px`; tip.style.top = `${e.clientY - 35}px`; tip.hidden = false; });
+$('#cal').addEventListener('pointerleave', () => { tip.hidden = true; });
+$('#cal').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { const r = e.target.closest('rect[data-d]'); if (r) { e.preventDefault(); r.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: e.shiftKey })); } } });
