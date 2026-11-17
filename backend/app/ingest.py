@@ -93,10 +93,9 @@ async def ingest(uid: str, fix: Fix) -> dict:
                 p.hincrbyfloat(K.daykm(uid), day, round(dist_m / 1000, 4))
             else:
                 p.hincrbyfloat(K.daykm(uid), day, 0)
-        if live:
+        if live and fresh:
             p.xadd(K.track(tid, uid), fields)
             p.geoadd(K.geo(tid), [fix.lon, fix.lat, uid])
-            p.hset(K.state(tid, uid), mapping={**fields, "status": "ok", "seen": now})
             if fix.speed is not None:
                 p.execute_command("TS.ADD", K.ts_speed(tid, uid), ts, round(fix.speed * 3.6, 2),
                                   "RETENTION", TS_RETENTION_MS, "ON_DUPLICATE", "LAST",
@@ -105,14 +104,16 @@ async def ingest(uid: str, fix: Fix) -> dict:
                 p.execute_command("TS.ADD", K.ts_alt(tid, uid), ts, round(fix.alt, 1),
                                   "RETENTION", TS_RETENTION_MS, "ON_DUPLICATE", "LAST",
                                   "LABELS", "trip", tid, "uid", uid, "kind", "alt")
-            p.set(K.hb(tid, uid), now, ex=HEARTBEAT_S)
             p.publish(K.live(tid), json.dumps({"kind": "pos", "uid": uid, **{k: _num(v) if k != "src" else v for k, v in fields.items()}}))
             p.execute_command("TS.INCRBY", "ts:sys:pubsub", 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000,
                               "LABELS", "metric", "sys", "kind", "pubsub")
+        if live:
+            p.hset(K.state(tid, uid), mapping={**(fields if fresh else {}), "status": "ok", "seen": now})
+            p.set(K.hb(tid, uid), now, ex=HEARTBEAT_S)
         p.zadd("online:report", {uid: now})  # 後台「線上人數」：最近 2 分鐘有回報位置的人（ZCOUNT）
         # 交給 worker：行程中的回報（警示、統計），以及所有新的足跡點（熱力圖、點亮鄉鎮）
-        if live or fresh:
-            p.xadd(K.ingest, {"trip": tid if live else "", "uid": uid, "fp": 1 if fresh else 0, **fields},
+        if fresh:
+            p.xadd(K.ingest, {"trip": tid if live else "", "uid": uid, "fp": 1, **fields},
                    maxlen=100_000, approximate=True)
         p.execute_command("TS.INCRBY", K.ts_writes, 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000)
         results = await p.execute(raise_on_error=False)
@@ -121,7 +122,7 @@ async def ingest(uid: str, fix: Fix) -> dict:
     if live and prev_status == "lost":
         await events.emit(tid, "back", uid, "恢復連線", ts=ts)
         await events.publish(tid, {"kind": "status", "uid": uid, "status": "ok"})
-    return {"ok": True, "trip": tid if live else None, "footprint": fresh, "errors": errors[:3]}
+    return {"ok": True, "trip": tid if live else None, "footprint": fresh, "errors": errors[:3], "stale": not fresh}
 
 
 @router.post("/api/track")
