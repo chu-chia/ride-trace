@@ -42,6 +42,7 @@
   .fp .nums span{font-size:12px;color:#b9b9c0}
   .fp .art{position:relative}
   .fp canvas{position:absolute;inset:0;width:100%;height:100%}
+  .fp .preview{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
   .fp .go{position:absolute;right:14px;bottom:14px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.14);font-size:20px}
   /* 進行中的行程：放在最前面，一鍵回地圖 */
   .live{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:18px;background:var(--surface);color:inherit;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--ok) 55%,transparent)}
@@ -82,7 +83,7 @@
       <div><div class="eyebrow">我的足跡</div><b id="fpTitle">去過的每一條路</b></div>
       <div class="nums" id="fpNums"></div>
     </div>
-    <div class="art"><canvas id="fpCanvas" aria-hidden="true"></canvas><span class="go" aria-hidden="true">›</span></div>
+    <div class="art"><img class="preview" id="fpPreview" alt="" hidden><canvas id="fpCanvas" aria-hidden="true"></canvas><span class="go" aria-hidden="true">›</span></div>
   </a>
   <a class="melink" href="/me">點亮鄉鎮 · 熱力圖 · 統計<span aria-hidden="true">›</span></a>
 
@@ -113,6 +114,7 @@
 import { api, $, esc, avatar, clock } from '/assets/common.js';
 api('/api/admin/whoami').then((w) => { if (w.admin) $('#adminLink').hidden = false; }).catch(() => {});
 import { drawFootprint } from '/assets/footmini.js';
+import { swr, clearSwrCache } from '/assets/swr.js';
 import { startBg } from '/assets/homebg.js';
 startBg($('#bg'));
 const ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
@@ -124,7 +126,12 @@ $('#hello').textContent = `${d.getHours() < 11 ? '早安' : d.getHours() < 18 ? 
 $('#me').innerHTML = avatar(me);
 $('#meName').textContent = me.nickname;
 $('#meUser').textContent = '@' + me.username;
-$('#logout').onclick = async () => { await api('/api/logout', { method: 'POST' }); location.href = '/login'; };
+$('#logout').onclick = async () => {
+  await api('/api/logout', { method: 'POST' });
+  await clearSwrCache();
+  try { localStorage.removeItem(`qiji-footprint-preview:${me.uid}`); } catch { /* 儲存空間不可用 */ }
+  location.href = '/login';
+};
 // 點選單外面或按 Esc 就收起來
 document.addEventListener('click', (e) => { if (!$('#menu').contains(e.target)) $('#menu').open = false; });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#menu').open = false; });
@@ -159,23 +166,45 @@ const pending = new URLSearchParams(location.search).get('join');
 if (pending) join(pending.toUpperCase());
 loadTrips();
 
-// 足跡卡片：數字先出來，縮圖資料比較大（約 5 萬格）隨後畫上
-api('/api/footprint/summary').then((s) => {
-  if (!s.points) {
+// 先放上次的畫布快照，再以快取格子和最新格子依序重畫。
+const previewKey = `qiji-footprint-preview:${me.uid}`;
+try {
+  const image = localStorage.getItem(previewKey);
+  if (image) { $('#fpPreview').src = image; $('#fpPreview').hidden = false; }
+} catch { /* 儲存空間不可用 */ }
+let fpSummary = null, fpCells = null;
+function renderFpNums() {
+  if (fpSummary && !fpSummary.points) {
     $('#fpTitle').textContent = '還沒有足跡';
     $('#fpNums').innerHTML = '<div><span>開始一趟行程，或匯入 GPX，地圖就會一格一格亮起來</span></div>';
+    $('#fpPreview').hidden = true;
+    $('#fpCanvas').getContext('2d').clearRect(0, 0, $('#fpCanvas').width, $('#fpCanvas').height);
+    try { localStorage.removeItem(previewKey); } catch { /* 儲存空間不可用 */ }
     return;
   }
-  const n = Object.keys(s.days).length;
-  const km = Object.values(s.days).reduce((a, b) => a + b, 0);
-  $('#fpNums').innerHTML = `<div><strong class="num">${n.toLocaleString()}</strong><span>天有紀錄</span></div><div><strong class="num">${Math.round(km).toLocaleString()} km</strong><span>總里程</span></div>`;
-  return api('/api/footprint/cells/all').then((c) => {
-    const draw = () => drawFootprint($('#fpCanvas'), c.cells, c.cell_deg);
-    draw();
-    addEventListener('resize', draw);
-    $('#fpNums').insertAdjacentHTML('beforeend', `<div><strong class="num">${c.count.toLocaleString()}</strong><span>個點亮的格子</span></div>`);
-  });
-}).catch(() => {});
+  const n = fpSummary ? Object.keys(fpSummary.days).length : null;
+  const km = fpSummary ? Object.values(fpSummary.days).reduce((a, b) => a + b, 0) : null;
+  $('#fpNums').innerHTML = `${n == null ? '' : `<div><strong class="num">${n.toLocaleString()}</strong><span>天有紀錄</span></div><div><strong class="num">${Math.round(km).toLocaleString()} km</strong><span>總里程</span></div>`}${fpCells ? `<div><strong class="num">${fpCells.count.toLocaleString()}</strong><span>個點亮的格子</span></div>` : ''}`;
+}
+function paintFp() {
+  if (!fpCells?.cells?.length) {
+    $('#fpPreview').hidden = true;
+    try { localStorage.removeItem(previewKey); } catch { /* 儲存空間不可用 */ }
+    return;
+  }
+  drawFootprint($('#fpCanvas'), fpCells.cells, fpCells.cell_deg);
+  $('#fpPreview').hidden = true;
+  try { localStorage.setItem(previewKey, $('#fpCanvas').toDataURL('image/png')); } catch { /* 配額或私密模式 */ }
+}
+addEventListener('resize', paintFp);
+swr('/api/footprint/cells/all', { key: me.uid, onData: (data, meta) => {
+  if (meta.unchanged) return;
+  fpCells = data; renderFpNums(); paintFp();
+} }).catch(() => {});
+swr('/api/footprint/summary', { key: me.uid, onData: (data, meta) => {
+  if (meta.unchanged) return;
+  fpSummary = data; renderFpNums();
+} }).catch(() => {});
 </script>
 </body>
 </html>

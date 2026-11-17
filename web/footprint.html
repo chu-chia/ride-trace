@@ -20,6 +20,7 @@
   .side .scroll>*{flex-shrink:0}
   .side h1{margin:0;font-size:22px;display:flex;align-items:center;gap:10px}
   .side h1 a{font-size:20px;color:var(--fg)}
+  .refreshing{font-size:11px;font-weight:400;color:var(--muted);white-space:nowrap}
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
   .stats div{display:flex;flex-direction:column;min-width:0}
   .stats b{font-size:19px;font-weight:700;line-height:1.15}
@@ -57,7 +58,7 @@
 
 <aside class="side glass" id="side">
   <div class="scroll">
-    <h1><a href="/" aria-label="回首頁">‹</a>我的足跡</h1>
+    <h1><a href="/" aria-label="回首頁">‹</a>我的足跡 <span class="refreshing" id="refreshing" hidden>更新中…</span></h1>
     <div class="small muted" id="overall">讀取中…</div>
 
     <div>

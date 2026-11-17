@@ -1,6 +1,7 @@
 // 全年足跡：深藍底圖上用黃色畫出騎過的每一條路（可切換日期範圍與一天中的時段）。
 // 「迷霧模式」是選配：地圖蓋一層霧，去過的格子把霧擦掉。
 import { api, $, $$ } from '/assets/common.js';
+import { swr } from '/assets/swr.js';
 import { createMap } from '/assets/mapbase.js';
 
 const TAIWAN = [[119.3, 21.85], [122.1, 25.35]];
@@ -10,6 +11,7 @@ const WEEK = '日一二三四五六';
 
 const M = createMap($('#map'), { style: 'navy', styles: ['navy', 'sat', 'light'], center: [120.95, 23.7], zoom: 7, interactive3d: false });
 const map = M.map;
+const uid = (await api('/api/me')).uid;
 map.keyboard.disableRotation();
 window.qijiMap = map; // 方便用 CDP 驗證鏡頭狀態（其他地圖頁也有）
 
@@ -126,6 +128,32 @@ $('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
 /* ---------- 讀資料 ---------- */
 let timer = null;
 function schedule(fit) { clearTimeout(timer); timer = setTimeout(() => load(fit), 180); }
+let refreshing = 0;
+function refreshStart() { refreshing++; $('#refreshing').hidden = false; }
+function refreshEnd() { refreshing = Math.max(0, refreshing - 1); $('#refreshing').hidden = refreshing === 0; }
+const allUrl = () => `/api/footprint/lines?from=${F.summary.first}&to=${F.summary.last}&buckets=${BUCKETS.join(',')}`;
+
+function applyLines(lines, id, fit = false) {
+  if (id !== F.req) return;
+  F.lines = lines || EMPTY;
+  map.getSource('fp-lines')?.setData(F.lines);
+  if (isAll()) { F.allLines = lines; map.getSource('fp-all')?.setData(lines); }
+  syncLayers();
+  if (fit) fitSelection();
+}
+
+function applyCells(cells, id, fit = false) {
+  if (id !== F.req) return;
+  F.cellDeg = cells.cell_deg || F.cellDeg;
+  F.selFlat = cells.cells;
+  F.sel = toMerc(cells.cells);
+  $('#stArea').textContent = cells.area_km2.toLocaleString();
+  $('#stCells').textContent = cells.count.toLocaleString();
+  $('#stKm').textContent = Math.round(cells.km).toLocaleString();
+  $('#stDays').textContent = cells.days;
+  if (fit) fitSelection();
+  draw();
+}
 
 async function load(fit = false) {
   const id = ++F.req;
@@ -134,23 +162,17 @@ async function load(fit = false) {
   renderRange();
   try {
     const wantLines = $('#optLines').checked;
-    const [cells, lines] = await Promise.all([
-      api('/api/footprint/cells?' + q),
-      wantLines ? api('/api/footprint/lines?' + q) : Promise.resolve(null),
-    ]);
+    const full = isAll();
+    const cellsTask = api('/api/footprint/cells?' + q).then((cells) => applyCells(cells, id, fit));
+    const linesTask = wantLines ? (full
+      ? (refreshStart(), swr(allUrl(), { key: uid, onData: (lines, meta) => {
+        if (!meta.unchanged) applyLines(lines, id);
+      } }).finally(refreshEnd))
+      : api('/api/footprint/lines?' + q).then((lines) => applyLines(lines, id))) : Promise.resolve();
+    await Promise.all([cellsTask, linesTask]);
     if (id !== F.req) return;
-    F.selFlat = cells.cells;
-    F.sel = toMerc(cells.cells);
-    $('#stArea').textContent = cells.area_km2.toLocaleString();
-    $('#stCells').textContent = cells.count.toLocaleString();
-    $('#stKm').textContent = Math.round(cells.km).toLocaleString();
-    $('#stDays').textContent = cells.days;
-    F.lines = lines || EMPTY;
-    map.getSource('fp-lines')?.setData(F.lines);
-    if (isAll() && lines && !F.allLines) { F.allLines = lines; map.getSource('fp-all')?.setData(lines); }
     if (!F.allLines && !isAll() && $('#optAll').checked) loadAllLines();
     syncLayers();
-    if (fit) fitSelection();
     draw();
   } catch (e) {
     if (id === F.req) $('#rangeSub').textContent = '讀取失敗：' + e.message;
@@ -163,9 +185,13 @@ async function load(fit = false) {
 let allReq = null;
 function loadAllLines() {
   if (allReq || !F.summary) return;
-  allReq = api(`/api/footprint/lines?from=${F.summary.first}&to=${F.summary.last}&buckets=${BUCKETS.join(',')}`)
-    .then((l) => { F.allLines = l; map.getSource('fp-all')?.setData(l); syncLayers(); })
+  refreshStart();
+  allReq = swr(allUrl(), { key: uid, onData: (l, meta) => {
+    if (meta.unchanged) return;
+    F.allLines = l; map.getSource('fp-all')?.setData(l); syncLayers();
+  } })
     .catch(() => { allReq = null; });
+  allReq.finally(refreshEnd);
 }
 
 function sidePad() {
@@ -301,10 +327,32 @@ $('#play').onclick = async () => {
 
 /* ---------- 開始 ---------- */
 map.once('load', () => map.fitBounds(TAIWAN, { padding: sidePad(), duration: 0 }));
-const s = await api('/api/footprint/summary');
-if (!s.points) {
-  $('#overall').textContent = '還沒有足跡資料。用 tools/import_gpx 匯入 GPX，或開始一趟行程。';
-} else {
+let allCellsStarted = false;
+function loadAllCells() {
+  if (allCellsStarted) return;
+  allCellsStarted = true;
+  refreshStart();
+  swr('/api/footprint/cells/all', { key: uid, onData: (all, meta) => {
+    if (meta.unchanged) return;
+    F.cellDeg = all.cell_deg;
+    F.all = toMerc(all.cells);
+    if (isAll()) {
+      F.sel = F.all;
+      F.selFlat = all.cells;
+      $('#stCells').textContent = all.count.toLocaleString();
+      draw();
+    }
+  } }).catch((e) => { $('#rangeSub').textContent = '讀取失敗：' + e.message; }).finally(refreshEnd);
+}
+
+function applySummary(s, meta) {
+  if (meta.unchanged) return;
+  if (!s.points) {
+    $('#overall').textContent = '還沒有足跡資料。用 tools/import_gpx 匯入 GPX，或開始一趟行程。';
+    return;
+  }
+  const previous = F.summary;
+  const wasAll = previous && F.from === previous.first && F.to === previous.last && F.buckets.size === 4;
   F.cellDeg = s.cell_deg;
   F.summary = { ...s, first: tsDay(s.first_ts), last: tsDay(s.last_ts) };
   const totalKm = Object.values(s.days).reduce((a, b) => a + b, 0);
@@ -312,7 +360,23 @@ if (!s.points) {
   const months = [];
   for (let d = parse(F.summary.first.slice(0, 8) + '01'); iso(d) <= F.summary.last; d.setMonth(d.getMonth() + 1)) months.push(iso(d).slice(0, 7));
   $('#months').innerHTML = months.map((m) => `<button data-m="${m}">${m.replace('-', '/')}</button>`).join('');
-  const all = await api('/api/footprint/cells/all');
-  F.all = toMerc(all.cells);
-  setRange(F.summary.first, F.summary.last, false);
+  if (!previous) {
+    F.from = F.summary.first; F.to = F.summary.last;
+    $('#from').value = F.from; $('#to').value = F.to;
+    renderRange(); syncChips(); renderCalendar();
+    loadAllCells();
+    load(false);
+  } else {
+    if (wasAll) {
+      F.from = F.summary.first; F.to = F.summary.last;
+      $('#from').value = F.from; $('#to').value = F.to;
+      if (previous.first !== F.summary.first || previous.last !== F.summary.last) F.allLines = null;
+      if (!meta.stale) load(false);
+    }
+    renderRange(); syncChips(); renderCalendar();
+  }
 }
+refreshStart();
+swr('/api/footprint/summary', { key: uid, onData: applySummary })
+  .catch((e) => { $('#overall').textContent = '讀取失敗：' + e.message; })
+  .finally(refreshEnd);
