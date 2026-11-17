@@ -1,4 +1,4 @@
-import { api, $, $$, dock, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
 import { createMap, declutter } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -124,20 +124,32 @@ M.onStyle(() => {
 
 /* ---------- 鏡頭 ---------- */
 ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => { if (e.originalEvent) { S.lastInteract = Date.now(); M.unfollow(); } }));
-// 手機：底部面板預設收合，地圖才看得到；點分頁或把手再展開
-if (innerWidth <= 760) $('#panel').classList.add('small');
+// 面板收合狀態與螢幕尺寸分開記錄；瀏覽器限制儲存時仍可操作。
+const PANEL_KEY = 'qiji.trip.panel.collapsed';
+let collapsed = innerWidth <= 760;
+try { const saved = localStorage.getItem(PANEL_KEY); if (saved !== null) collapsed = saved === '1'; } catch { /* 私密模式可能停用儲存 */ }
+function setCollapsed(value) {
+  collapsed = value;
+  $('#panel').classList.toggle('small', value);
+  $('#collapseBtn').textContent = value ? '›' : '‹';
+  $('#collapseBtn').setAttribute('aria-label', value ? '展開面板' : '收合面板');
+  $('#collapseBtn').setAttribute('aria-expanded', String(!value));
+  $('#handle').setAttribute('aria-expanded', String(!value));
+  try { localStorage.setItem(PANEL_KEY, value ? '1' : '0'); } catch { /* 略過 */ }
+  refreshPad();
+}
+$('#panel').classList.toggle('small', collapsed);
 function panelPad() {
   const narrow = innerWidth <= 760;
-  if (!narrow) return { top: 90, bottom: 60, left: 60, right: 460 };
-  // 手機：底部要讓出面板＋工具列（集合點、訊息…）＋全隊進度的高度
-  const dock = document.querySelector('.qx-dock');
-  const top = Math.min($('#panel').getBoundingClientRect().top, dock ? dock.getBoundingClientRect().top : Infinity);
+  if (!narrow) return { top: 70, bottom: 90, left: $('#panel').classList.contains('small') ? 270 : 440, right: 70 };
+  const top = $('#panel').getBoundingClientRect().top;
   return { top: 80, bottom: Math.max(60, innerHeight - top + 16), left: 30, right: 64 };
 }
 S.pad = panelPad();
 const refreshPad = () => setTimeout(() => (S.pad = panelPad()), 350);
 S.refreshPad = refreshPad;
 addEventListener('resize', refreshPad);
+setCollapsed(collapsed);
 
 // 要跟著誰：選了某個人就跟他；「全隊」但地圖上只有一個人時，也跟著那個人
 function followTarget() {
@@ -212,13 +224,30 @@ $('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
 $('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 
 /* ---------- 面板 ---------- */
-$('#tabs').onclick = (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  $$('#tabs button').forEach((x) => x.classList.toggle('on', x === b));
-  $$('[data-b]').forEach((x) => (x.hidden = x.dataset.b !== b.dataset.t));
-  $('#panel').classList.remove('small');
-};
-$('#handle').onclick = () => { $('#panel').classList.toggle('small'); refreshPad(); };
+function selectTab(name) {
+  $$('#tabs button').forEach((x) => x.classList.toggle('on', x.dataset.t === name));
+  $$('.body[data-b]').forEach((x) => (x.hidden = x.dataset.b !== name));
+  setCollapsed(false);
+  dispatchEvent(new CustomEvent('qiji:tab', { detail: { tab: name, more: $('#moreNav button.on')?.dataset.moreTab } }));
+}
+function selectMore(name) {
+  $$('#moreNav button').forEach((x) => x.classList.toggle('on', x.dataset.moreTab === name));
+  $$('.moreSection').forEach((x) => (x.hidden = x.dataset.more !== name));
+  selectTab('more');
+}
+$('#tabs').onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) selectTab(b.dataset.t); };
+$('#moreNav').onclick = (e) => { const b = e.target.closest('[data-more-tab]'); if (b) selectMore(b.dataset.moreTab); };
+$('#collapseBtn').onclick = () => setCollapsed(!collapsed);
+let draggedHandle = false;
+$('#handle').onclick = () => { if (draggedHandle) { draggedHandle = false; return; } setCollapsed(!collapsed); };
+let startY = null;
+$('#handle').addEventListener('pointerdown', (e) => { startY = e.clientY; $('#handle').setPointerCapture(e.pointerId); });
+$('#handle').addEventListener('pointerup', (e) => {
+  if (startY == null) return;
+  const delta = e.clientY - startY; startY = null;
+  if (Math.abs(delta) > 36) { draggedHandle = true; setCollapsed(delta > 0); e.preventDefault(); setTimeout(() => { draggedHandle = false; }, 0); }
+});
+addEventListener('qiji:open-tab', (e) => { if (e.detail.more) selectMore(e.detail.more); else selectTab(e.detail.tab); });
 
 function renderHeader() {
   const t = S.trip;
@@ -233,7 +262,7 @@ function renderHeader() {
     b.hidden = false;
     b.innerHTML = t.is_owner
       ? '<div>行程還沒開始。等大家到齊後按開始，所有人的位置才會開始記錄。</div><button class="btn primary" id="startBtn">開始行程</button>'
-      : '<div>等待建立者開始行程。可以先到「回報」分頁設定位置來源。</div>';
+      : '<div>等待建立者開始行程。可以先到「更多 → 回報裝置」設定位置來源。</div>';
     $('#startBtn')?.addEventListener('click', async () => {
       try { S.trip = { ...S.trip, ...(await api(`/api/trips/${tid}/start`, { method: 'POST' })) }; renderAll(); }
       catch (e) { toast(e.message, { icon: '!', color: '#ff3b30' }); }
@@ -253,6 +282,8 @@ function renderTeam() {
   const me = S.members.get(S.me);
   $('#sSpeed').textContent = me?.state.speed != null && me.state.speed !== '' ? Math.round(+me.state.speed * 3.6) : '–';
   $('#sAlt').textContent = me?.state.alt != null && me.state.alt !== '' ? Math.round(+me.state.alt) : '–';
+  $('#cOnline').textContent = $('#sOnline').textContent;
+  $('#cSpeed').textContent = $('#sSpeed').textContent;
   $('#team').innerHTML = list.map((m) => {
     const st = statusOf(m), [label, cls] = STATUS[st], s = m.state;
     const isMe = m.u.uid === S.me;
@@ -442,11 +473,9 @@ $('#endBtn').onclick = async () => {
 };
 
 $('#bReplay').href = `/replay?id=${tid}`;
+$('#warLink').href = `/war?id=${tid}`;
 $('#trUrl').textContent = `${location.origin}/osmand`;
 api('/api/me/device').then((d) => ($('#trId').textContent = d.device_id)).catch(() => {});
 syncTools();
 press($('#b3d'), M.is3d);
 connect();
-
-// 寬螢幕：標題列（返回、行程名、回放）併進右側面板頂端；手機維持浮在左上
-dock($('.topbar'), $('.panel'), '(min-width: 761px)');

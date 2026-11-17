@@ -10,49 +10,19 @@ const X = { wps: [], pins: new Map(), open: null, pick: null };
 const KIND = { meet: '集合點', rest: '休息點' };
 const nameOf = (uid) => S.members.get(uid)?.u.nickname || '';
 
-/* ---------- 左下角工具列＋彈出面板 ---------- */
-const dock = document.createElement('div');
-dock.className = 'qx-dock';
-dock.innerHTML = `
-  <div class="qx-pop glass" id="qxPop" hidden></div>
-  <div class="qx-prog glass" id="qxProg" hidden></div>
-  <div class="qx-bar">
-    <button class="tool glass" data-open="route" title="路線與全隊進度">路線</button>
-    <button class="tool glass" data-open="wp" title="集合點與休息點">集合點</button>
-    <button class="tool glass" data-open="cam" title="測速照相查詢">測速</button>
-    <button class="tool glass" data-open="msg" title="快速訊息">訊息</button>
-    <button class="tool glass" data-open="mark" title="地圖標註">標註</button>
-    <a class="tool glass qx-war" href="/war?id=${tid}" target="_blank" rel="noopener" title="戰情室：用電腦大螢幕看全隊">戰情室</a>
-    <button class="qx-sos" id="qxSos" title="長按 1.5 秒發出 SOS"><i></i><span>SOS</span></button>
-  </div>`;
-document.body.append(dock);
-const pop = $('#qxPop');
-
-// 手機版面板在下面，工具列要跟著面板頂端
-function placeDock() {
-  const panel = $('#panel');
-  const narrow = innerWidth <= 760;
-  // 手機：放在面板上方，再多留地圖版權列（MapLibre attribution）的高度，按鈕列才不會壓在它上面
-  const attr = document.querySelector('.maplibregl-ctrl-bottom-right')?.getBoundingClientRect();
-  const extra = attr && attr.height ? attr.height + 6 : 0;
-  const bottom = narrow && panel ? `${Math.max(12, innerHeight - panel.getBoundingClientRect().top + 8 + extra)}px` : '';
-  if (bottom !== dock.style.bottom || dock.offsetHeight !== placeDock.h) {
-    dock.style.bottom = bottom;
-    placeDock.h = dock.offsetHeight;
-    S.refreshPad?.();  // 地圖鏡頭要讓出工具列的高度
-  }
-}
-setInterval(placeDock, 400);
-addEventListener('resize', placeDock);
-placeDock();
-
-dock.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-open]');
-  if (b) { X.open = X.open === b.dataset.open ? null : b.dataset.open; render(); }
+/* ---------- 面板分頁：保留原功能渲染與事件處理，將內容掛進對應容器 ---------- */
+const pop = document.createElement('div');
+pop.id = 'qxPop';
+pop.className = 'qx-pop';
+const targets = { route: '#routeContent', wp: '#wpContent', msg: '#msgContent', mark: '#markContent', cam: '#camContent' };
+addEventListener('qiji:tab', (e) => {
+  X.open = e.detail.tab === 'more' ? (e.detail.more === 'cam' ? 'cam' : null) : (targets[e.detail.tab] ? e.detail.tab : null);
+  render();
 });
+function openTab(tab) { dispatchEvent(new CustomEvent('qiji:open-tab', { detail: { tab } })); }
 
 function render() {
-  dock.querySelectorAll('[data-open]').forEach((b) => b.classList.toggle('on', b.dataset.open === X.open));
+  if (X.open) $(targets[X.open])?.append(pop);
   pop.hidden = !X.open;
   if (X.open === 'wp') renderWpPanel();
   if (X.open === 'cam') renderCamPanel();
@@ -96,7 +66,7 @@ function drawWps() {
     if (!p) {
       const el = document.createElement('div');
       el.className = 'qx-pin';
-      el.onclick = () => { X.open = 'wp'; render(); };
+      el.onclick = () => openTab('wp');
       p = { el, marker: new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([w.lon, w.lat]).addTo(map) };
       X.pins.set(w.id, p);
     }
@@ -253,7 +223,7 @@ function renderCamPanel() {
     $('#camForm [name=q]').value = ''; $('#camForm [name=city]').value = '';
     const c = map.getCenter(); run({ lon: c.lng.toFixed(5), lat: c.lat.toFixed(5), km: 10 });
   });
-  if (!camMeta) api('/api/speedcam/meta').then((m) => { camMeta = m; if (X.open === 'cam') $('.qx-head .small').textContent = `${m.source} · ${m.count} 個 · 更新 ${new Date(m.updated).toLocaleDateString('zh-TW')}`; }).catch(() => {});
+  if (!camMeta) api('/api/speedcam/meta').then((m) => { camMeta = m; if (X.open === 'cam') $('.qx-head .small', pop).textContent = `${m.source} · ${m.count} 個 · 更新 ${new Date(m.updated).toLocaleDateString('zh-TW')}`; }).catch(() => {});
 }
 pop.addEventListener('click', (e) => {
   const row = e.target.closest('[data-cam]');
@@ -266,7 +236,7 @@ pop.addEventListener('click', (e) => {
 // 快速訊息：一鍵警示，寫進行程事件（隊友會跳提醒）。聊天：一串對話，存在 trip:{id}:chat。
 const PRESETS = ['加油', '休息一下', '等我', '有狀況', '我先走'];
 const C = { items: [], more: false, loaded: false, unread: 0, draft: '' };
-const msgBtn = dock.querySelector('[data-open="msg"]');
+const msgBtn = $('#tabs [data-t="msg"]');
 function setUnread(n) {
   C.unread = n;
   msgBtn.dataset.badge = n ? (n > 99 ? '99+' : String(n)) : '';
@@ -340,7 +310,7 @@ addEventListener('qiji:msg', (e) => {
   if (X.open === 'msg') { renderChatList(m.uid === S.me); markRead(); return; }
   if (m.uid !== S.me) {
     setUnread(C.unread + 1);
-    toast(`${nameOf(m.uid) || '隊友'}：${m.text}`, { icon: '聊', sub: '點左下「訊息」回覆' });
+    toast(`${nameOf(m.uid) || '隊友'}：${m.text}`, { icon: '聊', sub: '打開面板「訊息」回覆' });
   }
 });
 loadChat().catch(() => {});  // 進頁面先拿未讀數
@@ -356,7 +326,7 @@ function drawMarks() {
     if (!p) {
       const el = document.createElement('div');
       el.className = 'qx-mark';
-      el.onclick = () => { X.open = 'mark'; render(); };
+      el.onclick = () => openTab('mark');
       p = { el, marker: new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([m.lon, m.lat]).addTo(map) };
       X.markPins.set(m.id, p);
     }
@@ -385,7 +355,7 @@ function renderMarkPanel() {
   $('#markAdd')?.addEventListener('click', () => startPick('mark'));
   $('#markHere')?.addEventListener('click', () => {
     const me = S.members.get(S.me);
-    if (!me?.pos) { toast('還沒有你的位置，先到「回報」分頁開始定位', { icon: '!', color: '#ff9f0a' }); return; }
+    if (!me?.pos) { toast('還沒有你的位置，先到「更多 → 回報裝置」開始定位', { icon: '!', color: '#ff9f0a' }); return; }
     X.pick = { mode: 'mark', lngLat: { lng: me.pos[0], lat: me.pos[1] } };
     render();
   });
@@ -467,10 +437,7 @@ setInterval(() => { if (X.sos.length) renderSos(); }, 5000); // 距離會變
 
 /* ---------- 路線（M4）：路線線條、全隊進度條、我的下一個轉彎 ---------- */
 X.route = null; X.prog = {}; // uid → { km, off }
-const turnCard = document.createElement('div');
-turnCard.className = 'qx-turn glass';
-turnCard.hidden = true;
-document.body.append(turnCard);
+const turnCard = $('#qxTurn');
 
 const routeGeo = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: X.route?.coords || [] } });
 M.onStyle(() => {
@@ -600,5 +567,5 @@ loadSos();
 loadRoute();
 window.qijiExtra = X; // 除錯用
 
-/* ---------- 推播通知（回報分頁） ---------- */
+/* ---------- 推播通知（更多 → 回報裝置） ---------- */
 mountPushCard(document.getElementById('pushCard'));
