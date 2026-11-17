@@ -125,6 +125,8 @@ for (const m of riders) {
 ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => {
   if (e.originalEvent && R.follow !== 'off') setFollow('off');
 }));
+// 滾輪縮放在 MapLibre 不一定帶 originalEvent，直接聽畫布的 wheel
+map.getCanvasContainer().addEventListener('wheel', () => { if (R.follow !== 'off') setFollow('off'); }, { passive: true });
 const pad = () => (innerWidth <= 860 ? { top: 80, bottom: innerHeight * 0.4 + 140, left: 30, right: 30 } : { top: 80, bottom: 150, left: 40, right: 420 });
 function fitAll(dur = 900) {
   const pts = riders.flatMap((m) => m.track.filter((_, i) => i % 10 === 0).map((p) => [p[2], p[1]]));
