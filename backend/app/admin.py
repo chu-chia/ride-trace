@@ -140,11 +140,22 @@ async def overview(uid: str = Depends(require_admin)):
         "trips": {"live": live, "total": seq},
         "series": {"writes": await series(K.ts_writes), "pubsub": await series("ts:sys:pubsub")},
         "groups": groups,
-        "data": {**metas, "TDX 路況": {"source": "未串接", "count": 0, "updated": 0},
-                 "天氣": {"source": "未串接", "count": 0, "updated": 0}},
+        "data": {**metas, "TDX 路況": await tdx_meta(), "天氣": {"source": "未串接", "count": 0, "updated": 0}},
         "valhalla": valhalla,
         "now": now,
     }
+
+
+async def tdx_meta() -> dict:
+    """TDX 省道即時事件：筆數、更新時間，以及本月呼叫次數（每月 3 點＝4,500 次）。"""
+    from . import traffic
+    if not traffic.enabled():
+        return {"source": "未串接（.env 沒有 TDX 金鑰）", "count": 0, "updated": 0}
+    m = await r.hgetall(traffic.META)
+    calls = int(await r.hget(traffic.USAGE, time.strftime("%Y-%m")) or 0)
+    return {"source": f"{m.get('source', 'TDX 省道即時事件')} · 本月呼叫 {calls} 次（約 {calls / 1500:.2f} 點）"
+                      + ("" if m else " · 有行程進行或打開規劃頁才會抓"),
+            "count": int(m.get("count", 0)), "updated": int(m.get("updated", 0))}
 
 
 @router.get("/keys")

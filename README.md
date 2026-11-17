@@ -34,7 +34,7 @@ uv run python -m app.worker        # 另開一個終端機跑 worker
 | `/login` | 帳號登入（登入頁背景是台灣經典路線巡航） |
 | `/` | 首頁：我的足跡、進行中的行程、開團／加入、我的行程 |
 | `/trip?id=` | 騎乘頁：即時地圖、隊友、事件、邀請 QR、回報設定與推播通知；左下集合點／測速／訊息（快速訊息＋聊天室）／標註／SOS／路線、全隊進度條、轉彎提示 |
-| `/plan?trip=` | 規劃路線：搜尋地點加停靠點、機車／重機／汽車、1～3 條方案、依你的速度估時間、沿路線找加油站等、Google Maps 匯入（選用） |
+| `/plan?trip=` | 規劃路線：搜尋地點加停靠點、機車／重機／汽車、1～3 條方案、依你的速度估時間、沿路線找加油站等與**沿途路況**（TDX）、Google Maps 匯入（選用） |
 | `/replay?id=` | 回放：全隊同步、時間軸＋事件、跟拍鏡頭、速度與海拔曲線、整趟摘要 |
 | `/war?id=` | 戰情室（電腦大螢幕）：3D 自動運鏡、隊員卡片牆、事件流、進度條＋海拔剖面 |
 | `/footprint` | 全年足跡地圖（迷霧、日期範圍、一天中的時段、逐月播放） |
@@ -81,6 +81,10 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 
 在網頁「行程 → 回報」分頁可以看到伺服器網址（`https://<你的網址>/osmand`）和每個帳號一組的裝置 ID。同時支援舊版 OsmAnd 協定（query string，速度單位是節）和新版 JSON 格式。原生 App 可以在背景回報，騎車時建議用它而不是網頁定位。
 
+## 前方路況（交通部 TDX）
+
+`.env` 填 `TDX_CLIENT_ID`、`TDX_CLIENT_SECRET`（tdx.transportdata.tw 會員中心 → 資料服務 → API 金鑰），`docker compose up -d api worker`。用的是「省道即時性道路事件」（施工、事故、管制、落石、活動）。來源偶爾經緯度寫反、或里程換算失敗被放在台1線 0K（臺北車站前），程式會校正或略過。後台「外部資料同步」看得到筆數與本月呼叫次數。
+
 ## 推播通知（Web Push）
 
 1. 產生金鑰貼進 `.env`：`cd backend && uv run --with cryptography python -m tools.gen_vapid`（`VAPID_PUBLIC_KEY`、`VAPID_PRIVATE_KEY`；`VAPID_SUBJECT` 填 `mailto:` 或 `https:`），再 `docker compose up -d api worker`。
@@ -97,7 +101,7 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 
 | 功能 | 用在哪 |
 |---|---|
-| GEO | `trip:{id}:geo` 即時位置，`GEOSEARCH` 算隊友距離；`trip:{id}:waypoints` 集合點、`trip:{id}:marks` 標註、`poi:speedcam` 測速、`poi:geo:{種類}` 加油站等 |
+| GEO | `trip:{id}:geo` 即時位置，`GEOSEARCH` 算隊友距離；`tdx:roadev:geo` 省道事件（前方路況、沿途路況）；`trip:{id}:waypoints` 集合點、`trip:{id}:marks` 標註、`poi:speedcam` 測速、`poi:geo:{種類}` 加油站等 |
 | Pub/Sub | `trip:{id}:live` 位置與事件即時推到 WebSocket（行程頁、戰情室） |
 | Streams | `track:{trip}:{uid}` 軌跡、`trip:{id}:events` 事件、`trip:{id}:chat` 聊天（`XREVRANGE` 往回翻頁）、`footprint:{uid}` 全年足跡（ID 就是時間戳，`XRANGE` 依時間查） |
 | Streams Consumer Group | 每筆回報 `XADD stream:ingest`；獨立 worker 容器 `XREADGROUP`：group `stats`（里程、極速、熱力圖、點亮鄉鎮）、group `alerts`（落隊、抵達、測速、路況、沿路線進度、偏離路線、異常久停）；要推播的事件另外 `XADD stream:notify`，group `push` 送 Web Push。處理完才 `XACK`，worker 當掉時 `XAUTOCLAIM` 接手閒置 60 秒的訊息；`docker compose up -d --scale worker=2` 自動分攤 |
@@ -129,12 +133,13 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 | Sorted Set | `heat:{uid}` 熱力圖格子計數（`ZINCRBY`，`ZREVRANGE` 就是最常去的地方）；`online:report` 線上人數（`ZCOUNT` 最近 2 分鐘） |
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時 `SUNION`；`user:{uid}:towns` 點亮的鄉鎮（`SADD` 回傳 1 = 第一次點亮）；`SDIFF` 算誰還沒到集合點 |
 | Hash 快取 | `celltown` 格子 → 鄉鎮（同一格不必每次都查空間索引）；`cache:` 查詢結果 TTL 快取 |
+| cache-aside＋TTL（外部 API） | 交通部 TDX 每月只有 3 點（4,500 次）：`cache:tdx:roadev` 120 秒過期才再抓全台省道事件，`SET lock:tdx:roadev NX EX 30` 只讓一個 worker 去抓（防 cache stampede），重建時寫暫存 key 再 `MULTI`＋`RENAME` 一次換上；`cache:tdx:token` 存 OAuth token；`tdx:usage` 記本月呼叫次數。沒有進行中的行程、沒人開規劃頁時完全不呼叫 |
 
 ## 階段
 
 - [x] **M1 核心**：帳號、開團／邀請碼／開始／結束、位置回報（網頁＋Traccar）、即時地圖（深色／衛星／淺色、3D 地形）、失聯偵測、GPX 匯入、模擬器、全年迷霧足跡
 - [x] **M2 回放**：全隊同步、時間軸＋倍速（1～300×）、事件標記可跳轉、跟拍鏡頭、依隊員／速度／海拔上色、海拔與速度曲線（TS.MRANGE）、整趟摘要
-- [x] **M3 警示與互動**：Worker（consumer group）、落隊、抵達與全員到齊、前方測速（RediSearch）、快速訊息、地圖標註與前方路況、SOS、異常久停；**Web Push 推播**（SOS、落隊、失聯、全員到齊、前方測速、偏離路線、訊息，鎖螢幕也收得到）、**文字聊天室**（未讀數、往回翻頁、回放看得到）
+- [x] **M3 警示與互動**：Worker（consumer group）、落隊、抵達與全員到齊、前方測速（RediSearch）、快速訊息、地圖標註與前方路況、SOS、異常久停；**Web Push 推播**（SOS、落隊、失聯、全員到齊、前方測速、偏離路線、訊息，鎖螢幕也收得到）、**文字聊天室**（未讀數、往回翻頁、回放看得到）、**前方路況**（交通部 TDX 省道即時事件：有路線時沿路線前方 5 km、沒路線時行進方向 3 km，全隊通知一次）
 - [x] **M4 導航**：規劃頁（地點搜尋、聰明插入停靠點、沿路線找）、Valhalla 路線（機車不走國道與快速道路／重機不走國道但國道3甲例外、可走快速道路／汽車）、1～3 條方案、依個人速度估時間、Google Maps 匯入（選用）、全隊進度條、轉彎提示、偏離路線、路線版落隊
 - [x] **M5 長期紀錄與大螢幕**：點亮全台鄉鎮（GEOSHAPE）、熱力圖、累計統計、戰情室、管理後台
 - [ ] **M6 繳交**：架構圖與 UML、部署說明、簡報大綱、影片腳本、繳交清單與 Redis 匯出工具已備好（`docs/`）；實際部署、簡報、錄影、上傳 GitHub 由使用者進行
@@ -142,5 +147,5 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 ## 沒有做的（規格有、但這次不做）
 
 - Telegram 推播（已有 Web Push，先不做）
-- TDX 即時路況、封路、天氣（需要申請 API 金鑰；後台已標示「未串接」）
+- 天氣（等中央氣象署授權碼）
 - Google 登入（使用者決定用帳號密碼）

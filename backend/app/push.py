@@ -57,6 +57,7 @@ RULES = {
     "behind":   {"who": "all",    "calm": 300, "urgent": False, "title": "落隊"},
     "stuck":    {"who": "others", "calm": 600, "urgent": False, "title": "異常久停"},
     "allin":    {"who": "all",    "calm": 0,   "urgent": False, "title": "全員到齊"},
+    "roadevent": {"who": "all",   "calm": 0,   "urgent": False, "title": "前方路況"},
     "speedcam": {"who": "self",   "calm": 0,   "urgent": False, "title": "前方測速"},
     "offroute": {"who": "self",   "calm": 300, "urgent": False, "title": "偏離路線"},
     "start":    {"who": "others", "calm": 0,   "urgent": False, "title": "行程開始"},

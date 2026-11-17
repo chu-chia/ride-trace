@@ -21,7 +21,7 @@ import time
 
 from redis.exceptions import ResponseError
 
-from . import events
+from . import events, traffic
 from .db import K, arrive, check_lag, r, update_stats
 from .longterm import record_point
 from .push import NOTIFY, handle_push
@@ -210,6 +210,59 @@ async def check_hazard(tid: str, uid: str, f: dict):
         return
 
 
+# ---------- 前方路況（TDX 省道即時事件） ----------
+ROADEV_AHEAD_KM = 5        # 有路線：沿路線前方 5 km 內
+ROADEV_NEAR_ROUTE_M = 300  # 事件離路線 300 m 內才算在路上
+ROADEV_SEARCH_M = 8000     # 先用 GEOSEARCH 撈 8 km 內的事件，再精算
+ROADEV_FREE_M = 3000       # 沒路線：行進方向扇形 3 km 內
+ROADEV_EVERY_MS = 10_000   # 每個人 10 秒判斷一次就夠
+ROADEV_TTL = 6 * 3600      # 同一行程同一事件 6 小時只通知一次
+EV_PROJ: dict[tuple, tuple] = {}  # (路線 ID, 事件 ID) → (沿路線 km, 離路線 m)
+
+
+async def check_roadevent(tid: str, uid: str, f: dict):
+    """快取過期才打 TDX（traffic.ensure_fresh），判斷都在 Redis：GEOSEARCH 找附近事件，
+    有路線就投影到路線上看是不是在前方 5 km 內，沒路線就看行進方向的扇形。"""
+    try:
+        lat, lon, sp = float(f["lat"]), float(f["lon"]), float(f.get("speed") or 0)
+        hd = float(f["heading"]) if f.get("heading") not in (None, "") else None
+    except (KeyError, ValueError):
+        return
+    if not traffic.enabled() or not await r.set(f"roadevchk:{tid}:{uid}", 1, nx=True, px=ROADEV_EVERY_MS):
+        return
+    if not await traffic.ensure_fresh():
+        return
+    rt = await load_route(tid)
+    found = None
+    if rt:
+        rid, coords, cum, _ = rt
+        my_km = float(await r.hget(K.progress(tid), uid) or 0)
+        for x, _ in await traffic.near(lon, lat, ROADEV_SEARCH_M):
+            key = (rid, x["id"])
+            if key not in EV_PROJ:
+                km, off, _ = project(coords, cum, x["lat"], x["lon"])
+                EV_PROJ[key] = (km, off)
+            km, off = EV_PROJ[key]
+            if off <= ROADEV_NEAR_ROUTE_M and 0 < km - my_km <= ROADEV_AHEAD_KM:
+                found = (x, km - my_km)
+                break
+    elif hd is not None and sp >= CAM_MIN_MS:
+        for x, dist in await traffic.near(lon, lat, ROADEV_FREE_M):
+            if angdiff(hd, bearing_deg(lat, lon, x["lat"], x["lon"])) <= 40:
+                found = (x, dist / 1000)
+                break
+    if not found:
+        return
+    x, km = found
+    if await r.set(f"roadevt:{tid}:{x['id']}", 1, nx=True, ex=ROADEV_TTL):
+        # 這是全隊共用的路況，事件不掛在某個人身上（推播也會推給全隊）；文字裡寫是誰前方多遠
+        nick = await r.hget(K.user(uid), "nickname") or ""
+        road = f"{x['road']} " if x["road"] else ""
+        text = f"前方路況｜{road}{x['title']}（{nick} 前方 {km:.1f} km）：{traffic.short(x)}"
+        await events.emit(tid, "roadevent", None, text, ts=int(f["ts"]), ev=x["id"], lon=x["lon"], lat=x["lat"],
+                          by=uid)
+
+
 # ---------- 沿路線進度 ----------
 ROUTES: dict[str, tuple] = {}     # tid → (rid, coords, cum_km, 載入時間)
 LAST_IDX: dict[tuple, int] = {}   # (tid, uid) → 上次投影到的線段（下次先在附近找）
@@ -329,6 +382,7 @@ async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
             await check_speedcam(f["trip"], f["uid"], f)
             await check_hazard(f["trip"], f["uid"], f)
             await check_stuck(f["trip"], f["uid"], f)
+            await check_roadevent(f["trip"], f["uid"], f)
     trips = dict.fromkeys(f["trip"] for _, f in msgs if f.get("trip"))
     for tid in trips:
         await check_trip_lag(tid)

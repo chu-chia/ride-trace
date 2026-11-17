@@ -4,10 +4,11 @@
 - /search    FT.SEARCH 中文全文，先找附近（GEO 條件），不夠再找全台，依重要度排序
 - /along     沿路線找某一類（加油站、便利商店…）：路線上每隔一段取一點，Pipeline 一次送出多個 GEOSEARCH
 """
+import json
 import re
 from difflib import SequenceMatcher
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from .auth import current_uid
@@ -111,6 +112,8 @@ class AlongIn(BaseModel):
 async def along(body: AlongIn, uid: str = Depends(current_uid)):
     """沿路線找：一次 Pipeline 送出每個取樣點的 GEOSEARCH，回傳依「沿路線里程」排序。
     SQL 要做「離這條線 800 m 內的加油站」通常得靠 PostGIS 的緩衝區運算。"""
+    if body.kind == "roadevent":
+        return await along_roadevents(body)
     if body.kind not in ALONG_KINDS:
         return []
     async with r.pipeline(transaction=False) as p:
@@ -133,4 +136,33 @@ async def along(body: AlongIn, uid: str = Depends(current_uid)):
             item["route_km"] = round(best[pid][0], 1)
             item["off_m"] = round(best[pid][1])
             out.append(item)
+    return out
+
+
+async def along_roadevents(body: AlongIn) -> list[dict]:
+    """沿途路況（規格 4.2 的沿途簡報）：TDX 省道即時事件。資料過期才去 TDX 抓（cache-aside），
+    然後跟加油站一樣，Pipeline 一次送出每個取樣點的 GEOSEARCH。"""
+    from . import traffic
+    if not await traffic.ensure_fresh():
+        raise HTTPException(503, "路況資料還沒設定（.env 的 TDX_CLIENT_ID／TDX_CLIENT_SECRET）")
+    async with r.pipeline(transaction=False) as p:
+        for lon, lat, _ in body.samples:
+            p.geosearch(traffic.GEO, longitude=lon, latitude=lat, radius=body.radius_m, unit="m", withdist=True,
+                        sort="ASC", count=5)
+        res = await p.execute()
+    best: dict[str, tuple[float, float]] = {}
+    for (lon, lat, km), hits in zip(body.samples, res):
+        for eid, dist in hits:
+            if eid not in best or float(dist) < best[eid][1]:
+                best[eid] = (km, float(dist))
+    ids = sorted(best, key=lambda i: best[i][0])[:40]
+    infos = await r.hmget(traffic.INFO, ids) if ids else []
+    out = []
+    for eid, raw in zip(ids, infos):
+        if not raw:
+            continue
+        x = json.loads(raw)
+        out.append({"id": eid, "name": f"{x['road']} {x['title']}".strip(), "area": traffic.short(x, 90),
+                    "lon": x["lon"], "lat": x["lat"], "route_km": round(best[eid][0], 1), "off_m": round(best[eid][1]),
+                    "type": x["type_name"]})
     return out
