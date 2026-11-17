@@ -96,7 +96,13 @@ async def replay(tid: str, uid: str = Depends(current_uid)):
             t0 = pts[0][0] if t0 is None else min(t0, pts[0][0])
             t1 = pts[-1][0] if t1 is None else max(t1, pts[-1][0])
     raw = await r.xrange(K.events(tid))
-    detail["events"] = [event_from_stream(i, f) for i, f in raw]
+    evs = [event_from_stream(i, f) for i, f in raw]
+    # 聊天另存一條 Stream（trip:{id}:chat），回放時併進事件時間軸
+    for i, f in await r.xrange(f"trip:{tid}:chat"):
+        evs.append({"kind": "event", "id": i, "type": "chat", "uid": f.get("uid", ""), "text": f.get("text", ""),
+                    "ts": int(f.get("ts") or i.split("-")[0])})
+    evs.sort(key=lambda e: e["ts"])
+    detail["events"] = evs
     detail["t0"], detail["t1"] = t0, t1
     return detail
 

@@ -13,7 +13,19 @@ async def emit(tid: str, etype: str, uid: str | None, text: str, ts: int | None 
     eid = await r.xadd(K.events(tid), {k: str(v) for k, v in fields.items()})
     msg = {"kind": "event", "id": eid, **fields}
     await publish(tid, msg)
+    await notify(tid, eid, etype, uid, text)
     return msg
+
+
+# 要推播的事件類型（推給誰、多久推一次在 push.RULES）
+NOTIFY_TYPES = {"sos", "lost", "behind", "stuck", "allin", "speedcam", "offroute", "start", "kick", "msg", "chat"}
+
+
+async def notify(tid: str, eid: str, etype: str, uid: str | None, text: str):
+    """交給 worker 的 consumer group「push」去推播（API 不等推播服務回應）。"""
+    if etype in NOTIFY_TYPES:
+        await r.xadd("stream:notify", {"trip": tid, "eid": eid, "type": etype, "uid": uid or "", "text": text},
+                     maxlen=5000, approximate=True)
 
 
 PUBSUB_TS = "ts:sys:pubsub"

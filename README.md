@@ -4,7 +4,7 @@
 
 接手的 agent 請先讀 `AGENTS.md`。架構圖與 UML 在 `docs/架構與UML.md`，部署在 `docs/部署.md`，繳交清單在 `docs/繳交清單.md`。
 
-目前進度：**M1～M5 完成**；M3 的 Telegram 推播先不做；M6 文件已備好，部署、簡報、影片待使用者處理（見下方「階段」）。
+目前進度：**M1～M5 完成**，另外補上 Web Push 推播與文字聊天室；M6 文件已備好，部署、簡報、影片待使用者處理（見下方「階段」）。
 
 ## 啟動
 
@@ -33,7 +33,7 @@ uv run python -m app.worker        # 另開一個終端機跑 worker
 |---|---|
 | `/login` | 帳號登入（登入頁背景是台灣經典路線巡航） |
 | `/` | 首頁：我的足跡、進行中的行程、開團／加入、我的行程 |
-| `/trip?id=` | 騎乘頁：即時地圖、隊友、事件、邀請 QR、回報設定；左下集合點／測速／訊息／標註／SOS／路線、全隊進度條、轉彎提示 |
+| `/trip?id=` | 騎乘頁：即時地圖、隊友、事件、邀請 QR、回報設定與推播通知；左下集合點／測速／訊息（快速訊息＋聊天室）／標註／SOS／路線、全隊進度條、轉彎提示 |
 | `/plan?trip=` | 規劃路線：搜尋地點加停靠點、機車／重機／汽車、1～3 條方案、依你的速度估時間、沿路線找加油站等、Google Maps 匯入（選用） |
 | `/replay?id=` | 回放：全隊同步、時間軸＋事件、跟拍鏡頭、速度與海拔曲線、整趟摘要 |
 | `/war?id=` | 戰情室（電腦大螢幕）：3D 自動運鏡、隊員卡片牆、事件流、進度條＋海拔剖面 |
@@ -81,6 +81,14 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 
 在網頁「行程 → 回報」分頁可以看到伺服器網址（`https://<你的網址>/osmand`）和每個帳號一組的裝置 ID。同時支援舊版 OsmAnd 協定（query string，速度單位是節）和新版 JSON 格式。原生 App 可以在背景回報，騎車時建議用它而不是網頁定位。
 
+## 推播通知（Web Push）
+
+1. 產生金鑰貼進 `.env`：`cd backend && uv run --with cryptography python -m tools.gen_vapid`（`VAPID_PUBLIC_KEY`、`VAPID_PRIVATE_KEY`；`VAPID_SUBJECT` 填 `mailto:` 或 `https:`），再 `docker compose up -d api worker`。
+2. 每台裝置在行程頁「回報」分頁按「開啟這台裝置的通知」。電腦用 `localhost` 或 HTTPS 都可以；手機一定要 HTTPS（見 `docs/部署.md`）。
+3. **iPhone**：要先用 Safari「分享 → 加入主畫面」，從主畫面打開騎跡再開通知（iOS 16.4 以上）。Android Chrome 直接開就好。
+
+推給誰：SOS、失聯、異常久停、快速訊息、聊天推給全隊（不含本人）；落隊、全員到齊推給全隊；前方測速、偏離路線只推給本人。聊天可以在同一張卡片關掉。推播內容由瀏覽器金鑰端對端加密，推播服務看不到，也不放座標。
+
 ## Redis 用到的功能
 
 > 每一項都寫了「為什麼用 Redis、SQL 為什麼不方便」的理由在程式註解裡。
@@ -91,8 +99,8 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 |---|---|
 | GEO | `trip:{id}:geo` 即時位置，`GEOSEARCH` 算隊友距離；`trip:{id}:waypoints` 集合點、`trip:{id}:marks` 標註、`poi:speedcam` 測速、`poi:geo:{種類}` 加油站等 |
 | Pub/Sub | `trip:{id}:live` 位置與事件即時推到 WebSocket（行程頁、戰情室） |
-| Streams | `track:{trip}:{uid}` 軌跡、`trip:{id}:events` 事件、`footprint:{uid}` 全年足跡（ID 就是時間戳，`XRANGE` 依時間查） |
-| Streams Consumer Group | 每筆回報 `XADD stream:ingest`；獨立 worker 容器 `XREADGROUP`：group `stats`（里程、極速、熱力圖、點亮鄉鎮）、group `alerts`（落隊、抵達、測速、路況、沿路線進度、偏離路線、異常久停）。處理完才 `XACK`，worker 當掉時 `XAUTOCLAIM` 接手閒置 60 秒的訊息；`docker compose up -d --scale worker=2` 自動分攤 |
+| Streams | `track:{trip}:{uid}` 軌跡、`trip:{id}:events` 事件、`trip:{id}:chat` 聊天（`XREVRANGE` 往回翻頁）、`footprint:{uid}` 全年足跡（ID 就是時間戳，`XRANGE` 依時間查） |
+| Streams Consumer Group | 每筆回報 `XADD stream:ingest`；獨立 worker 容器 `XREADGROUP`：group `stats`（里程、極速、熱力圖、點亮鄉鎮）、group `alerts`（落隊、抵達、測速、路況、沿路線進度、偏離路線、異常久停）；要推播的事件另外 `XADD stream:notify`，group `push` 送 Web Push。處理完才 `XACK`，worker 當掉時 `XAUTOCLAIM` 接手閒置 60 秒的訊息；`docker compose up -d --scale worker=2` 自動分攤 |
 | TTL＋Keyspace Notification | `hb:{trip}:{uid}` 心跳 90 秒過期 → 失聯警示；`session:` 登入、`invite:` 邀請碼 24 小時 |
 | Pipeline | 每筆 GPS 回報一次送出十幾個指令；匯入工具每 5,000 筆一批；沿路線找 POI 一次送出上百個 `GEOSEARCH` |
 | Transactions | 開始行程用 `WATCH`＋`MULTI/EXEC` 樂觀鎖 |
@@ -104,8 +112,9 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 | Lua：結束紀錄 | 移出 active、最後一人時把行程改成 ended，原子完成 |
 | Lua：冪等統計 | worker 更新里程時依 ts 去重，at-least-once 重送不會重算 |
 | Lua：落隊 | 有路線用「沿路線里程」中位數當中心（山路髮夾彎直線只差 400 m、沿路線落後 3 km 也抓得到），沒路線用座標中位數＋已騎里程；判斷＋改旗標在同一個 script，多個 worker 也只警示一次 |
+| Lua：聊天已讀 | `trip:{id}:chatread` 記每個人讀到的 Stream ID，比大小後只往前推；未讀數＝`XRANGE (已讀ID +` 數別人發的 |
 | Lua：抵達／全員到齊 | `SADD` 回傳 1 才通知抵達；`SDIFF active arrived` 為空＋`SET NX` 判斷全員到齊 |
-| `SET NX EX`／`NX PX` | 測速提醒去重（15 分鐘）、坑洞提醒去重、快速訊息限流（2 秒）、落隊判斷節流（每行程 2 秒一次） |
+| `SET NX EX`／`NX PX` | 測速提醒去重（15 分鐘）、坑洞提醒去重、快速訊息限流（2 秒）、聊天限流（1 秒）、落隊判斷節流（每行程 2 秒一次）、推播去重（`push:sent:{事件}:{收件人}`，worker 重送不會推兩次）、推播冷卻（落隊 5 分鐘只推一次） |
 | `HSETNX`／`HDEL` | 偏離路線／回到路線、異常久停／恢復移動，回傳值保證只通知一次 |
 
 ### 查詢與分析
@@ -116,7 +125,7 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 | RediSearch：地點搜尋 | `idx:poi`：本機 OSM 的 10.5 萬筆地名與 POI，中文斷詞＋前綴；`FT.SUGADD／FT.SUGGET`（含 FUZZY）打字自動完成 |
 | RediSearch：GEOSHAPE | `idx:townshape`：全台 368 個鄉鎮市區多邊形，`FT.SEARCH "@shape:[CONTAINS $pt]"` 查一個點在哪個鄉鎮 → 點亮鄉鎮（SQL 通常得裝 PostGIS） |
 | RedisJSON | `route:{id}` 整條路線（途經點、幾千個座標、累計里程、轉彎指示）；`JSON.GET … $.summary` 只取需要的部分 |
-| TimeSeries | `ts:{trip}:{uid}:speed／alt`（回放 `TS.MRANGE … FILTER trip=… AGGREGATION avg`）；`ts:pace:{uid}:{類別}:m／s` 個人在各種路的距離與時間（`TS.MRANGE … GROUPBY cat REDUCE sum`）；`ts:sys:writes`、`ts:sys:pubsub` 後台每秒寫入與訊息量 |
+| TimeSeries | `ts:{trip}:{uid}:speed／alt`（回放 `TS.MRANGE … FILTER trip=… AGGREGATION avg`）；`ts:pace:{uid}:{類別}:m／s` 個人在各種路的距離與時間（`TS.MRANGE … GROUPBY cat REDUCE sum`）；`ts:sys:writes`、`ts:sys:pubsub`、`ts:sys:push` 後台每秒寫入、訊息量、推播數 |
 | Sorted Set | `heat:{uid}` 熱力圖格子計數（`ZINCRBY`，`ZREVRANGE` 就是最常去的地方）；`online:report` 線上人數（`ZCOUNT` 最近 2 分鐘） |
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時 `SUNION`；`user:{uid}:towns` 點亮的鄉鎮（`SADD` 回傳 1 = 第一次點亮）；`SDIFF` 算誰還沒到集合點 |
 | Hash 快取 | `celltown` 格子 → 鄉鎮（同一格不必每次都查空間索引）；`cache:` 查詢結果 TTL 快取 |
@@ -125,13 +134,13 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 
 - [x] **M1 核心**：帳號、開團／邀請碼／開始／結束、位置回報（網頁＋Traccar）、即時地圖（深色／衛星／淺色、3D 地形）、失聯偵測、GPX 匯入、模擬器、全年迷霧足跡
 - [x] **M2 回放**：全隊同步、時間軸＋倍速（1～300×）、事件標記可跳轉、跟拍鏡頭、依隊員／速度／海拔上色、海拔與速度曲線（TS.MRANGE）、整趟摘要
-- [x] **M3 警示與互動**：Worker（consumer group）、落隊、抵達與全員到齊、前方測速（RediSearch）、快速訊息、地圖標註與前方路況、SOS、異常久停。**Telegram 推播先不做**（使用者決定）
+- [x] **M3 警示與互動**：Worker（consumer group）、落隊、抵達與全員到齊、前方測速（RediSearch）、快速訊息、地圖標註與前方路況、SOS、異常久停；**Web Push 推播**（SOS、落隊、失聯、全員到齊、前方測速、偏離路線、訊息，鎖螢幕也收得到）、**文字聊天室**（未讀數、往回翻頁、回放看得到）
 - [x] **M4 導航**：規劃頁（地點搜尋、聰明插入停靠點、沿路線找）、Valhalla 路線（機車不走國道與快速道路／重機不走國道但國道3甲例外、可走快速道路／汽車）、1～3 條方案、依個人速度估時間、Google Maps 匯入（選用）、全隊進度條、轉彎提示、偏離路線、路線版落隊
 - [x] **M5 長期紀錄與大螢幕**：點亮全台鄉鎮（GEOSHAPE）、熱力圖、累計統計、戰情室、管理後台
 - [ ] **M6 繳交**：架構圖與 UML、部署說明、簡報大綱、影片腳本、繳交清單與 Redis 匯出工具已備好（`docs/`）；實際部署、簡報、錄影、上傳 GitHub 由使用者進行
 
 ## 沒有做的（規格有、但這次不做）
 
-- Telegram／Web Push 推播（使用者決定先不做）
+- Telegram 推播（已有 Web Push，先不做）
 - TDX 即時路況、封路、天氣（需要申請 API 金鑰；後台已標示「未串接」）
-- 文字聊天室（目前用快速訊息＋自訂文字代替）、Google 登入（使用者決定用帳號密碼）
+- Google 登入（使用者決定用帳號密碼）

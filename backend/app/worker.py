@@ -24,6 +24,7 @@ from redis.exceptions import ResponseError
 from . import events
 from .db import K, arrive, check_lag, r, update_stats
 from .longterm import record_point
+from .push import NOTIFY, handle_push
 from .geo import bearing_deg
 
 log = logging.getLogger("qiji.worker")
@@ -34,10 +35,10 @@ BLOCK_MS = 2000  # 要小於 redis-py 8 預設的 socket_timeout（5 秒），�
 CLAIM_IDLE_MS = 60_000
 
 
-async def ensure_group(group: str):
+async def ensure_group(group: str, stream: str = K.ingest):
     try:
         # 從 $（現在之後）開始，不回頭處理建 group 之前的歷史訊息
-        await r.xgroup_create(K.ingest, group, id="$", mkstream=True)
+        await r.xgroup_create(stream, group, id="$", mkstream=True)
         log.info("建立 consumer group %s", group)
     except ResponseError as e:
         if "BUSYGROUP" not in str(e):
@@ -334,31 +335,32 @@ async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
     return [i for i, _ in msgs]
 
 
-HANDLERS = {"stats": handle_stats, "alerts": handle_alerts}
+# (stream, group) → handler。位置回報給統計、警示各一份；要推播的事件另走 stream:notify 給推播 group
+HANDLERS = {(K.ingest, "stats"): handle_stats, (K.ingest, "alerts"): handle_alerts, (NOTIFY, "push"): handle_push}
 
 
-async def run_group(group: str, handler):
-    await ensure_group(group)
+async def run_group(stream: str, group: str, handler):
+    await ensure_group(group, stream)
     claim_cursor = "0-0"
     while True:
         try:
             # 1. 先接手別人（或自己上次）卡住的訊息
-            res = await r.xautoclaim(K.ingest, group, CONSUMER, min_idle_time=CLAIM_IDLE_MS,
+            res = await r.xautoclaim(stream, group, CONSUMER, min_idle_time=CLAIM_IDLE_MS,
                                      start_id=claim_cursor, count=BATCH)
             claim_cursor, claimed = res[0], res[1]
             claimed = [(i, f) for i, f in claimed if f]  # 已被 MAXLEN 修剪掉的訊息 f 會是 None
             if claimed:
                 log.info("[%s] 接手 %d 筆閒置訊息", group, len(claimed))
-                await ack(group, await handler(claimed))
+                await ack(stream, group, await handler(claimed))
             # 2. 再讀新訊息（> 表示從沒派給任何 consumer 的）
-            resp = await r.xreadgroup(group, CONSUMER, {K.ingest: ">"}, count=BATCH, block=BLOCK_MS)
+            resp = await r.xreadgroup(group, CONSUMER, {stream: ">"}, count=BATCH, block=BLOCK_MS)
             for _, msgs in resp or []:
-                await ack(group, await handler(msgs))
+                await ack(stream, group, await handler(msgs))
         except asyncio.CancelledError:
             raise
         except ResponseError as e:
             if "NOGROUP" in str(e):  # stream 被刪掉重建
-                await ensure_group(group)
+                await ensure_group(group, stream)
                 continue
             log.exception("[%s] 處理失敗，3 秒後重試", group)
             await asyncio.sleep(3)
@@ -367,15 +369,15 @@ async def run_group(group: str, handler):
             await asyncio.sleep(3)
 
 
-async def ack(group: str, ids: list[str]):
+async def ack(stream: str, group: str, ids: list[str]):
     if ids:
-        await r.xack(K.ingest, group, *ids)
+        await r.xack(stream, group, *ids)
 
 
 async def main():
     await r.ping()
-    log.info("worker 啟動：consumer=%s groups=%s", CONSUMER, list(HANDLERS))
-    await asyncio.gather(*(run_group(g, h) for g, h in HANDLERS.items()))
+    log.info("worker 啟動：consumer=%s groups=%s", CONSUMER, [g for _, g in HANDLERS])
+    await asyncio.gather(*(run_group(s, g, h) for (s, g), h in HANDLERS.items()))
 
 
 if __name__ == "__main__":

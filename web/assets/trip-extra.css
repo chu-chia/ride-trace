@@ -83,3 +83,20 @@
 .qx-turn .d{font-size:17px;font-weight:700}
 .qx-turn .s{font-size:12.5px;color:var(--muted)}
 @media (max-width:760px){.qx-pop{width:calc(100vw - 88px)}}
+
+/* 聊天室（訊息面板下半部） */
+.qx-bar .tool{position:relative}
+.qx-bar .tool[data-badge]:not([data-badge=""])::after{content:attr(data-badge);position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--crit);color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px var(--surface)}
+.qc-head{margin-top:4px;padding-top:10px;border-top:1px solid var(--line)}
+.qc-list{display:flex;flex-direction:column;gap:8px;min-height:120px;max-height:min(34vh,300px);overflow-y:auto;padding:2px}
+.qc-empty{padding:10px 2px}
+.qc-more{align-self:center;border:0;background:var(--surface-2);color:var(--fg);font:inherit;font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer}
+.qc-msg{display:flex;flex-direction:column;align-items:flex-start;gap:2px;max-width:86%}
+.qc-msg.me{align-self:flex-end;align-items:flex-end}
+.qc-meta{font-size:11.5px;color:var(--muted)}
+.qc-meta b{color:var(--fg);font-weight:600}
+.qc-bubble{padding:7px 11px;border-radius:14px 14px 14px 4px;background:var(--surface-2);font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.qc-msg.me .qc-bubble{border-radius:14px 14px 4px 14px;background:var(--accent-fill);color:#fff}
+/* 回報分頁：推播通知 */
+.push-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13.5px}
+.push-row input{width:18px;height:18px;accent-color:var(--accent-fill)}

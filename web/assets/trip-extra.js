@@ -2,6 +2,7 @@
 // 和 trip.js 分開放，避免和畫面設計的改動互相衝突。trip.js 只提供三個掛鉤：
 //   window.qijiM（地圖包裝）、window.qijiState（頁面狀態）、window 的 'qiji:msg' 事件（每則 WebSocket 訊息）
 import { api, $, esc, toast, clock } from '/assets/common.js';
+import { mountPushCard } from '/assets/push.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 const M = window.qijiM, map = window.qijiMap, S = window.qijiState;
@@ -256,20 +257,88 @@ pop.addEventListener('click', (e) => {
   map.easeTo({ center: [+row.dataset.lon, +row.dataset.lat], zoom: 15.5, duration: 900 });
 });
 
-/* ---------- 快速訊息 ---------- */
+/* ---------- 快速訊息＋聊天室 ---------- */
+// 快速訊息：一鍵警示，寫進行程事件（隊友會跳提醒）。聊天：一串對話，存在 trip:{id}:chat。
 const PRESETS = ['加油', '休息一下', '等我', '有狀況', '我先走'];
+const C = { items: [], more: false, loaded: false, unread: 0, draft: '' };
+const msgBtn = dock.querySelector('[data-open="msg"]');
+function setUnread(n) {
+  C.unread = n;
+  msgBtn.dataset.badge = n ? (n > 99 ? '99+' : String(n)) : '';
+  msgBtn.title = n ? `訊息（${n} 則未讀）` : '快速訊息與聊天';
+}
 async function sendMsg(text) {
-  try { await api(`/api/trips/${tid}/messages`, { method: 'POST', body: { text } }); X.open = null; render(); }
+  try { await api(`/api/trips/${tid}/messages`, { method: 'POST', body: { text } }); toast(`已送出「${text}」`, { icon: '訊' }); }
   catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+}
+async function loadChat(before) {
+  const q = new URLSearchParams({ limit: 40 });
+  if (before) q.set('before', before);
+  const d = await api(`/api/trips/${tid}/chat?${q}`);
+  C.items = before ? [...d.items, ...C.items] : d.items;
+  C.more = d.more; C.loaded = true;
+  setUnread(d.unread);
+}
+async function markRead() {
+  const last = C.items[C.items.length - 1];
+  if (!last || !C.unread) return;
+  try { setUnread((await api(`/api/trips/${tid}/chat/read`, { method: 'POST', body: { id: last.id } })).unread); } catch { /* 略過 */ }
+}
+function chatRow(m) {
+  const mine = m.uid === S.me;
+  return `<div class="qc-msg${mine ? ' me' : ''}"><div class="qc-meta">${mine ? '' : `<b>${esc(nameOf(m.uid) || '隊友')}</b> `}<time>${clock(m.ts)}</time></div><div class="qc-bubble">${esc(m.text)}</div></div>`;
+}
+function renderChatList(stick = true) {
+  const box = $('#qcList');
+  if (!box) return;
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  box.innerHTML = (C.more ? '<button class="qc-more" id="qcMore">載入更早的訊息</button>' : '')
+    + (C.items.map(chatRow).join('') || '<div class="small muted qc-empty">還沒有人說話。休息時可以在這裡聊天，回放時也看得到。</div>');
+  if (stick || nearBottom) box.scrollTop = box.scrollHeight;
 }
 function renderMsgPanel() {
   pop.innerHTML = `
-    <div class="qx-head"><b>快速訊息</b><span class="small muted">全隊都會收到，也會記在回放裡</span></div>
+    <div class="qx-head"><b>快速訊息</b><span class="small muted">一鍵送出，隊友會跳出提醒</span></div>
     <div class="qx-presets">${PRESETS.map((t) => `<button class="btn" data-say="${esc(t)}">${esc(t)}</button>`).join('')}</div>
-    <form class="qx-inline" id="msgForm"><input class="input" name="t" maxlength="40" placeholder="自己打…" autocomplete="off"><button class="btn primary" style="flex:none">送出</button></form>`;
-  $('#msgForm').addEventListener('submit', (e) => { e.preventDefault(); const t = new FormData(e.target).get('t').trim(); if (t) sendMsg(t); });
+    <div class="qx-head qc-head"><b>聊天</b><span class="small muted">全隊都看得到，也會記在回放裡</span></div>
+    <div class="qc-list" id="qcList"><div class="small muted qc-empty">載入中…</div></div>
+    <form class="qx-inline" id="chatForm"><input class="input" id="chatInput" name="t" maxlength="200" placeholder="說點什麼…" autocomplete="off" enterkeyhint="send"><button class="btn primary" style="flex:none">送出</button></form>`;
+  const input = $('#chatInput');
+  input.value = C.draft;
+  input.addEventListener('input', () => { C.draft = input.value; });
+  $('#chatForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      await api(`/api/trips/${tid}/chat`, { method: 'POST', body: { text } });
+      input.value = C.draft = '';
+    } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  });
+  if (C.loaded) { renderChatList(); markRead(); }
+  loadChat().then(() => { renderChatList(); markRead(); }).catch(() => { $('#qcList').innerHTML = '<div class="small muted qc-empty">聊天紀錄載入失敗</div>'; });
 }
-pop.addEventListener('click', (e) => { const b = e.target.closest('[data-say]'); if (b) sendMsg(b.dataset.say); });
+pop.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-say]');
+  if (b) sendMsg(b.dataset.say);
+  if (e.target.closest('#qcMore')) {
+    const box = $('#qcList'), h = box.scrollHeight;
+    await loadChat(C.items[0]?.id);
+    renderChatList(false);
+    box.scrollTop = box.scrollHeight - h;  // 停在原本看的位置
+  }
+});
+addEventListener('qiji:msg', (e) => {
+  const m = e.detail;
+  if (m.kind !== 'chat' || C.items.some((x) => x.id === m.id)) return;
+  if (C.loaded) C.items.push(m);
+  if (X.open === 'msg') { renderChatList(m.uid === S.me); markRead(); return; }
+  if (m.uid !== S.me) {
+    setUnread(C.unread + 1);
+    toast(`${nameOf(m.uid) || '隊友'}：${m.text}`, { icon: '聊', sub: '點左下「訊息」回覆' });
+  }
+});
+loadChat().catch(() => {});  // 進頁面先拿未讀數
 
 /* ---------- 地圖標註 ---------- */
 const MARK = { pothole: ['坑洞', '坑'], rock: ['落石', '石'], food: ['美食', '食'], view: ['風景', '景'], other: ['其他', '註'] };
@@ -511,3 +580,6 @@ loadMarks();
 loadSos();
 loadRoute();
 window.qijiExtra = X; // 除錯用
+
+/* ---------- 推播通知（回報分頁） ---------- */
+mountPushCard(document.getElementById('pushCard'));

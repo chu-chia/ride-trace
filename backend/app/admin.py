@@ -103,11 +103,13 @@ async def overview(uid: str = Depends(require_admin)):
     live = [{"id": str(i + 1), "name": n, "riders": await r.scard(K.active(str(i + 1)))}
             for i, (st, n) in enumerate(trips) if st == "live"]
     groups = []
-    try:
-        for g in await r.xinfo_groups(K.ingest):
-            groups.append({"name": g["name"], "consumers": g["consumers"], "pending": g["pending"], "lag": g.get("lag")})
-    except Exception:  # noqa: BLE001
-        pass
+    for stream in (K.ingest, "stream:notify"):  # 位置回報（統計、警示）、推播
+        try:
+            for g in await r.xinfo_groups(stream):
+                groups.append({"name": f"{g['name']}（{stream}）", "consumers": g["consumers"], "pending": g["pending"],
+                               "lag": g.get("lag")})
+        except Exception:  # noqa: BLE001
+            pass
     metas = {}
     for name, key in (("測速照相", "meta:speedcam"), ("地點與 POI", "meta:poi"), ("鄉鎮界線", "meta:towns")):
         m = await r.hgetall(key)

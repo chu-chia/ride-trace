@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import admin, auth, footprint, ingest, interact, live, longterm, pace, poi, replay, routes, speedcam, system, trips, waypoints
+from . import admin, auth, chat, footprint, ingest, interact, live, longterm, pace, poi, push, replay, routes, speedcam, system, trips, waypoints
 from .db import r
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="騎跡 API", lifespan=lifespan)
-for mod in (auth, trips, replay, ingest, live, footprint, system, waypoints, speedcam, interact, routes, poi, pace, longterm, admin):
+for mod in (auth, trips, replay, ingest, live, footprint, system, waypoints, speedcam, interact, routes, poi, pace, longterm, admin, chat, push):
     app.include_router(mod.router)
 
 
@@ -44,6 +44,19 @@ def page(file: str):
 PAGES = {"/admin": "admin.html", "/war": "war.html", "/me": "me.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html"}
 for path, file in PAGES.items():
     app.add_api_route(path, page(file), include_in_schema=False)
+
+# Service Worker 要放在網站根目錄，scope 才能涵蓋所有頁面；manifest 給「加入主畫面」（iPhone 要這樣才收得到推播）
+@app.get("/sw.js", include_in_schema=False)
+async def service_worker():
+    return FileResponse(WEB_DIR / "sw.js", media_type="text/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+async def manifest():
+    return FileResponse(WEB_DIR / "manifest.webmanifest", media_type="application/manifest+json",
+                        headers={"Cache-Control": "no-cache"})
+
 
 class NoCacheStatic(StaticFiles):
     """前端檔案每次都向伺服器確認有沒有更新（用 ETag，沒改就回 304），改完重新整理就生效。"""
