@@ -22,7 +22,7 @@ window.qijiMap = map;
 const data = await api(`/api/trips/${tid}/replay`);
 const riders = data.members.filter((m) => m.track.length > 1);
 const t0 = data.t0, t1 = data.t1;
-const R = { t: t0, playing: false, rate: 60, follow: 'all', color: 'rider', sel: riders[0]?.uid, lastInteract: 0, bearing: null, zoomed: false };
+const R = { t: t0, playing: false, rate: 60, follow: 'all', followTarget: 'all', color: 'rider', sel: riders[0]?.uid, bearing: null, zoomed: false };
 
 $('#tName').textContent = data.name;
 document.title = `${data.name} · 回放`;
@@ -100,6 +100,7 @@ M.onStyle(() => {
   applyLayerState();
   $('#bStyle').textContent = M.styleName;
   R.styleReady = true;
+  $('#b3d').disabled = false;
 });
 function applyLayerState() {
   if (!map.getLayer('rp-seg')) return;
@@ -121,7 +122,9 @@ for (const m of riders) {
 }
 
 /* ---------- 鏡頭 ---------- */
-['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => { if (e.originalEvent) { R.lastInteract = Date.now(); M.unfollow(); } }));
+['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => {
+  if (e.originalEvent && R.follow !== 'off') setFollow('off');
+}));
 const pad = () => (innerWidth <= 860 ? { top: 80, bottom: innerHeight * 0.4 + 140, left: 30, right: 30 } : { top: 80, bottom: 150, left: 40, right: 420 });
 function fitAll(dur = 900) {
   const pts = riders.flatMap((m) => m.track.filter((_, i) => i % 10 === 0).map((p) => [p[2], p[1]]));
@@ -130,20 +133,26 @@ function fitAll(dur = 900) {
   if (cam) { R.easeUntil = performance.now() + dur + 50; map.easeTo({ ...cam, pitch: M.is3d ? 50 : 0, bearing: 0, duration: dur }); }
 }
 function setFollow(uid) {
+  if (uid !== 'off') R.followTarget = uid;
   R.follow = uid;
-  if (uid !== 'all') R.sel = uid;
+  if (uid !== 'all' && uid !== 'off') R.sel = uid;
   R.zoomed = false;
   R.bearing = null;
-  R.lastInteract = 0;
+  M.unfollow();
   $('#cam').value = uid;
-  if (uid === 'all') { M.unfollow(); fitAll(); }
+  press($('#bFollow'), uid !== 'off');
+  $('#bFollow').textContent = uid === 'off' ? '跟隨視角' : '跟隨中';
+  if (uid === 'all') fitAll();
   applyLayerState();
   renderRiders();
   renderSummary();
   drawCharts();
 }
-$('#cam').innerHTML = '<option value="all">鏡頭：全隊</option>' + riders.map((m) => `<option value="${m.uid}">跟拍：${esc(m.nickname)}</option>`).join('');
+$('#cam').innerHTML = '<option value="off">自由視角</option><option value="all">鏡頭：全隊</option>' + riders.map((m) => `<option value="${m.uid}">跟拍：${esc(m.nickname)}</option>`).join('');
+$('#cam').value = R.follow;
 $('#cam').onchange = (e) => setFollow(e.target.value);
+$('#bFollow').onclick = () => setFollow(R.follow === 'off' ? R.followTarget : 'off');
+press($('#bFollow'), true);
 
 /* ---------- 面板 ---------- */
 function renderRiders() {
@@ -166,10 +175,27 @@ function renderNow() {
   $('#now').innerHTML = [[st.kmh == null ? '–' : Math.round(st.kmh), 'km/h'], [st.alt == null ? '–' : Math.round(st.alt), 'm 海拔'], [st.km.toFixed(1), 'km 已騎']]
     .map(([a, b]) => `<div><b class="num">${a}</b><span>${b}</span></div>`).join('');
 }
+function renderTeam() {
+  const states = riders.map((m) => ({ m, st: stateAt(m, R.t) }));
+  const active = states.filter(({ st }) => !st.before);
+  const lead = active.length ? Math.max(...active.map(({ st }) => st.km)) : null;
+  $('#teamBrief').textContent = `${riders.length} 人 · ${active.length} 人已出發`;
+  if (!$('#teamStatus').open) return;
+  $('#teamRows').innerHTML = states.map(({ m, st }) => {
+    const started = !st.before;
+    const speed = started && st.kmh != null ? Math.round(st.kmh) : '–';
+    const alt = started && st.alt != null ? Math.round(st.alt) : '–';
+    const km = started ? st.km.toFixed(1) : '–';
+    const gap = started && lead != null ? Math.max(0, lead - st.km).toFixed(1) : '–';
+    return `<div class="team-row"><span class="team-name"><i style="background:${esc(m.color)}"></i><b>${esc(m.nickname)}</b></span><span class="num">${speed}<small>km/h</small></span><span class="num">${alt}<small>m 海拔</small></span><span class="num">${km}<small>km 已騎</small></span><span class="num">${gap}<small>km 距領先</small></span></div>`;
+  }).join('');
+}
+$('#teamStatus').addEventListener('toggle', renderTeam);
 
 const nameOf = (uid) => data.members.find((m) => m.uid === uid)?.nickname || '';
-const tickEvents = data.events.filter((e) => e.ts >= t0 && e.ts <= t1 && e.type !== 'create');
-$('#events').innerHTML = tickEvents.map((e) => `<div class="ev" data-t="${e.ts}"><time class="num">${clock(e.ts)}</time><i style="--c:${EV[e.type] || 'var(--muted)'}"></i><span>${e.uid ? `<b>${esc(nameOf(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`).join('') || '<div class="small muted">這趟沒有事件</div>';
+const riderColor = (uid) => data.members.find((m) => String(m.uid) === String(uid))?.color || 'var(--muted)';
+const tickEvents = data.events.filter((e) => e.ts >= t0 && e.ts <= t1 && !['create', 'town'].includes(e.type));
+$('#events').innerHTML = tickEvents.map((e) => `<div class="ev" data-t="${e.ts}"><time class="num">${clock(e.ts)}</time><i style="--c:${e.uid ? esc(riderColor(e.uid)) : 'var(--muted)'}"></i><span>${e.uid ? `<b>${esc(nameOf(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`).join('') || '<div class="small muted">這趟沒有事件</div>';
 $('#events').onclick = (e) => { const r = e.target.closest('[data-t]'); if (r) seek(+r.dataset.t - 5000); };
 $('#ticks').innerHTML = tickEvents.map((e) => `<button class="tick" style="left:${((e.ts - t0) / (t1 - t0)) * 100}%;--c:${EV[e.type] || 'var(--muted)'}" data-t="${e.ts}" title="${clock(e.ts)} ${esc(nameOf(e.uid))} ${esc(e.text)}"></button>`).join('');
 $('#ticks').onclick = (e) => { const b = e.target.closest('.tick'); if (b) seek(+b.dataset.t - 5000); };
@@ -238,8 +264,17 @@ $('#colorBy').onclick = (e) => {
   }
   applyLayerState();
 };
-$('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
-$('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
+$('#bStyle').onclick = () => {
+  R.styleReady = false;
+  $('#b3d').disabled = true;
+  $('#bStyle').textContent = M.nextStyle();
+};
+$('#b3d').onclick = () => {
+  M.unfollow();
+  R.easeUntil = performance.now() + 850;
+  M.set3d(!M.is3d);
+  press($('#b3d'), M.is3d);
+};
 press($('#b3d'), M.is3d);
 
 /* ---------- 主迴圈 ---------- */
@@ -258,6 +293,7 @@ function update(force) {
     $('#clock').textContent = clock(R.t);
     $('#elapsed').textContent = '+' + dur(R.t - t0);
     renderNow();
+    renderTeam();
     drawCharts();
   }
 }
@@ -270,7 +306,7 @@ function frame(now) {
     update(false);
   }
   // 跟拍：人在正中間、車頭朝上（方向平滑轉）、鏡頭高度平滑跟著地形
-  if (R.follow !== 'all' && R.styleReady && Date.now() - R.lastInteract > 8000) {
+  if (R.follow !== 'all' && R.follow !== 'off' && R.styleReady && now > (R.easeUntil || 0)) {
     const m = riders.find((x) => x.uid === R.follow);
     const st = stateAt(m, R.t);
     if (!R.zoomed) {
@@ -285,7 +321,7 @@ function frame(now) {
       }
       M.follow(st.pos, { padding: pad(), ...(R.bearing != null ? { bearing: R.bearing } : {}) });
     }
-  } else if (R.follow === 'all' && R.styleReady && Date.now() - R.lastInteract > 8000 && (R.playing || now - (R.seekAt || 0) < 1500)
+  } else if (R.follow === 'all' && R.styleReady && (R.playing || now - (R.seekAt || 0) < 1500)
              && now > (R.easeUntil || 0)) {
     // 全隊：每一格平滑地框住所有人（暫停時不動，保留整趟總覽或使用者自己調的視角）
     M.followGroup(riders.map((m) => stateAt(m, R.t).pos), { padding: pad(), maxZoom: 14.5 });

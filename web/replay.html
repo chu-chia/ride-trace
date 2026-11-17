@@ -25,6 +25,19 @@
   .sum div{display:flex;flex-direction:column;min-width:0}
   .sum b{font-size:19px;font-weight:700;line-height:1.15}
   .sum span{font-size:11px;color:var(--muted)}
+  .team-status{padding:0;overflow:hidden}
+  .team-status summary{cursor:pointer;display:flex;align-items:center;gap:8px;padding:14px 16px;list-style:none;min-width:0}
+  .team-status summary::-webkit-details-marker{display:none}
+  .team-status summary::after{content:'⌄';margin-left:auto;color:var(--muted);transition:transform .2s}
+  .team-status[open] summary::after{transform:rotate(180deg)}
+  .team-status summary b{font-size:13px;white-space:nowrap}
+  .team-status summary span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .team-rows{padding:0 12px 10px}
+  .team-row{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(4,minmax(0,1fr));gap:4px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:12px;text-align:right}
+  .team-row .team-name{display:flex;align-items:center;gap:5px;min-width:0;text-align:left}
+  .team-name i{width:9px;height:9px;border-radius:50%;flex:none}
+  .team-name b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .team-row small{display:block;font-size:9px;color:var(--muted);white-space:nowrap}
   .label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin-bottom:6px}
   canvas.chart{width:100%;height:130px;display:block;cursor:crosshair}
   .ev{display:grid;grid-template-columns:44px 9px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer}
@@ -62,9 +75,11 @@
     .legend{display:none}
     .maplibregl-ctrl-bottom-right{right:0;bottom:calc(40dvh + 78px)}
     /* 手機：鏡頭／上色方式搬進面板（replay.js），時間軸只剩一列，地圖多一點空間 */
-    .panel #camRow{flex-wrap:nowrap;gap:8px}
-    .panel #camRow .seg{min-width:0!important;flex:1.4}
+    .panel #camRow{flex-wrap:wrap;gap:8px}
+    .panel #camRow .seg{min-width:0!important;flex:1 0 100%}
+    .panel #camRow .seg button{min-width:0;padding:7px 4px}
     .panel #camRow #cam{flex:1;min-width:0;padding:9px 8px}
+    .panel #camRow #bFollow{height:36px;padding:9px 7px;white-space:nowrap}
   }
 </style>
 </head>
@@ -78,7 +93,7 @@
 
 <div class="tools">
   <button class="tool glass" id="bStyle">深色</button>
-  <button class="tool glass on" id="b3d" aria-pressed="true">3D</button>
+  <button class="tool glass on" id="b3d" aria-pressed="true" disabled>3D</button>
 </div>
 
 <div class="timeline glass">
@@ -90,6 +105,7 @@
   </div>
   <div class="tl-row" id="camRow">
     <select id="cam" aria-label="鏡頭"></select>
+    <button class="tool glass on" id="bFollow" aria-pressed="true">跟隨中</button>
     <div class="seg" id="colorBy" style="min-width:220px"><button class="on" data-c="rider">隊員色</button><button data-c="speed">速度</button><button data-c="alt">海拔</button></div>
     <div class="legend" id="legend" hidden></div>
   </div>
@@ -98,6 +114,10 @@
 <aside class="panel glass">
   <div class="scroll">
     <div class="riders" id="riders"></div>
+    <details class="card team-status" id="teamStatus">
+      <summary><b>全隊狀態</b><span id="teamBrief"></span></summary>
+      <div class="team-rows" id="teamRows" aria-label="全隊即時狀態"></div>
+    </details>
     <div class="card">
       <div class="label" id="sumTitle">整趟摘要</div>
       <div class="sum" id="sum"></div>
