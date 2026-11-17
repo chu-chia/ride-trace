@@ -2,6 +2,7 @@
 import json
 import time
 from datetime import datetime
+from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -134,11 +135,12 @@ async def osmand(request: Request):
     q = dict(request.query_params)
     body = {}
     if request.method == "POST":
+        raw = await request.body()
         try:
-            body = await request.json()
-        except Exception:
-            form = await request.form() if "form" in request.headers.get("content-type", "") else {}
-            q.update({k: str(v) for k, v in dict(form).items()})
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            # iOS Traccar Client 用 x-www-form-urlencoded 送，自己解析，不依賴 python-multipart
+            q.update(dict(parse_qsl(raw.decode("utf-8", "replace"))))
     if isinstance(body, dict) and "location" in body:
         loc = body["location"]
         c = loc.get("coords", {})
