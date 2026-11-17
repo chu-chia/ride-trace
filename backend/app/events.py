@@ -18,7 +18,7 @@ async def emit(tid: str, etype: str, uid: str | None, text: str, ts: int | None 
 
 
 # 要推播的事件類型（推給誰、多久推一次在 push.RULES）
-NOTIFY_TYPES = {"sos", "lost", "behind", "stuck", "allin", "speedcam", "offroute", "start", "kick", "msg", "chat", "roadevent"}
+NOTIFY_TYPES = {"sos", "lost", "behind", "stuck", "allin", "speedcam", "offroute", "start", "kick", "msg", "chat", "roadevent", "weather"}
 
 
 async def notify(tid: str, eid: str, etype: str, uid: str | None, text: str):

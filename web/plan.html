@@ -68,6 +68,8 @@
   .al .n span{font-size:12px;color:var(--muted)}
   .al .evt{font-size:11.5px;font-weight:600;color:var(--warn-ink);background:color-mix(in srgb,var(--warn) 16%,transparent);padding:3px 8px;border-radius:999px;flex:none}
   .poipin.evpin{cursor:default}
+  .al .evt.wet{color:#fff;background:#0a84ff}
+  .poipin.evpin.wxpin b{background:#0a84ff}
   .poipin.evpin b{background:var(--crit)}
   .al button{border:0;border-radius:8px;padding:5px 10px;font-size:12.5px;background:var(--surface-2);color:var(--accent);cursor:pointer;flex:none}
   details{background:var(--surface);border-radius:14px}
@@ -124,7 +126,7 @@
       <h3 style="margin-top:6px">沿路線找</h3>
       <div class="chips" id="chips">
         <button data-k="fuel">加油站</button><button data-k="convenience">便利商店</button><button data-k="food">餐廳</button>
-        <button data-k="sight">景點</button><button data-k="lodging">住宿</button><button data-k="rest">休息站</button><button data-k="roadevent">路況</button>
+        <button data-k="sight">景點</button><button data-k="lodging">住宿</button><button data-k="rest">休息站</button><button data-k="roadevent">路況</button><button data-k="weather">天氣</button>
       </div>
       <div class="along" id="along" hidden></div>
 

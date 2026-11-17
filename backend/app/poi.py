@@ -106,6 +106,7 @@ class AlongIn(BaseModel):
     kind: str
     samples: list[list[float]] = Field(min_length=1, max_length=400)  # [經度, 緯度, 沿路線 km]
     radius_m: int = Field(800, ge=100, le=3000)
+    kmh: float = Field(40, ge=5, le=150)  # 天氣：估計經過時間用的平均速度
 
 
 @router.post("/along")
@@ -114,6 +115,8 @@ async def along(body: AlongIn, uid: str = Depends(current_uid)):
     SQL 要做「離這條線 800 m 內的加油站」通常得靠 PostGIS 的緩衝區運算。"""
     if body.kind == "roadevent":
         return await along_roadevents(body)
+    if body.kind == "weather":
+        return await along_weather(body)
     if body.kind not in ALONG_KINDS:
         return []
     async with r.pipeline(transaction=False) as p:
@@ -165,4 +168,28 @@ async def along_roadevents(body: AlongIn) -> list[dict]:
         out.append({"id": eid, "name": f"{x['road']} {x['title']}".strip(), "area": traffic.short(x, 90),
                     "lon": x["lon"], "lat": x["lat"], "route_km": round(best[eid][0], 1), "off_m": round(best[eid][1]),
                     "type": x["type_name"]})
+    return out
+
+
+async def along_weather(body: AlongIn) -> list[dict]:
+    """沿途天氣：路線經過哪些鄉鎮（本機 GEOSHAPE），用預計經過的時間查氣象署鄉鎮預報的 3 小時降雨機率。
+    只向氣象署要縣市的整份預報（Redis 快取 30 分鐘），座標不送出去。"""
+    import time as _t
+    from . import weather
+    if not weather.enabled():
+        raise HTTPException(503, "天氣還沒設定（.env 的 CWA_API_KEY）")
+    now = int(_t.time() * 1000)
+    seen, out = set(), []
+    for lon, lat, km in body.samples:
+        t = await weather.town_at(lat, lon)
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        eta = now + int(km / body.kmh * 3_600_000)
+        w = await weather.rain_at(lat, lon, eta)
+        if not w:
+            continue
+        out.append({"id": f"{t[0]}{t[1]}", "name": f"{t[0]}{t[1]}", "lon": lon, "lat": lat, "route_km": round(km, 1),
+                    "off_m": 0, "pop": w["pop"], "type": f"降雨 {w['pop']}%",
+                    "area": f"約 {weather.tw(eta)} 經過 · {weather.tw(w['start'], '%H')}–{weather.tw(w['end'], '%H')} 時預報"})
     return out

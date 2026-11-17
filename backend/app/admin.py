@@ -140,7 +140,7 @@ async def overview(uid: str = Depends(require_admin)):
         "trips": {"live": live, "total": seq},
         "series": {"writes": await series(K.ts_writes), "pubsub": await series("ts:sys:pubsub")},
         "groups": groups,
-        "data": {**metas, "TDX 路況": await tdx_meta(), "天氣": {"source": "未串接", "count": 0, "updated": 0}},
+        "data": {**metas, "TDX 路況": await tdx_meta(), "天氣": await cwa_meta()},
         "valhalla": valhalla,
         "now": now,
     }
@@ -156,6 +156,17 @@ async def tdx_meta() -> dict:
     return {"source": f"{m.get('source', 'TDX 省道即時事件')} · 本月呼叫 {calls} 次（約 {calls / 1500:.2f} 點）"
                       + ("" if m else " · 有行程進行或打開規劃頁才會抓"),
             "count": int(m.get("count", 0)), "updated": int(m.get("updated", 0))}
+
+
+async def cwa_meta() -> dict:
+    from . import weather
+    if not weather.enabled():
+        return {"source": "未串接（.env 沒有 CWA_API_KEY）", "count": 0, "updated": 0}
+    m = await r.hgetall(weather.META)
+    calls = int(await r.hget(weather.USAGE, time.strftime("%Y-%m")) or 0)
+    cached = len([k async for k in r.scan_iter("cache:cwa:*")])
+    return {"source": f"{m.get('source', '中央氣象署 鄉鎮預報')} · 快取中 {cached} 個縣市 · 本月呼叫 {calls} 次",
+            "count": cached, "updated": int(m.get("updated", 0))}
 
 
 @router.get("/keys")

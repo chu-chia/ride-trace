@@ -21,7 +21,7 @@ import time
 
 from redis.exceptions import ResponseError
 
-from . import events, traffic
+from . import events, traffic, weather
 from .db import K, arrive, check_lag, r, update_stats
 from .longterm import record_point
 from .push import NOTIFY, handle_push
@@ -263,6 +263,51 @@ async def check_roadevent(tid: str, uid: str, f: dict):
                           by=uid)
 
 
+# ---------- 前方降雨（中央氣象署鄉鎮預報） ----------
+WX_EVERY_MS = 5 * 60_000            # 每個人 5 分鐘看一次就夠（預報是 3 小時一格）
+WX_AHEAD_KM = (0, 10, 20, 35, 50)   # 有路線：看沿路線前方這幾個點
+WX_TTL = 6 * 3600
+
+
+async def check_weather(tid: str, uid: str, f: dict):
+    """把前方的點換成鄉鎮（本機 GEOSHAPE），用預計經過的時間查那個鄉鎮的 3 小時降雨機率。
+    同一行程、同一鄉鎮、同一個 3 小時時段只通知一次。"""
+    if not weather.enabled() or not await r.set(f"wxchk:{tid}:{uid}", 1, nx=True, px=WX_EVERY_MS):
+        return
+    try:
+        lat, lon = float(f["lat"]), float(f["lon"])
+    except (KeyError, ValueError):
+        return
+    now = int(time.time() * 1000)
+    pts = [(0.0, lat, lon)]
+    rt = await load_route(tid)
+    kmh = 40.0
+    if rt:
+        rid, coords, cum, _ = rt
+        s = (await r.json().get(K.route(rid), "$.summary") or [{}])[0] or {}
+        if s.get("km") and s.get("min"):
+            kmh = max(15.0, s["km"] / (s["min"] / 60))
+        my_km = float(await r.hget(K.progress(tid), uid) or 0)
+        for d in WX_AHEAD_KM[1:]:
+            target = my_km + d
+            if target > cum[-1]:
+                break
+            i = next(j for j, k in enumerate(cum) if k >= target)
+            pts.append((float(d), coords[i][1], coords[i][0]))
+    for d, plat, plon in pts:
+        eta = now + int(d / kmh * 3_600_000)
+        w = await weather.rain_at(plat, plon, eta)
+        if not w or w["pop"] < weather.RAIN_POP:
+            continue
+        if not await r.set(f"wxevt:{tid}:{w['county']}{w['town']}:{w['start']}", 1, nx=True, ex=WX_TTL):
+            return
+        where = "目前所在" if d == 0 else f"約 {round(d / kmh * 60)} 分鐘後經過"
+        await events.emit(tid, "weather", None,
+                          f"前方降雨｜{w['county']}{w['town']}（{where}）{weather.tw(w['start'], '%H')}–{weather.tw(w['end'], '%H')} 時降雨機率 {w['pop']}%",
+                          ts=int(f["ts"]), town=w["town"], pop=w["pop"], by=uid)
+        return
+
+
 # ---------- 沿路線進度 ----------
 ROUTES: dict[str, tuple] = {}     # tid → (rid, coords, cum_km, 載入時間)
 LAST_IDX: dict[tuple, int] = {}   # (tid, uid) → 上次投影到的線段（下次先在附近找）
@@ -383,6 +428,7 @@ async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
             await check_hazard(f["trip"], f["uid"], f)
             await check_stuck(f["trip"], f["uid"], f)
             await check_roadevent(f["trip"], f["uid"], f)
+            await check_weather(f["trip"], f["uid"], f)
     trips = dict.fromkeys(f["trip"] for _, f in msgs if f.get("trip"))
     for tid in trips:
         await check_trip_lag(tid)

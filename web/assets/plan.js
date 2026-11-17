@@ -223,19 +223,22 @@ $('#chips').addEventListener('click', async (e) => {
   let next = 0;
   r.coords.forEach((c, i) => { if (r.cum_km[i] >= next) { samples.push([c[0], c[1], r.cum_km[i]]); next += step; } });
   try {
-    const ev = kind === 'roadevent';  // 路況：TDX 省道即時事件，只能看、不能加入路線
-    const items = await api('/api/poi/along', { method: 'POST', body: { kind, samples, radius_m: ev ? 500 : 800 } });
+    const wx = kind === 'weather';    // 天氣：沿途鄉鎮在預計經過時的降雨機率
+    const ev = kind === 'roadevent' || wx;  // 路況、天氣只能看、不能加入路線
+    const kmh = r.summary.min ? r.summary.km / (r.summary.min / 60) : 40;
+    const items = await api('/api/poi/along', { method: 'POST', body: { kind, samples, radius_m: kind === 'roadevent' ? 500 : 800, kmh: Math.min(150, Math.max(5, kmh)) } });
     if (P.along !== kind) return;
     $('#along').hidden = false;
     $('#along').innerHTML = items.length ? items.map((x, i) => `<div class="al"><i class="num">${x.route_km} km</i>
       <div class="n" data-go="${i}"><b>${esc(x.name)}</b><span>${esc(x.area || '')}${x.off_m > 150 ? ` · 離路線 ${x.off_m} m` : ''}</span></div>
-      ${ev ? `<span class="evt">${esc(x.type)}</span>` : `<button data-add="${i}">加入</button>`}</div>`).join('')
-      : `<div class="empty">${ev ? '路線沿途目前沒有省道施工、事故或管制（交通部 TDX）' : '路線 800 m 內沒有找到'}</div>`;
+      ${ev ? `<span class="evt${wx && x.pop >= 60 ? ' wet' : ''}">${esc(x.type)}</span>` : `<button data-add="${i}">加入</button>`}</div>`).join('')
+      : `<div class="empty">${wx ? '查不到沿途的天氣預報' : ev ? '路線沿途目前沒有省道施工、事故或管制（交通部 TDX）' : '路線 800 m 內沒有找到'}</div>`;
     P.alongItems = items;
     P.alongPins = items.map((x, i) => {
       const el = document.createElement('div');
       el.className = 'poipin';
-      el.innerHTML = `<b>${b.textContent[0]}</b>${esc(x.name.slice(0, 10))}`;
+      el.innerHTML = wx ? `<b>雨</b>${esc(x.name.slice(3, 10))} ${x.pop}%` : `<b>${b.textContent[0]}</b>${esc(x.name.slice(0, 10))}`;
+      if (wx) el.classList.add('wxpin');
       if (ev) { el.classList.add('evpin'); el.title = `${x.name}：${x.area}`; }
       else { el.onclick = (e2) => { e2.stopPropagation(); addPoint(P.alongItems[i]); }; el.title = '點一下加入路線'; }
       return new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([x.lon, x.lat]).addTo(map);
