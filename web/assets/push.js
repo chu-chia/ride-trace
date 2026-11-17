@@ -41,7 +41,7 @@ export async function mountPushCard(el) {
     const on = !!sub && Notification.permission === 'granted';
     let state = '', action = '';
     if (!cfg.enabled) state = '伺服器還沒設定推播金鑰（.env 的 VAPID_*）。';
-    else if (isIOS() && !standalone()) state = 'iPhone 要先用 Safari 的「分享 → 加入主畫面」，再從主畫面打開騎跡，才能開通知（iOS 16.4 以上）。';
+    else if (isIOS() && !standalone()) state = 'iPhone 要用「網頁 App」模式才能收通知：用 Safari 打開這個網址 →「分享 → 加入主畫面」，再從主畫面的騎跡圖示打開（上方不會有網址列），回到這裡開啟通知（iOS 16.4 以上）。';
     else if (!supported()) state = '這個瀏覽器不支援網頁推播。';
     else if (!window.isSecureContext) state = '要用 HTTPS 網址打開才能開通知。';
     else if (Notification.permission === 'denied') state = '通知被封鎖了，要到瀏覽器的網站設定裡改成允許。';
