@@ -85,6 +85,7 @@ async def ingest(uid: str, fix: Fix) -> dict:
         if fresh:
             # 全年足跡：Stream ID 直接用時間戳，之後可以用 XRANGE 依時間範圍查
             p.xadd(K.footprint(uid), {"lat": fields["lat"], "lon": fields["lon"], "ele": fields.get("alt", "0")}, id=f"{ts}-*")
+            p.incr(K.fp_ver(uid))
             p.hset(K.last(uid), mapping={"ts": ts, "lat": fix.lat, "lon": fix.lon})
             if cells:
                 p.sadd(K.fog(uid, day, bucket), *cells)

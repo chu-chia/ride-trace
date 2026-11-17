@@ -4,7 +4,8 @@ import json
 import math
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, Response
 
 from .auth import current_uid
 from .db import K, r
@@ -12,6 +13,28 @@ from .geo import BUCKETS, CELL, TPE, haversine_m, local_dt
 
 router = APIRouter(prefix="/api/footprint")
 MAX_LINE_POINTS = 40_000
+CACHE_TTL = 7 * 86400
+
+
+def _etag(uid: str, ver: str, part: str) -> str:
+    return f'W/"fp-{uid}-{ver}-{part}"'
+
+
+def _not_modified(request: Request, tag: str) -> bool:
+    return tag in (value.strip() for value in request.headers.get("if-none-match", "").split(","))
+
+
+def _headers(tag: str) -> dict[str, str]:
+    return {"ETag": tag, "Cache-Control": "private, no-cache"}
+
+
+async def _cached(key: str, build):
+    cached = await r.get(key)
+    if cached is not None:
+        return json.loads(cached)
+    out = await build()
+    await r.set(key, json.dumps(out), ex=CACHE_TTL)
+    return out
 
 
 def parse_day(s: str) -> date:
@@ -29,7 +52,15 @@ def parse_buckets(s: str | None) -> list[str]:
 
 
 @router.get("/summary")
-async def summary(uid: str = Depends(current_uid)):
+async def summary(request: Request, uid: str = Depends(current_uid)):
+    ver = await r.get(K.fp_ver(uid)) or "0"
+    tag = _etag(uid, ver, "summary")
+    if _not_modified(request, tag):
+        return Response(status_code=304, headers=_headers(tag))
+    return JSONResponse(await _cached(K.cache_summary(uid, ver), lambda: build_summary(uid)), headers=_headers(tag))
+
+
+async def build_summary(uid: str) -> dict:
     daykm = await r.hgetall(K.daykm(uid))
     days = {d: round(float(v), 2) for d, v in sorted(daykm.items())}
     first = await r.xrange(K.footprint(uid), count=1)
@@ -88,7 +119,19 @@ async def cells(
 
 
 @router.get("/cells/all")
-async def cells_all(uid: str = Depends(current_uid)):
+async def cells_all(request: Request, uid: str = Depends(current_uid)):
+    ver = await r.get(K.fp_ver(uid)) or "0"
+    tag = _etag(uid, ver, "cells")
+    if _not_modified(request, tag):
+        return Response(status_code=304, headers=_headers(tag))
+    return JSONResponse(await get_cells_all(uid, ver), headers=_headers(tag))
+
+
+async def get_cells_all(uid: str, ver: str) -> dict:
+    return await _cached(K.cache_cells(uid, ver), lambda: build_cells_all(uid))
+
+
+async def build_cells_all(uid: str) -> dict:
     members = await r.smembers(K.fog_all(uid))
     flat: list[int] = []
     for m in members:
@@ -99,23 +142,38 @@ async def cells_all(uid: str = Depends(current_uid)):
 
 @router.get("/lines")
 async def lines(
+    request: Request,
     start: str = Query(..., alias="from"),
     end: str = Query(..., alias="to"),
     buckets: str | None = None,
     uid: str = Depends(current_uid),
 ):
-    """XRANGE 直接用時間戳當範圍查軌跡；結果用 TTL 快取 10 分鐘。"""
+    """XRANGE 直接用時間戳當範圍查軌跡；版本變更時改用新快取。"""
     s, e = parse_day(start), parse_day(end)
     if e < s:
         s, e = e, s
     bs = parse_buckets(buckets)
+    ver = await r.get(K.fp_ver(uid)) or "0"
+    qkey = line_qkey(s, e, bs)
+    tag = _etag(uid, ver, qkey)
+    if _not_modified(request, tag):
+        return Response(status_code=304, headers=_headers(tag))
+    return JSONResponse(await get_lines(uid, ver, s, e, bs), headers=_headers(tag))
+
+
+def line_qkey(s: date, e: date, bs: list[str]) -> str:
     t0 = int(datetime(s.year, s.month, s.day, tzinfo=TPE).timestamp() * 1000)
     t1 = int(datetime(e.year, e.month, e.day, tzinfo=TPE).timestamp() * 1000) + 86400_000 - 1
-    last = await r.xrevrange(K.footprint(uid), count=1)
-    qkey = hashlib.sha1(f"{t0}:{t1}:{','.join(bs)}:{last[0][0] if last else ''}".encode()).hexdigest()[:16]
-    cached = await r.get(K.cache_lines(uid, qkey))
-    if cached:
-        return json.loads(cached)
+    return hashlib.sha1(f"{t0}:{t1}:{','.join(bs)}".encode()).hexdigest()[:16]
+
+
+async def get_lines(uid: str, ver: str, s: date, e: date, bs: list[str]) -> dict:
+    return await _cached(K.cache_lines(uid, ver, line_qkey(s, e, bs)), lambda: build_lines(uid, s, e, bs))
+
+
+async def build_lines(uid: str, s: date, e: date, bs: list[str]) -> dict:
+    t0 = int(datetime(s.year, s.month, s.day, tzinfo=TPE).timestamp() * 1000)
+    t1 = int(datetime(e.year, e.month, e.day, tzinfo=TPE).timestamp() * 1000) + 86400_000 - 1
 
     want = set(bs)
     segs: list[list[list[float]]] = []
@@ -158,5 +216,16 @@ async def lines(
         segs = [s for s in segs if len(s) > 1]
     out = {"type": "Feature", "properties": {"points": total, "stride": stride},
            "geometry": {"type": "MultiLineString", "coordinates": segs}}
-    await r.set(K.cache_lines(uid, qkey), json.dumps(out), ex=600)
     return out
+
+
+async def warm_all(uid: str) -> None:
+    """worker 以最新版本預算首頁與足跡頁使用的全期間資料。"""
+    ver = await r.get(K.fp_ver(uid)) or "0"
+    first = await r.xrange(K.footprint(uid), count=1)
+    last = await r.xrevrange(K.footprint(uid), count=1)
+    if first and last:
+        s = local_dt(int(first[0][0].split("-")[0])).date()
+        e = local_dt(int(last[0][0].split("-")[0])).date()
+        await get_lines(uid, ver, s, e, list(BUCKETS))
+    await get_cells_all(uid, ver)

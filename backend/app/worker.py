@@ -21,7 +21,7 @@ import time
 
 from redis.exceptions import ResponseError
 
-from . import events, traffic, weather
+from . import events, footprint, traffic, weather
 from .db import K, arrive, check_lag, r, update_stats
 from .longterm import record_point
 from .push import NOTIFY, handle_push
@@ -33,6 +33,25 @@ CONSUMER = os.environ.get("WORKER_NAME") or f"{socket.gethostname()}-{os.getpid(
 BATCH = 200
 BLOCK_MS = 2000  # 要小於 redis-py 8 預設的 socket_timeout（5 秒），否則沒訊息時會 TimeoutError
 CLAIM_IDLE_MS = 60_000
+WARM_DELAY_S = 60
+WARM_TASKS: set[asyncio.Task] = set()
+
+
+async def warm_footprint_after_delay(uid: str):
+    """等同一使用者的密集回報結束後，依最新版本預算。"""
+    await asyncio.sleep(WARM_DELAY_S)
+    try:
+        await footprint.warm_all(uid)
+    except Exception:  # noqa: BLE001
+        log.exception("足跡預算失敗：uid=%s", uid)
+
+
+async def schedule_footprint_warm(uid: str):
+    # SET NX EX 跨 worker 防抖；短時間大量 GPS 點只排一個預算工作。
+    if await r.set(K.fp_warm(uid), 1, nx=True, ex=WARM_DELAY_S):
+        task = asyncio.create_task(warm_footprint_after_delay(uid))
+        WARM_TASKS.add(task)
+        task.add_done_callback(WARM_TASKS.discard)
 
 
 async def ensure_group(group: str, stream: str = K.ingest):
@@ -51,8 +70,10 @@ async def handle_stats(msgs: list[tuple[str, dict]]) -> list[str]:
     """每位隊友的里程、極速、移動時間（Lua 原子更新，依 ts 去重，重送不會重算）；
     所有新的足跡點都更新熱力圖與點亮鄉鎮（不管有沒有在行程中）。"""
     changed: dict[tuple[str, str], None] = {}
+    warm_uids: set[str] = set()
     for _, f in msgs:
         if f.get("fp") == "1" and f.get("uid") and "lat" in f:
+            warm_uids.add(f["uid"])
             code = await record_point(f["uid"], float(f["lat"]), float(f["lon"]), int(f["ts"]))
             if code and f.get("trip"):
                 name, county = await r.hmget(f"town:{code}", "name", "county")
@@ -69,6 +90,8 @@ async def handle_stats(msgs: list[tuple[str, dict]]) -> list[str]:
     for tid, uid in changed:
         s = await r.hmget(K.stats(tid, uid), "km", "max_kmh", "moving_s")
         await events.publish(tid, {"kind": "stats", "uid": uid, **stats_dict(s)})
+    for uid in warm_uids:
+        await schedule_footprint_warm(uid)
     return [i for i, _ in msgs]
 
 

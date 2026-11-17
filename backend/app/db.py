@@ -50,10 +50,14 @@ class K:
     ts_writes = "ts:sys:writes"
 
     footprint = staticmethod(lambda uid: f"footprint:{uid}")
+    fp_ver = staticmethod(lambda uid: f"fp:ver:{uid}")
+    fp_warm = staticmethod(lambda uid: f"fp:warm:{uid}")
     daykm = staticmethod(lambda uid: f"footprint:{uid}:daykm")
     fog = staticmethod(lambda uid, day, bucket: f"fog:{uid}:{day}:{bucket}")
     fog_all = staticmethod(lambda uid: f"fog:{uid}:all")
-    cache_lines = staticmethod(lambda uid, q: f"cache:lines:{uid}:{q}")
+    cache_lines = staticmethod(lambda uid, ver, q: f"cache:lines:{uid}:{ver}:{q}")
+    cache_cells = staticmethod(lambda uid, ver: f"cache:cells:{uid}:{ver}")
+    cache_summary = staticmethod(lambda uid, ver: f"cache:summary:{uid}:{ver}")
 
 
 # 結束自己的紀錄：移出 active，最後一個人離開時把行程標成 ended。

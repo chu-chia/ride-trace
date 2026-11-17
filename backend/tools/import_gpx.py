@@ -113,6 +113,7 @@ def main():
         pipe.hincrbyfloat(K.daykm(uid), day, round(km, 4))
     if prev:
         pipe.hset(K.last(uid), mapping={"ts": prev[0], "lat": prev[1], "lon": prev[2]})
+    pipe.incr(K.fp_ver(uid))
     pipe.execute()
 
     print(f"\n完成：寫入 {kept:,} 點、略過 {skipped:,} 個不合理的點（飛機或跳點）")
