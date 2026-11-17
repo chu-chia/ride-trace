@@ -14,7 +14,7 @@ window.qijiWar = S;
 const EXAG = 1.4; // mapbase 的地形誇張倍率
 const EV = {
   lost: '#ff453a', back: '#30d158', start: '#ff8a3d', end: '#8e8e93', stop: '#8e8e93', join: '#64d2ff', kick: '#ffd60a',
-  behind: '#ffd60a', ahead: '#ffd60a', regroup: '#30d158', arrive: '#30d158', allin: '#30d158', speedcam: '#ffd60a', roadevent: '#ff9f0a', weather: '#64d2ff',
+  behind: '#ffd60a', ahead: '#ffd60a', regroup: '#30d158', arrive: '#30d158', allin: '#30d158', speedcam: '#ffd60a', roadevent: '#ff9f0a', weather: '#64d2ff', chat: '#64d2ff',
   msg: '#64d2ff', mark: '#ffd60a', sos: '#ff453a', sos_off: '#30d158', route: '#ff8a3d', offroute: '#ffd60a', onroute: '#30d158', town: '#ff8a3d', stuck: '#ffd60a', moving: '#30d158',
 };
 
@@ -110,6 +110,7 @@ function renderCards() {
 
 /* ---------- 事件流 ---------- */
 const nameOf = (uid) => S.members.get(uid)?.u.nickname || '';
+const chatEv = (m) => ({ ...m, kind: 'event', type: 'chat', text: `聊天：${m.text}` });
 function renderFeed() {
   $('#feed').innerHTML = S.events.slice(-14).reverse().map((e) => `<div class="ev${e.type === 'sos' ? ' sos' : ''}"><time class="num">${clock(+e.ts)}</time>
     <i style="--c:${EV[e.type] || '#8e8e93'}"></i><span>${e.uid ? `<b>${esc(nameOf(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`).join('') || '<div class="empty">還沒有事件</div>';
@@ -203,6 +204,11 @@ function handle(msg) {
       document.title = `戰情室 · ${t.name}`;
       api(`/api/trips/${tid}/sos`).then((list) => { S.sos = new Map(list.map((e) => [e.uid, e])); renderSos(); renderCards(); }).catch(() => {});
       loadRoute(); renderCards(); renderFeed();
+      // 最近的聊天併進事件流（聊天另存一條 Stream）
+      api(`/api/trips/${tid}/chat?limit=20`).then((d) => {
+        S.events = [...S.events, ...d.items.map(chatEv)].sort((a, b) => +a.ts - +b.ts).slice(-200);
+        renderFeed();
+      }).catch(() => {});
       break;
     }
     case 'pos': {
@@ -227,6 +233,14 @@ function handle(msg) {
       if (msg.type === 'sos') S.sos.set(msg.uid, msg);
       if (msg.type === 'sos_off') S.sos.delete(msg.uid);
       renderFeed(); renderSos();
+      break;
+    case 'chat':  // 聊天另存在 trip:{id}:chat，大螢幕也顯示在事件流裡
+      S.events.push(chatEv(msg));
+      if (S.events.length > 200) S.events.shift();
+      renderFeed();
+      break;
+    case 'sos_refresh':  // 後台清掉測試 SOS
+      api(`/api/trips/${tid}/sos`).then((list) => { S.sos = new Map(list.map((e) => [e.uid, e])); renderSos(); renderCards(); }).catch(() => {});
       break;
   }
 }
