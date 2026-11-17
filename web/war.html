@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>戰情室 · 騎跡</title>
+<title>戰情室｜騎跡 RideTrace</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
 <style>
@@ -44,6 +44,22 @@
   .sosbar{position:fixed;z-index:20;left:50%;top:18px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px}
   .sosbar div{background:#e5352b;color:#fff;font-weight:800;font-size:22px;padding:14px 26px;border-radius:16px;box-shadow:0 10px 40px rgba(229,53,43,.6);animation:blink 1s ease-in-out infinite alternate}
   .empty{color:var(--muted);font-size:13px}
+  @media (max-width:760px){
+    body{overflow-x:hidden;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:12px}
+    .wr{display:contents}
+    .wr>*{min-width:0;width:100%}
+    .head{order:1;display:flex;flex-direction:column;align-items:flex-start;gap:8px;justify-self:auto;padding:14px 16px}
+    .head>div:first-child{min-width:0}
+    .head b{font-size:21px;overflow-wrap:anywhere}
+    .head .clock{margin:0;font-size:25px}
+    .mapwrap{position:relative;inset:auto;order:2;width:100%;height:42dvh;min-height:260px;overflow:hidden;border-radius:18px}
+    .cards{order:3;display:grid;grid-template-columns:minmax(0,1fr);overflow:visible}
+    .cd{min-width:0}
+    .prog{order:4;min-height:190px}
+    .feed{order:5;min-height:190px}
+    .sosbar{max-width:calc(100vw - 24px)}
+    .sosbar div{font-size:17px;padding:10px 14px}
+  }
 </style>
 </head>
 <body>

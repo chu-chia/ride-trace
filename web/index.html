@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>騎跡</title>
+<title>騎跡 RideTrace</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <meta name="theme-color" content="#d9500f">
@@ -15,6 +15,11 @@
   .page{max-width:640px;gap:16px}
   .head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-top:8px}
   .head h1{margin:4px 0 0;font-size:30px;line-height:1.15}
+  .home-brand{display:block;margin-bottom:5px;font-size:12px;font-weight:650;letter-spacing:.08em;color:var(--accent-ink)}
+  .home-tagline{margin:2px 0 0;padding:0 2px 4px}
+  .home-tagline .english{font-size:11px;letter-spacing:.07em;color:var(--accent-ink)}
+  .home-tagline strong{display:block;margin-top:5px;font-size:20px;font-weight:650;line-height:1.2}
+  .home-tagline .zh{display:block;margin-top:4px;font-size:13px;color:var(--muted)}
 
   /* 帳號選單：頭像點開才有登出 */
   .menu{position:relative}
@@ -62,7 +67,7 @@
 <canvas id="bg" aria-hidden="true"></canvas>
 <main class="page">
   <header class="head">
-    <div><div class="eyebrow" id="today"></div><h1 id="hello">騎跡</h1></div>
+    <div><div class="home-brand">騎跡 <span lang="en">RideTrace</span></div><div class="eyebrow" id="today"></div><h1 id="hello">騎跡</h1></div>
     <details class="menu" id="menu">
       <summary aria-label="帳號選單" id="me"></summary>
       <div class="pop">
@@ -73,6 +78,7 @@
       </div>
     </details>
   </header>
+  <div class="home-tagline"><div class="english">Motorcycle Route Tracking &amp; Group Rides</div><strong>Every ride leaves a trace.</strong><span class="zh">每一趟騎乘，都會留下足跡。</span></div>
 
   <a class="fp" href="/footprint" aria-label="我的足跡：打開全年迷霧地圖">
     <div class="txt">

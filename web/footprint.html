@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>我的足跡 · 騎跡</title>
+<title>我的足跡｜騎跡 RideTrace</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
 <style>
@@ -25,9 +25,11 @@
   .chips{display:flex;gap:6px;flex-wrap:wrap}
   .chips button{border:0;background:var(--surface-2);border-radius:999px;padding:6px 11px;font-size:12.5px;cursor:pointer;white-space:nowrap}
   .chips button.on{background:var(--accent-fill);color:#fff}
-  .months{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+  .months{min-width:0;width:100%;max-width:100%;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-inline:contain;padding-bottom:4px;scrollbar-width:none}
+  .months::-webkit-scrollbar{display:none}
+  .months button{flex:none}
   .dates{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
-  .dates input{padding:8px 10px;font-size:13.5px}
+  .dates input{min-width:0;width:100%;padding:8px 10px;font-size:13.5px}
   .cal{overflow-x:auto;padding-bottom:4px}
   .cal svg{display:block}
   .cal rect{cursor:pointer}

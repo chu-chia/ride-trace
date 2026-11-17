@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>登入 · 騎跡</title>
+<title>登入｜騎跡 RideTrace</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
 <style>
@@ -23,8 +23,10 @@
   .hero-brand .row{display:flex;align-items:center;gap:14px}
   .hero-brand svg{width:48px;height:48px;flex:none}
   .hero-brand h1{margin:0;font-size:clamp(34px,4vw,48px);line-height:1;letter-spacing:.06em}
-  .hero-brand p{margin:14px 0 0;font-size:clamp(17px,1.6vw,21px);font-weight:600;max-width:22em}
-  .hero-brand p span{display:block;margin-top:6px;font-size:14px;font-weight:400;color:#b9b9c0}
+  .hero-brand h1 small{display:block;margin-top:5px;font-size:clamp(14px,1.5vw,18px);font-weight:500;letter-spacing:.12em;color:#ffb27a}
+  .hero-brand .english{margin:20px 0 0;font-size:12px;font-weight:500;letter-spacing:.08em;color:#ffb27a}
+  .hero-brand .slogan{margin:7px 0 0;font-size:clamp(22px,2.6vw,32px);font-weight:650;line-height:1.15;letter-spacing:-.02em}
+  .hero-brand .slogan-zh{margin:8px 0 0;font-size:15px;font-weight:400;color:#d1d1d6}
 
   .routecard{position:absolute;z-index:3;left:clamp(24px,4vw,56px);bottom:max(32px,env(safe-area-inset-bottom,0px));right:24px;max-width:420px}
   .routecard .eyebrow{color:#ffb27a}
@@ -68,7 +70,9 @@
     .stage{min-height:0;height:min(58dvh,460px)}
     .hero-brand{top:max(20px,env(safe-area-inset-top,0px))}
     .hero-brand svg{width:40px;height:40px}
-    .hero-brand p span{display:none}
+    .hero-brand .english{margin-top:14px;font-size:10px;letter-spacing:.04em}
+    .hero-brand .slogan{font-size:23px}
+    .hero-brand .slogan-zh{font-size:13px}
     .routecard{bottom:18px}
     .stage::after{height:170px}
     .side{align-items:flex-start;padding:24px 20px 48px}
@@ -82,9 +86,11 @@
     <div class="hero-brand">
       <div class="row">
         <svg viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" style="fill:#d9500f"/><path d="M5 19c3-1 4-6 8-7s5 2 8-5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="21" cy="7" r="2.6" fill="#fff"/></svg>
-        <h1>騎跡</h1>
+        <h1>騎跡<small>RideTrace</small></h1>
       </div>
-      <p>整隊一起出發，一個都不少。<span>隊友即時位置、落隊與失聯警示、整趟回放，還有你自己的全年足跡地圖。</span></p>
+      <div class="english">Motorcycle Route Tracking &amp; Group Rides</div>
+      <p class="slogan">Every ride leaves a trace.</p>
+      <p class="slogan-zh">每一趟騎乘，都會留下足跡。</p>
     </div>
     <div class="routecard" aria-live="polite">
       <div class="fade" id="rcText">
