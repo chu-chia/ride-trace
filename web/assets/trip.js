@@ -124,12 +124,19 @@ M.onStyle(() => {
 
 /* ---------- 鏡頭 ---------- */
 ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => { if (e.originalEvent) { S.lastInteract = Date.now(); M.unfollow(); } }));
+// 手機：底部面板預設收合，地圖才看得到；點分頁或把手再展開
+if (innerWidth <= 760) $('#panel').classList.add('small');
 function panelPad() {
   const narrow = innerWidth <= 760;
-  return narrow ? { top: 90, bottom: $('#panel').offsetHeight + 30, left: 40, right: 70 } : { top: 90, bottom: 60, left: 60, right: 460 };
+  if (!narrow) return { top: 90, bottom: 60, left: 60, right: 460 };
+  // 手機：底部要讓出面板＋工具列（集合點、訊息…）＋全隊進度的高度
+  const dock = document.querySelector('.qx-dock');
+  const top = Math.min($('#panel').getBoundingClientRect().top, dock ? dock.getBoundingClientRect().top : Infinity);
+  return { top: 80, bottom: Math.max(60, innerHeight - top + 16), left: 30, right: 64 };
 }
 S.pad = panelPad();
 const refreshPad = () => setTimeout(() => (S.pad = panelPad()), 350);
+S.refreshPad = refreshPad;
 addEventListener('resize', refreshPad);
 
 // 要跟著誰：選了某個人就跟他；「全隊」但地圖上只有一個人時，也跟著那個人

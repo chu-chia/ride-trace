@@ -44,14 +44,30 @@
   .stats b{font-size:22px;font-weight:700;line-height:1.1}
   .stats span{font-size:11.5px;color:var(--muted)}
   @media (max-width:760px){
-    .panel{left:0;right:0;bottom:0;top:auto;width:auto;height:46dvh;border-radius:22px 22px 0 0;padding-bottom:env(safe-area-inset-bottom,0px);transition:height .3s}
-    .panel.small{height:150px}
-    .panel .handle{display:grid;place-items:center;border:0;background:none;padding:8px 0 0;cursor:pointer}
-    .panel .handle::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--muted);opacity:.45}
-    .tools{right:12px;top:76px}
-    .topbar b{max-width:52vw}
-    .maplibregl-ctrl-bottom-right{right:0;bottom:46dvh}
-    body:has(.panel.small) .maplibregl-ctrl-bottom-right{bottom:150px}
+    /* 手機：地圖優先。面板預設收合成「數字＋分頁」，點分頁或把手才展開 */
+    .panel{left:0;right:0;bottom:0;top:auto;width:auto;height:min(58dvh,520px);border-radius:20px 20px 0 0;padding-bottom:env(safe-area-inset-bottom,0px);transition:height .28s ease}
+    .panel.small{height:calc(128px + env(safe-area-inset-bottom,0px))}
+    .panel.small .body,.panel.small .banner{display:none}
+    .panel .handle{display:grid;place-items:center;border:0;background:none;padding:7px 0 2px;cursor:pointer;flex:none}
+    .panel .handle::before{content:"";width:36px;height:5px;border-radius:3px;background:var(--muted);opacity:.45}
+    .stats{padding:4px 16px 0;gap:4px}
+    .stats b{font-size:19px}
+    .stats span{font-size:11px}
+    .panel .seg{margin:8px 12px 6px}
+    .panel .seg button{padding:7px 0;font-size:13.5px}
+    .banner{margin:8px 12px 0;padding:10px 12px}
+    /* 頂端列：滿版一行 */
+    .topbar{left:max(10px,env(safe-area-inset-left,0px));right:max(10px,env(safe-area-inset-right,0px));top:max(10px,env(safe-area-inset-top,0px));max-width:none;gap:8px;padding:6px 6px 6px 4px;border-radius:14px}
+    .topbar>div{flex:1}
+    .topbar a.back{width:30px;height:30px}
+    .topbar b{font-size:14.5px;max-width:none}
+    .topbar .sub{font-size:11.5px}
+    .topbar a.go{padding:7px 11px;font-size:12.5px}
+    /* 右側地圖按鈕：小一號，排在頂端列下面 */
+    .tools{right:max(10px,env(safe-area-inset-right,0px));top:calc(max(10px,env(safe-area-inset-top,0px)) + 62px);gap:6px}
+    .tools .tool{min-width:44px;height:34px;padding:0 8px;font-size:11.5px;border-radius:10px}
+    .maplibregl-ctrl-bottom-right{right:0;bottom:min(58dvh,520px)}
+    body:has(.panel.small) .maplibregl-ctrl-bottom-right{bottom:calc(128px + env(safe-area-inset-bottom,0px))}
   }
 </style>
 </head>

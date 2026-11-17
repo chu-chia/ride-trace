@@ -35,7 +35,12 @@ function placeDock() {
   // 手機：放在面板上方，再多留地圖版權列（MapLibre attribution）的高度，按鈕列才不會壓在它上面
   const attr = document.querySelector('.maplibregl-ctrl-bottom-right')?.getBoundingClientRect();
   const extra = attr && attr.height ? attr.height + 6 : 0;
-  dock.style.bottom = narrow && panel ? `${Math.max(12, innerHeight - panel.getBoundingClientRect().top + 12 + extra)}px` : '';
+  const bottom = narrow && panel ? `${Math.max(12, innerHeight - panel.getBoundingClientRect().top + 8 + extra)}px` : '';
+  if (bottom !== dock.style.bottom || dock.offsetHeight !== placeDock.h) {
+    dock.style.bottom = bottom;
+    placeDock.h = dock.offsetHeight;
+    S.refreshPad?.();  // 地圖鏡頭要讓出工具列的高度
+  }
 }
 setInterval(placeDock, 400);
 addEventListener('resize', placeDock);
@@ -484,7 +489,21 @@ async function loadRoute() {
   map.getSource('qx-route')?.setData(routeGeo());
   renderProgress();
   if (X.open === 'route') render();
+  setTimeout(idleFit, 300);
 }
+
+// 還沒有人有位置時，鏡頭先對準路線（沒有路線就對準全台），不要停在預設位置
+let idleFitted = false;
+function idleFit() {
+  if (idleFitted || [...S.members.values()].some((m) => m.pos) || Date.now() - (S.lastInteract || 0) < 12000) return;
+  idleFitted = true;
+  S.pad = S.refreshPad ? (S.refreshPad(), S.pad) : S.pad;
+  const c = X.route?.coords;
+  const b = c?.length ? c.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(c[0], c[0]))
+    : new maplibregl.LngLatBounds([119.9, 21.8], [122.1, 25.4]);
+  map.fitBounds(b, { padding: S.pad, maxZoom: 14, duration: 0 });
+}
+setTimeout(idleFit, 2500);
 
 // 集合點投影到路線上（前端算就好：點數少）
 function routeKmOf(lon, lat) {
