@@ -1,5 +1,6 @@
 // 管理後台的「測試工具」：推播、行程事件、外部資料。後端在 backend/app/admin_test.py。
 import { api, $, esc } from '/assets/common.js';
+import { mountPushCard } from '/assets/push.js';
 
 let I = null;  // /api/admin/test/info
 const now = () => new Date().toLocaleTimeString('zh-TW', { hour12: false });
@@ -24,6 +25,7 @@ async function load() {
   $('#tPushTo').innerHTML = users.map((u) => `<option value="${u.uid}">${esc(u.uid === I.me ? `我（${u.name}）` : u.name)}（${u.devices} 台）</option>`).join('');
   $('#tPushHint').textContent = !I.push_enabled ? '伺服器沒有推播金鑰（.env 的 VAPID_*）'
     : I.push_users.length ? '手機要先在行程頁「回報」分頁開啟通知，才會出現在這裡。' : '還沒有人開通知：到行程頁「回報」分頁開啟。';
+  $('#tDevices').innerHTML = I.push_users.map((u) => `${esc(u.uid === I.me ? '我' : u.name)}：${u.kinds.map(esc).join('、')}`).join('<br>');
   // 行程
   const ST = { live: '進行中', planned: '未開始', ended: '已結束' };
   $('#tTrip').innerHTML = I.trips.map((t) => `<option value="${t.id}">${t.mine ? '★ ' : ''}#${t.id} ${esc(t.name)}（${ST[t.status] || t.status}）</option>`).join('');
@@ -84,4 +86,10 @@ $('#tCounty').addEventListener('change', async (e) => {
 });
 
 // 等後台主畫面確認是管理者（#app 顯示）再載入
-const wait = setInterval(() => { if (!$('#app').hidden) { clearInterval(wait); load().catch((e) => log(esc(e.message), true)); } }, 300);
+const wait = setInterval(() => {
+  if ($('#app').hidden) return;
+  clearInterval(wait);
+  load().catch((e) => log(esc(e.message), true));
+  mountPushCard($('#pushCard'));  // 「這台裝置」開關通知（手機打開後台也能直接開）
+  $('#pushCard').addEventListener('click', () => setTimeout(load, 1500));
+}, 300);

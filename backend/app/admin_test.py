@@ -31,6 +31,12 @@ EVENTS = {
 }
 
 
+def svc(endpoint: str) -> str:
+    """推播服務是哪一家，看得出是哪種裝置。"""
+    return ("iPhone／Mac Safari（Apple）" if "push.apple.com" in endpoint else "Chrome／Android（Google）" if "googleapis" in endpoint
+            else "Firefox（Mozilla）" if "mozilla" in endpoint else "其他")
+
+
 async def nick(uid: str) -> str:
     u = await r.hmget(K.user(uid), "nickname", "username")
     return u[0] or u[1] or uid
@@ -42,9 +48,10 @@ async def info(uid: str = Depends(require_admin)):
     users = []
     async for key in r.scan_iter("user:*:push"):
         u = key.split(":")[1]
-        n = await r.hlen(key)
-        if n:
-            users.append({"uid": u, "name": await nick(u), "devices": n})
+        subs = await r.hvals(key)
+        if subs:
+            kinds = [svc(json.loads(x)["endpoint"]) for x in subs]
+            users.append({"uid": u, "name": await nick(u), "devices": len(subs), "kinds": kinds})
     users.sort(key=lambda x: (x["uid"] != uid, int(x["uid"])))
     # 行程：我參加的優先，其次進行中，最多 20 個
     seq = int(await r.get("seq:trip") or 0)
