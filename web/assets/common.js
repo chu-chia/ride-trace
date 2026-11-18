@@ -160,6 +160,31 @@ export function markFocus(markers, uid, away) {
 // 隊員狀態表（回放、行程頁、戰情室共用的樣式）：每列＝顏色點＋名字（下面一行狀態）＋四欄數字，點一下選那個人。
 // 列只在人員或順序改變時重建，平常只更新文字：每秒重畫整個 innerHTML 的話，點下去的按鈕會被換掉而點不到。
 // rows：[{ uid, name, color, sub, subCls, cols: [[值, 單位] ×4], on, away }]
+// 事件篩選（騎乘頁事件分頁、戰情室事件流共用，UX-29）：全部／重要／路況／訊息，預設「全部」，選擇存在 localStorage
+export const EVENT_FILTERS = {
+  all: ['全部', null],
+  important: ['重要', new Set(['sos', 'sos_off', 'lost', 'behind', 'ahead', 'offroute', 'stuck'])],
+  road: ['路況', new Set(['roadevent', 'weather', 'rain', 'speedcam'])],
+  message: ['訊息', new Set(['msg', 'chat', 'mark'])],
+};
+export function eventFilter(el, storeKey, onChange) {
+  let cur = 'all';
+  try { const v = localStorage.getItem(storeKey); if (Object.hasOwn(EVENT_FILTERS, v)) cur = v; } catch { /* 私密模式 */ }
+  el.classList.add('feed-filters');
+  el.setAttribute('role', 'group');
+  if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', '篩選事件');
+  el.innerHTML = Object.entries(EVENT_FILTERS).map(([k, [n]]) => `<button type="button" data-feed-filter="${k}" aria-pressed="${k === cur}">${n}</button>`).join('');
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-feed-filter]');
+    if (!b || b.dataset.feedFilter === cur) return;
+    cur = b.dataset.feedFilter;
+    try { localStorage.setItem(storeKey, cur); } catch { /* 私密模式 */ }
+    el.querySelectorAll('[data-feed-filter]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    onChange(cur);
+  });
+  return { get value() { return cur; }, match: (e) => cur === 'all' || !!EVENT_FILTERS[cur][1]?.has(e.type) };
+}
+
 export function teamTable(el, rows, onPick) {
   const key = rows.map((r) => r.uid).join(',');
   if (el.dataset.key !== key) {
