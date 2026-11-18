@@ -1,4 +1,4 @@
-import { api, tripGate, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
+import { api, tripGate, armConfirm, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -153,13 +153,15 @@ function panelPad() {
   const narrow = innerWidth <= 760;
   if (!narrow) return { top: 70, bottom: 90, left: ($('#panel').offsetWidth || 380) + 50, right: 80 };
   // 用抽屜實際的高度；開合後 smoothPad 讓鏡頭慢慢滑到新的置中位置（拖曳中不更新，所以不會跟著手指晃）
-  return { top: 80, bottom: Math.max(60, innerHeight - $('#panel').getBoundingClientRect().top + 16), left: 30, right: 64 };
+  // 抽屜拉高時留白最多用到畫面高度的 60%，不然可視區只剩一條、cameraForBounds 也會算不出來（UX-11）
+  return { top: 80, bottom: Math.min(innerHeight * 0.6, Math.max(60, innerHeight - $('#panel').getBoundingClientRect().top + 16)), left: 30, right: 64 };
 }
 let PAD = null;
 const refreshPad = () => setTimeout(() => PAD?.refresh(), innerWidth <= 760 ? 0 : 300); // 電腦側欄寬度有 0.25 秒轉場，等它停
 S.refreshPad = refreshPad;
 addEventListener('resize', refreshPad);
-const PANEL = initPanel($('#panel'), 'trip', { onChange: refreshPad });
+// 抽屜開合後，還沒有人在騎時重新框一次（不然台灣會被拉高的抽屜蓋住，UX-11）
+const PANEL = initPanel($('#panel'), 'trip', { onChange: () => { refreshPad(); setTimeout(() => S.trip && fitFallback(), 500); } });
 PAD = smoothPad(panelPad);
 Object.defineProperty(S, 'pad', { get: () => PAD.get(), set() {}, configurable: true });
 const setCollapsed = (v) => PANEL.set(v);
@@ -194,11 +196,36 @@ function camera(force) {
   if (!force && S.away) return;
   if (followTarget()) return; // 跟隨模式由動畫迴圈每一格把人放在正中間
   const pts = [...S.members.values()].filter(inGroup).map((m) => m.pos);
+  if (!pts.length) { fitFallback(); return; }
   if (pts.length < 2) return;
-  const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
-  const cam = map.cameraForBounds(b, { padding: S.pad, maxZoom: 15, bearing: map.getBearing() });
-  if (cam) { S.easeUntil = performance.now() + 950; map.easeTo({ ...cam, pitch: map.getPitch(), padding: S.pad, duration: 900 }); }
+  fitPoints(pts, 15, 900);
 }
+// 自己算 zoom（不考慮傾斜，再留一點邊）：傾斜 55° 加上手機抽屜的留白時，cameraForBounds 會算得太保守，
+// 甚至算不出來（Console「Map cannot fit within canvas」，UX-11）
+function fitPoints(pts, maxZoom, duration) {
+  const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
+  const box = map.getContainer(), pad = S.pad;
+  const W = Math.max(box.clientWidth * 0.25, box.clientWidth - pad.left - pad.right);
+  const H = Math.max(box.clientHeight * 0.2, box.clientHeight - pad.top - pad.bottom);
+  const sw = maplibregl.MercatorCoordinate.fromLngLat(b.getSouthWest()), ne = maplibregl.MercatorCoordinate.fromLngLat(b.getNorthEast());
+  const z = Math.log2(Math.min(W / Math.max(1e-9, Math.abs(ne.x - sw.x) * 512), H / Math.max(1e-9, Math.abs(ne.y - sw.y) * 512))) - 0.35;
+  if (!Number.isFinite(z)) return false;
+  const cam = { center: b.getCenter(), zoom: Math.max(1, Math.min(maxZoom, z)), pitch: map.getPitch(), padding: pad };
+  S.easeUntil = performance.now() + duration + 50;
+  if (duration) map.easeTo({ ...cam, duration });
+  else map.jumpTo(cam);
+  return true;
+}
+// 還沒有人在騎（行程還沒開始、大家都還沒回報）：先框路線，沒有路線就框有位置的人，再不行就框台灣（UX-11）。
+// 使用者 10 秒內動過地圖就不搶鏡頭
+function fitFallback() {
+  if (S.away || (S.lastInteract && Date.now() - S.lastInteract < 10000)) return;
+  if ([...S.members.values()].some(inGroup)) return;
+  const route = S.routeCoords, known = [...S.members.values()].filter((m) => m.pos).map((m) => m.pos);
+  const pts = route?.length ? route : known.length ? known : [[119.9, 21.8], [122.1, 25.4]];
+  if (!fitPoints(pts.length === 1 ? [pts[0], pts[0]] : pts, 14, S.styleReady ? 600 : 0)) map.jumpTo({ center: [120.97, 23.7], zoom: 6.6 });
+}
+S.fitFallback = fitFallback; // trip-extra.js：路線載入後再框一次
 // 之後「全隊」由動畫迴圈每一格平滑追（M.followGroup），不再定時 easeTo
 
 // 動畫迴圈：標記平滑移動、跟隨的人保持在畫面中間、軌跡線尾巴接著標記
@@ -270,25 +297,50 @@ $('#bStyle').onclick = () => setLabel($('#bStyle'), M.nextStyle());
 $('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 
 /* ---------- 面板 ---------- */
-function selectTab(name) {
+const TAB_KEY = `qiji:tripTab:${tid}`;
+function saveTab() {
+  try { sessionStorage.setItem(TAB_KEY, JSON.stringify({ tab: $$('.panel-body[data-b]').find((x) => !x.hidden)?.dataset.b, more: $('#moreNav button.on')?.dataset.moreTab })); } catch { /* 私密模式 */ }
+}
+function selectTab(name, { open = true } = {}) {
   const primary = ['wp', 'events', 'mark'].includes(name) ? 'more' : name;
   $$('#tabs button').forEach((x) => x.classList.toggle('on', x.dataset.t === primary));
   $$('.panel-body[data-b]').forEach((x) => (x.hidden = x.dataset.b !== name));
-  setCollapsed(false);
+  if (open) setCollapsed(false);
+  saveTab();
   dispatchEvent(new CustomEvent('qiji:tab', { detail: { tab: name, more: $('#moreNav button.on')?.dataset.moreTab } }));
 }
-function selectMore(name) {
+function selectMore(name, opts) {
   $$('#moreNav button').forEach((x) => x.classList.toggle('on', x.dataset.moreTab === name));
   $$('.moreSection').forEach((x) => (x.hidden = x.dataset.more !== name));
-  selectTab('more');
+  selectTab('more', opts);
 }
 $('#tabs').onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) selectTab(b.dataset.t); };
 $('#moreNav').onclick = (e) => { const b = e.target.closest('[data-more-tab]'); if (b) selectMore(b.dataset.moreTab); };
 $$('[data-open-tab]').forEach((b) => { b.onclick = () => selectTab(b.dataset.openTab); });
 $$('[data-back-more]').forEach((b) => { b.onclick = () => selectTab('more'); });
 addEventListener('qiji:open-tab', (e) => { if (e.detail.more) selectMore(e.detail.more); else selectTab(e.detail.tab); });
-addEventListener('DOMContentLoaded', () => { if (['team', 'route', 'msg', 'more'].includes(location.hash.slice(1))) selectTab(location.hash.slice(1)); });
+// 網址 #分頁 優先；否則回到重新整理前的分頁（UX-49）。重新整理不改抽屜開合（開合另外記在 initPanel）
+const TABS = ['team', 'route', 'msg', 'more', 'wp', 'events', 'mark'];
+function restoreTab() {
+  const h = location.hash.slice(1);
+  if (TABS.includes(h)) { selectTab(h); return; }
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem(TAB_KEY) || 'null'); } catch { /* 略過 */ }
+  if (!saved || !TABS.includes(saved.tab)) return;
+  if (saved.more && $(`#moreNav [data-more-tab="${saved.more}"]`)) selectMore(saved.more, { open: false });
+  if (saved.tab !== 'more' || !saved.more) selectTab(saved.tab, { open: false });
+}
 
+// 橫幅：每秒重畫，但內容沒變就不動 DOM（按鈕的「再按一次確定」倒數才不會被洗掉）
+function setBanner(html, bind) {
+  const b = $('#banner');
+  b.hidden = !html;
+  if (b.dataset.html === html) return;
+  b.dataset.html = html;
+  b.innerHTML = html;
+  bind?.();
+}
+const inviteBtn = '<button class="btn" data-invite>＋ 邀請隊友</button>';
 function renderHeader() {
   const t = S.trip;
   $('#tName').textContent = t.name;
@@ -297,37 +349,53 @@ function renderHeader() {
   $('#tStatus').className = 'chip ' + cls;
   $('#tStatus').textContent = label;
   $('#tTimer').textContent = t.status === 'live' && t.started ? '已騎 ' + dur(Date.now() - +t.started) : '';
-  const b = $('#banner');
-  if (t.status === 'planned') {
-    b.hidden = false;
-    b.innerHTML = t.is_owner
-      ? '<div>行程還沒開始。等大家到齊後按開始，所有人的位置才會開始記錄。</div><button class="btn primary" id="startBtn">開始行程</button>'
-      : '<div>等待建立者開始行程。可以先到「更多 → 回報裝置」設定位置來源。</div>';
-    $('#startBtn')?.addEventListener('click', async () => {
-      try { S.trip = { ...S.trip, ...(await api(`/api/trips/${tid}/start`, { method: 'POST' })) }; renderAll(); }
-      catch (e) { toast(e.message, { icon: '!', color: '#ff3b30' }); }
-    });
-  } else if (t.status === 'ended') {
-    b.hidden = false;
-    b.innerHTML = `<div>行程已結束，可以整隊回放這一趟。</div><a class="btn primary" href="/replay?id=${tid}">看回放</a>`;
-  } else b.hidden = true;
   const meActive = S.members.get(S.me)?.u.active;
+  if (t.status === 'planned') {
+    setBanner(t.is_owner
+      ? `<div>行程還沒開始。等大家到齊後按開始，所有人的位置才會開始記錄，也會通知全隊。</div><div class="bannerBtns">${inviteBtn}<button class="btn primary" id="startBtn">開始行程</button></div>`
+      : `<div>等待建立者開始行程。可以先到「更多 → 回報裝置」設定位置來源。</div><div class="bannerBtns">${inviteBtn}</div>`,
+    () => $('#startBtn')?.addEventListener('click', (e) => {
+      // 一按就會推播給全隊：先確認一次（UX-45）
+      armConfirm(e.currentTarget, '再按一次開始（會通知全隊）', async () => {
+        try { S.trip = { ...S.trip, ...(await api(`/api/trips/${tid}/start`, { method: 'POST' })) }; renderAll(); }
+        catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+      });
+    }));
+  } else if (t.status === 'ended') {
+    setBanner(`<div>行程已結束，可以整隊回放這一趟。</div><a class="btn primary" href="/replay?id=${tid}">看回放</a>`);
+  } else if (t.status === 'live' && (meActive || t.is_owner)) {
+    // 「我騎完了」放在面板上，不用到 更多 → 回報裝置 找；建立者可以直接結束整趟（UX-10）
+    setBanner(`<div class="bannerBtns">${meActive ? '<button class="btn" id="doneBtn">我騎完了</button>' : ''}${t.is_owner ? '<button class="btn danger" id="finishBtn">結束整趟行程</button>' : ''}</div>`, () => {
+      $('#doneBtn')?.addEventListener('click', (e) => armConfirm(e.currentTarget, '再按一次結束我的紀錄', endMine));
+      $('#finishBtn')?.addEventListener('click', (e) => armConfirm(e.currentTarget, '再按一次結束全隊', async () => {
+        try { await api(`/api/trips/${tid}/finish`, { method: 'POST' }); }
+        catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+      }));
+    });
+  } else setBanner('');
   $('#endBtn').hidden = !(t.status === 'live' && meActive);
+  $('#teamInvite').hidden = t.status === 'ended';
 }
+// 邀請入口（等待卡片、隊友分頁）都打開 更多 → 邀請隊友（UX-24）
+document.addEventListener('click', (e) => { if (e.target.closest('[data-invite], #teamInvite')) selectMore('invite'); });
 
-let pendingKickUid = null;
-let kickTimer = null;
 function renderTeam() {
-  const list = [...S.members.values()];
+  // 固定順序：我在最上面，其他人依加入順序（uid），不會因為狀態變化跳來跳去（UX-60）
+  const list = [...S.members.values()].sort((a, b) => (b.u.uid === S.me) - (a.u.uid === S.me) || (+a.u.uid - +b.u.uid));
   const online = list.filter((m) => ['ride', 'rest', 'weak'].includes(statusOf(m))).length;
   $('#sOnline').textContent = `${online}/${list.length}`;
   const me = S.members.get(S.me);
-  $('#sSpeed').textContent = me?.state.speed != null && me.state.speed !== '' ? Math.round(+me.state.speed * 3.6) : '–';
+  // 失聯、訊號弱、還沒回報、已結束：最後的速度不是現在的速度，不要大字顯示（UX-46）
+  const meLive = me && ['ride', 'rest'].includes(statusOf(me));
+  $('#sSpeed').textContent = meLive && me.state.speed != null && me.state.speed !== '' ? Math.round(+me.state.speed * 3.6) : '–';
   $('#sAlt').textContent = me?.state.alt != null && me.state.alt !== '' ? Math.round(+me.state.alt) : '–';
+  $('#sSpeed').title = meLive ? '' : '目前沒有即時位置';
   $('#cOnline').textContent = $('#sOnline').textContent;
   $('#cSpeed').textContent = $('#sSpeed').textContent;
   const lagging = list.filter((m) => S.trip.flags?.[m.u.uid] === 'behind' && statusOf(m) !== 'done').length;
-  $('#quickTeam').textContent = lagging ? `${online}/${list.length} 在線 · ${lagging} 人落隊` : online < list.length ? `${online}/${list.length} 在線 · ${list.length - online} 人未連線` : `${online}/${list.length} 全員在線`;
+  // 「進團」和「正在回報位置」分開寫：大家都開著網頁、但還沒人開始回報時，不會看起來像全員離線（UX-33）
+  $('#quickTeam').textContent = `${list.length} 人進團・${online ? `${online} 人正在回報` : '還沒有人回報位置'}${lagging ? `・${lagging} 人落隊` : ''}`;
+  $('#sOnline').title = `${list.length} 人進團，${online} 人正在回報位置`;
   // 和回放頁同一種隊員表：名字＋狀態、速度、海拔、已騎、距離我；點一下鏡頭跟著他
   teamTable($('#team'), list.map((m) => {
     const st = statusOf(m), [label, cls] = STATUS[st], s = m.state;
@@ -347,21 +415,27 @@ function renderTeam() {
   // 建立者：隊員管理（移出）收在表格下面，不和點選跟拍混在一起
   const admin = S.trip.is_owner ? list.filter((m) => m.u.uid !== S.me) : [];
   const open = $('#teamAdmin details')?.open;
-  $('#teamAdmin').innerHTML = admin.length ? `<details${open ? ' open' : ''}><summary>管理隊員</summary>${admin.map((m) => `<div class="row"><span>${esc(m.u.nickname)}</span><button class="kick" data-kick="${m.u.uid}">${pendingKickUid === String(m.u.uid) ? '確定移出？' : '移出'}</button></div>`).join('')}</details>` : '';
+  // 移出鈕的無障礙名字帶上是誰（UX-57）；內容沒變就不重畫，確認倒數條才不會每秒重來
+  const html = admin.length ? `<details><summary>管理隊員</summary>${admin.map((m) => `<div class="row"><span>${esc(m.u.nickname)}</span><button class="kick" data-kick="${m.u.uid}" aria-label="移出 ${esc(m.u.nickname)}">移出</button></div>`).join('')}</details>` : '';
+  if ($('#teamAdmin').dataset.html !== html) {
+    $('#teamAdmin').dataset.html = html; $('#teamAdmin').innerHTML = html;
+    if (open && $('#teamAdmin details')) $('#teamAdmin details').open = true;
+  }
 }
-$('#teamAdmin').onclick = async (e) => {
+$('#teamAdmin').onclick = (e) => {
   const k = e.target.closest('[data-kick]');
   if (!k) return;
-  const uid = k.dataset.kick;
-  if (pendingKickUid !== uid) { pendingKickUid = uid; clearTimeout(kickTimer); renderTeam(); kickTimer = setTimeout(() => { pendingKickUid = null; renderTeam(); }, 3000); return; }
-  pendingKickUid = null; clearTimeout(kickTimer);
-  try { await api(`/api/trips/${tid}/kick`, { method: 'POST', body: { uid } }); }
-  catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  const uid = k.dataset.kick, who = S.members.get(uid)?.u.nickname || '';
+  armConfirm(k, `確定移出${who ? ' ' + who : ''}？`, async () => {
+    try { await api(`/api/trips/${tid}/kick`, { method: 'POST', body: { uid } }); }
+    catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  });
 };
 
 function renderEvents() {
   const name = (uid) => S.members.get(uid)?.u.nickname || S.trip?.people?.[uid]?.nickname || '';  // people：已被移出的人（UX-54）
-  $('#events').innerHTML = S.events.slice().reverse().map((e) => {
+  // 不同來源（警示、聊天、加入…）的事件到達順序和發生時間不一定一樣：依事件時間排，新的在上（同時間保留到達順序）（UX-35）
+  $('#events').innerHTML = S.events.slice().reverse().sort((a, b) => +b.ts - +a.ts).map((e) => {
     const [, color] = EV[e.type] || ['', 'var(--muted)'];
     return `<div class="ev"><time class="num">${clock(+e.ts)}</time><i style="--c:${color}"></i><span>${e.uid ? `<b>${esc(name(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`;
   }).join('') || '<div class="muted small">還沒有事件</div>';
@@ -377,6 +451,11 @@ function renderInvite() {
     $('#qr').innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
     $('#qr').dataset.done = '1';
   }
+  $('#shareLink').hidden = !navigator.share;
+  $('#shareLink').onclick = async () => {
+    try { await navigator.share({ title: `一起騎「${t.name}」`, text: `用騎跡加入「${t.name}」，邀請碼 ${t.invite}`, url: link }); }
+    catch (e) { if (e.name !== 'AbortError') toast('沒辦法開啟分享，改用複製連結', { icon: '!', color: '#ff9f0a' }); }
+  };
   $('#copyLink').onclick = async () => {
     try { await navigator.clipboard.writeText(link); toast('已複製邀請連結'); } catch { prompt('複製這個連結', link); }
   };
@@ -396,7 +475,14 @@ function renderLag() {
 }
 
 function renderAll() { renderHeader(); renderTeam(); renderEvents(); renderInvite(); renderLag(); }
-setInterval(() => { if (S.trip) { renderHeader(); renderTeam(); S.members.forEach(placeMarker); } }, 1000);
+setInterval(() => { if (S.trip) { renderHeader(); renderTeam(); S.members.forEach(placeMarker); describeMap(); } }, 1000);
+// 地圖給螢幕報讀器一段文字（UX-61）
+function describeMap() {
+  const list = [...S.members.values()], on = list.filter((m) => ['ride', 'rest', 'weak'].includes(statusOf(m)));
+  const who = S.follow === 'all' ? '全隊' : S.members.get(S.follow)?.u.nickname || '';
+  const txt = `地圖：${S.trip.name}，${list.length} 名隊友，${on.length} 人正在回報位置${who && !S.away ? `，鏡頭跟著${who}` : ''}`;
+  if ($('#map').getAttribute('aria-label') !== txt) { $('#map').setAttribute('aria-label', txt); map.getCanvas().setAttribute('aria-label', txt); }
+}
 
 /* ---------- WebSocket ---------- */
 // 自動重連＋斷線橫幅在 livesock.js（和戰情室共用）
@@ -423,7 +509,8 @@ function handle(msg) {
         if (m.pos) m.trail = m.trail.slice(0, -1); // 最後一點就是目前位置，由 m.pos 接上
       });
       S.events = t.events;
-            renderAll();
+      renderAll();
+      if (!S.tabRestored) { S.tabRestored = true; restoreTab(); }  // trip-extra.js 這時已經在聽 qiji:tab
       camera(true);
       break;
     }
@@ -490,21 +577,36 @@ async function wakeLock() {
 document.addEventListener('visibilitychange', () => { if (S.gps && document.visibilityState === 'visible') wakeLock(); });
 
 $('#gpsBtn').onclick = () => {
-  if (S.gps) {
-    navigator.geolocation.clearWatch(S.gps.watch);
-    S.gps = null; S.wake?.release?.(); S.wake = null;
-    $('#gpsBtn').textContent = '開始回報我的位置'; $('#gpsBtn').className = 'btn primary';
-    $('#gpsInfo').textContent = '已停止';
-    return;
-  }
+  if (S.gps) { stopGps('已停止'); return; }
   if (!navigator.geolocation) { toast('這個瀏覽器不支援定位', { icon: '!', color: '#ff3b30' }); return; }
   if (!isSecureContext) { $('#gpsInfo').textContent = '要用 HTTPS 網址（或 localhost）才能定位'; return; }
   S.gps = { last: 0, sent: 0 };
-  S.gps.watch = navigator.geolocation.watchPosition(onFix, (err) => { $('#gpsInfo').textContent = '定位失敗：' + err.message; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  S.gps.watch = navigator.geolocation.watchPosition(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
   wakeLock();
   $('#gpsBtn').textContent = '停止回報'; $('#gpsBtn').className = 'btn';
   $('#gpsInfo').textContent = '等待定位…';
 };
+function stopGps(info) {
+  if (S.gps) navigator.geolocation.clearWatch(S.gps.watch);
+  S.gps = null; S.wake?.release?.(); S.wake = null;
+  $('#gpsBtn').textContent = '開始回報我的位置'; $('#gpsBtn').className = 'btn primary';
+  $('#gpsInfo').textContent = info;
+}
+// 定位權限被拒：停止回報、按鈕改回去、面板上方顯示怎麼打開（UX-31）。逾時、暫時抓不到就繼續等
+function onGpsError(err) {
+  if (err.code === 1) { stopGps('定位權限被拒絕，沒有在回報位置'); showGpsBar(); return; }
+  $('#gpsInfo').textContent = err.code === 3 ? '還在等 GPS 訊號（到空曠的地方會比較快）…' : '暫時抓不到位置，會繼續嘗試：' + err.message;
+}
+function showGpsBar() {
+  const me = S.members.get(S.me), ts = +me?.state.ts || 0;
+  $('#gpsBar').hidden = false;
+  $('#gpsBar').innerHTML = `<b>沒有定位權限，騎跡拿不到你的位置</b>
+    <div>${ts ? `地圖上的你是 ${ago(ts)}的最後位置，不是即時的。` : '隊友在地圖上看不到你。'}iPhone：設定 → 隱私權與安全性 → 定位服務 → Safari 網站（加到主畫面的話是「騎跡」）→ 使用 App 期間；Android、電腦：點網址列左邊的圖示 → 位置 → 允許，再重新整理。</div>
+    <div class="bannerBtns"><button class="btn" id="gpsRetry">重新試一次</button><button class="btn" id="gpsTraccar">改用 Traccar</button><button class="btn" id="gpsHide">先不用</button></div>`;
+  $('#gpsRetry').onclick = () => { $('#gpsBar').hidden = true; $('#gpsBtn').click(); };
+  $('#gpsTraccar').onclick = () => { $('#gpsBar').hidden = true; selectMore('report'); };
+  $('#gpsHide').onclick = () => { $('#gpsBar').hidden = true; };
+}
 // 送出佇列（gpsqueue.js）：斷網時點先存在手機，恢復後依序補傳
 let gpsQ = null;
 let gpsAcc = null;
@@ -538,12 +640,11 @@ async function onFix(p) {
   q.push({ lat: c.latitude, lon: c.longitude, alt: c.altitude, speed: c.speed, heading: c.heading, acc: c.accuracy, batt: await battery(), ts: Math.round(p.timestamp), src: 'web' });
 }
 
-$('#endBtn').onclick = async () => {
-  const b = $('#endBtn');
-  if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = '再按一次確定結束'; return; }
-  try { await api(`/api/trips/${tid}/end`, { method: 'POST' }); if (S.gps) $('#gpsBtn').click(); b.hidden = true; }
+async function endMine() {
+  try { await api(`/api/trips/${tid}/end`, { method: 'POST' }); if (S.gps) stopGps('已結束紀錄'); $('#endBtn').hidden = true; toast('已結束你的紀錄，其他人還在騎時行程會繼續', { icon: '停' }); }
   catch (e) { toast(e.message, { icon: '!', color: '#ff3b30' }); }
-};
+}
+$('#endBtn').onclick = (e) => armConfirm(e.currentTarget, '再按一次確定結束', endMine);
 
 $('#bReplay').href = `/replay?id=${tid}`;
 $('#warLink').href = `/war?id=${tid}`;
@@ -553,3 +654,10 @@ api('/api/me/device').then((d) => ($('#trId').textContent = d.device_id)).catch(
 syncTools();
 press($('#b3d'), M.is3d);
 connect();
+navigator.permissions?.query({ name: 'geolocation' }).then((p) => {
+  // 用 Traccar 回報的人不需要網頁定位，不提醒
+  const check = () => { const me = S.members.get(S.me); if (p.state === 'denied' && S.trip?.status === 'live' && me?.u.active && me.state.src !== 'traccar') showGpsBar(); };
+  setTimeout(check, 1500);  // 等 snapshot
+  p.onchange = () => { if (p.state !== 'denied') $('#gpsBar').hidden = true; else check(); };
+}).catch(() => {});
+S.isLive = (uid) => { const m = S.members.get(uid); return !!m && ['ride', 'rest'].includes(statusOf(m)); }; // trip-extra.js：轉彎提示只在位置是即時的時候顯示

@@ -9,10 +9,10 @@ export async function api(path, opts = {}) {
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
   } catch {
-    throw new Error(navigator.onLine === false ? '沒有網路，請檢查手機訊號' : '連不到伺服器，請稍後再試');
+    throw netError(navigator.onLine === false ? '沒有網路，請檢查手機訊號' : '連不到伺服器，請稍後再試');
   }
   // Tailscale serve／反向代理在後端重啟時回 502～504
-  if (res.status >= 502 && res.status <= 504) throw new Error('伺服器暫時連不上（可能正在重新啟動），請稍後再試');
+  if (res.status >= 502 && res.status <= 504) throw netError('伺服器暫時連不上（可能正在重新啟動），請稍後再試');
   if (res.status === 401 && !location.pathname.startsWith('/login')) {
     toLogin();
     // 已經在換頁：回一個永遠不完成的 Promise，呼叫端不會再收到一堆「請先登入」的未處理錯誤（UX-53）
@@ -21,6 +21,29 @@ export async function api(path, opts = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.detail || `錯誤 ${res.status}`);
   return data;
+}
+
+// 網路斷線、伺服器重啟這類「等一下再送就會好」的錯誤：err.net = true（訊息待送佇列用，UX-56）
+function netError(msg) { const e = new Error(msg); e.net = true; return e; }
+
+// 兩段式確認（移出、開始行程、結束、解除 SOS 共用）：第一次按換成確認文字＋倒數條，
+// ms 內再按一次才執行；時間到恢復原狀。戴手套也來得及按第二下（UX-22、UX-45）
+export function armConfirm(btn, label, onConfirm, ms = 6000) {
+  if (btn.dataset.armed === '1') { disarm(btn); onConfirm(); return; }
+  btn.__orig = { html: btn.innerHTML, aria: btn.getAttribute('aria-label') };
+  btn.dataset.armed = '1';
+  btn.textContent = label;
+  if (btn.__orig.aria != null) btn.setAttribute('aria-label', label);
+  btn.style.setProperty('--arm', ms + 'ms');
+  btn.classList.add('arming');
+  btn.__armT = setTimeout(() => disarm(btn), ms);
+}
+export function disarm(btn) {
+  clearTimeout(btn.__armT);
+  if (btn.dataset.armed !== '1') return;
+  btn.dataset.armed = '';
+  btn.classList.remove('arming');
+  if (btn.__orig) { btn.innerHTML = btn.__orig.html; if (btn.__orig.aria != null) btn.setAttribute('aria-label', btn.__orig.aria); }
 }
 
 export function toLogin() {

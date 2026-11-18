@@ -1,7 +1,7 @@
 // 行程頁的 M3／M4 功能：集合點、前方測速、快速訊息、地圖標註、SOS、路線（進度條、轉彎提示）。
 // 和 trip.js 分開放，避免和畫面設計的改動互相衝突。trip.js 只提供三個掛鉤：
 //   window.qijiM（地圖包裝）、window.qijiState（頁面狀態）、window 的 'qiji:msg' 事件（每則 WebSocket 訊息）
-import { api, tripGate, $, esc, toast, clock } from '/assets/common.js';
+import { api, tripGate, armConfirm, $, esc, toast, clock, ago } from '/assets/common.js';
 import { mountPushCard } from '/assets/push.js';
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -244,10 +244,52 @@ function setUnread(n) {
   C.unread = n;
   msgBtn.dataset.badge = n ? (n > 99 ? '99+' : String(n)) : '';
   msgBtn.title = n ? `訊息（${n} 則未讀）` : '快速訊息與聊天';
+  // 徽章是 CSS 偽元素，螢幕報讀器念不到：另外放一段看不見的文字（UX-57）
+  msgBtn.innerHTML = `訊息${n ? `<span class="srOnly">（${n} 則未讀）</span>` : ''}`;
+}
+// 斷網（隧道、山區）時送不出去的快速訊息和聊天先存在這支手機（sessionStorage），恢復連線後依序補送（UX-56）
+const OUT_KEY = `qiji:outbox:${tid}`;
+let outbox = [];
+try { outbox = JSON.parse(sessionStorage.getItem(OUT_KEY) || '[]'); } catch { outbox = []; }
+const saveOutbox = () => { try { sessionStorage.setItem(OUT_KEY, JSON.stringify(outbox)); } catch { /* 私密模式 */ } };
+const PATH = { msg: 'messages', chat: 'chat' };
+function queueOut(kind, text) {
+  outbox.push({ kind, text, at: Date.now() });
+  saveOutbox();
+  toast(`沒有網路，「${text}」先存在手機，恢復連線後自動送出`, { icon: '!', color: '#ff9f0a' });
+  renderOutbox();
+}
+let flushing = false;
+async function flushOutbox() {
+  if (flushing || !outbox.length || navigator.onLine === false) return;
+  flushing = true;
+  let sent = 0;
+  try {
+    while (outbox.length) {
+      const o = outbox[0];
+      try { await api(`/api/trips/${tid}/${PATH[o.kind]}`, { method: 'POST', body: { text: o.text } }); sent++; }
+      catch (err) {
+        if (err.net) break;  // 還是連不上：留著下次再送
+        toast(`「${o.text}」送不出去：${err.message}`, { icon: '!', color: '#ff3b30' });  // 例如行程已結束：丟掉，不要一直重試
+      }
+      outbox.shift(); saveOutbox();
+      if (outbox.length) await new Promise((ok) => setTimeout(ok, 2100));  // 快速訊息 2 秒只能發一則
+    }
+  } finally { flushing = false; renderOutbox(); }
+  if (sent) toast(`已補送 ${sent} 則訊息`, { icon: '訊' });
+}
+addEventListener('online', () => setTimeout(flushOutbox, 1500));
+setInterval(flushOutbox, 10000);
+function renderOutbox() {
+  const el = $('#qcOutbox');
+  if (!el) return;
+  el.hidden = !outbox.length;
+  el.innerHTML = outbox.length ? `待送 ${outbox.length} 則：${outbox.map((o) => `「${esc(o.text)}」`).join('、')}，恢復連線後自動送出 <button type="button" class="qc-more" id="qcRetry">現在重試</button>` : '';
 }
 async function sendMsg(text) {
+  if (outbox.length) { queueOut('msg', text); flushOutbox(); return; }  // 前面還有沒送出的：排在後面，順序才不會亂
   try { await api(`/api/trips/${tid}/messages`, { method: 'POST', body: { text } }); toast(`已送出「${text}」`, { icon: '訊' }); }
-  catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  catch (err) { if (err.net) queueOut('msg', text); else toast(err.message, { icon: '!', color: '#ff3b30' }); }
 }
 async function loadChat(before) {
   const q = new URLSearchParams({ limit: 40 });
@@ -280,7 +322,8 @@ function renderMsgPanel() {
     <div class="qx-presets">${PRESETS.map((t) => `<button class="btn" data-say="${esc(t)}">${esc(t)}</button>`).join('')}</div>
     <div class="qx-head qc-head"><b>聊天</b></div>
     <div class="qc-list" id="qcList"><div class="small muted qc-empty">載入中…</div></div>
-    <form class="qx-inline" id="chatForm"><input class="input" id="chatInput" name="t" maxlength="200" placeholder="說點什麼…" autocomplete="off" enterkeyhint="send"><button class="btn primary" style="flex:none">送出</button></form>`;
+    <div class="small qc-outbox" id="qcOutbox" role="status" hidden></div>
+    <form class="qx-inline qc-form" id="chatForm"><input class="input" id="chatInput" name="t" maxlength="200" placeholder="說點什麼…" autocomplete="off" enterkeyhint="send"><button class="btn primary" style="flex:none">送出</button></form>`;
   const input = $('#chatInput');
   input.value = C.draft;
   input.addEventListener('input', () => { C.draft = input.value; });
@@ -288,17 +331,23 @@ function renderMsgPanel() {
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
+    if (outbox.length) { queueOut('chat', text); input.value = C.draft = ''; flushOutbox(); return; }
     try {
       await api(`/api/trips/${tid}/chat`, { method: 'POST', body: { text } });
       input.value = C.draft = '';
-    } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+    } catch (err) {
+      if (err.net) { queueOut('chat', text); input.value = C.draft = ''; }
+      else toast(err.message, { icon: '!', color: '#ff3b30' });
+    }
   });
+  renderOutbox();
   if (C.loaded) { renderChatList(); markRead(); }
   loadChat().then(() => { renderChatList(); markRead(); }).catch(() => { $('#qcList').innerHTML = '<div class="small muted qc-empty">聊天紀錄載入失敗</div>'; });
 }
 pop.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-say]');
   if (b) sendMsg(b.dataset.say);
+  if (e.target.closest('#qcRetry')) flushOutbox();
   if (e.target.closest('#qcMore')) {
     const box = $('#qcList'), h = box.scrollHeight;
     await loadChat(C.items[0]?.id);
@@ -400,29 +449,57 @@ document.body.append(banner);
 X.sos = [];
 let hold = null;
 function mineSos() { return X.sos.find((e) => e.uid === S.me); }
-function syncSosBtn() { sosBtn.classList.toggle('active', !!mineSos()); sosBtn.querySelector('span').textContent = mineSos() ? '解除求救' : '按住 1.5 秒發出 SOS'; sosOpen.textContent = mineSos() ? '解除' : 'SOS'; sosOpen.setAttribute('aria-label', mineSos() ? '開啟解除求救選單' : '開啟緊急求救選單'); }
+const HOLD_MS = 1500;
+const sosHint = $('#sosHint');
+function syncSosBtn() {
+  const on = !!mineSos();
+  sosOpen.textContent = on ? '解除' : 'SOS'; sosOpen.setAttribute('aria-label', on ? '開啟解除求救選單' : '開啟緊急求救選單');
+  sosHint.textContent = on ? '你的 SOS 還在，隊友都看得到。沒事了就點一下按鈕，再點一次確認解除，隊友會收到「SOS 解除」。'
+    : '按住不放 1.5 秒，圓環填滿就會發出，全隊都會收到通知和你的位置。';
+  if (sosBtn.dataset.armed === '1' || hold) return;  // 正在確認解除／正在長按：不要洗掉倒數
+  sosBtn.classList.toggle('active', on);
+  sosBtn.querySelector('span').textContent = on ? '解除求救' : '按住 1.5 秒發出 SOS';
+}
+// 長按：按鈕裡的圓環和底色跟著填滿，旁邊倒數秒數（UX-22）
 function beginSosHold() {
-  if (mineSos()) return;
-  if (hold) return;
+  if (mineSos() || hold) return;
   sosBtn.classList.add('holding');
-  hold = setTimeout(async () => {
-    hold = null; sosBtn.classList.remove('holding');
+  const t0 = performance.now(), span = sosBtn.querySelector('span');
+  const step = (now) => {
+    if (!hold) return;
+    const k = Math.min(1, (now - t0) / HOLD_MS);
+    sosBtn.style.setProperty('--p', k.toFixed(3));
+    span.textContent = k < 1 ? `繼續按住… ${((HOLD_MS * (1 - k)) / 1000).toFixed(1)} 秒` : '發出中…';
+    if (k < 1) hold.raf = requestAnimationFrame(step);
+  };
+  hold = { raf: 0, timer: setTimeout(async () => {
+    cancelAnimationFrame(hold?.raf); hold = null; sosBtn.classList.remove('holding'); sosBtn.style.setProperty('--p', 0);
     try { await api(`/api/trips/${tid}/sos`, { method: 'POST' }); navigator.vibrate?.(300); }
     catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
-  }, 1500);
+    syncSosBtn();
+  }, HOLD_MS) };
+  hold.raf = requestAnimationFrame(step);
 }
 sosBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); beginSosHold(); });
-const stopHold = () => { if (hold) { clearTimeout(hold); hold = null; sosBtn.classList.remove('holding'); toast('SOS 要按住 1.5 秒才會發出', { icon: 'S', color: '#ff3b30' }); } };
+const stopHold = () => {
+  if (!hold) return;
+  clearTimeout(hold.timer); cancelAnimationFrame(hold.raf); hold = null;
+  sosBtn.classList.remove('holding'); sosBtn.style.setProperty('--p', 0);
+  syncSosBtn();
+  toast('SOS 要按住 1.5 秒（圓環填滿）才會發出', { icon: 'S', color: '#ff3b30' });
+};
 sosBtn.addEventListener('pointerup', stopHold);
 sosBtn.addEventListener('pointerleave', stopHold);
 sosBtn.addEventListener('pointercancel', stopHold);
 sosBtn.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); beginSosHold(); } });
 sosBtn.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); stopHold(); } });
-sosBtn.addEventListener('click', async () => {
+// 解除：第一次點換成「再點一次解除 SOS」＋6 秒倒數條，時間到恢復（UX-22）
+sosBtn.addEventListener('click', () => {
   if (!mineSos()) return;
-  if (sosBtn.dataset.confirm !== '1') { sosBtn.dataset.confirm = '1'; sosBtn.querySelector('span').textContent = '確定？'; setTimeout(() => { sosBtn.dataset.confirm = ''; syncSosBtn(); }, 3000); return; }
-  sosBtn.dataset.confirm = '';
-  try { await api(`/api/trips/${tid}/sos`, { method: 'DELETE' }); } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  armConfirm(sosBtn, '再點一次解除 SOS', async () => {
+    try { await api(`/api/trips/${tid}/sos`, { method: 'DELETE' }); } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+    syncSosBtn();
+  });
 });
 function kmFromMe(lon, lat) {
   const me = S.members.get(S.me);
@@ -434,8 +511,10 @@ function renderSos() {
   banner.hidden = !X.sos.length;
   banner.innerHTML = X.sos.map((e) => {
     const km = e.uid === S.me ? null : kmFromMe(e.lon, e.lat);
+    // 位置是發出時伺服器上最後一個點；超過 1 分鐘就寫「最後位置 N 前」（UX-04）
+    const old = e.pos_ts && Date.now() - +e.pos_ts > 60000 ? ` · 最後位置 ${ago(+e.pos_ts)}` : '';
     return `<div class="qx-sosrow"><b>SOS</b><div class="grow"><div class="t1">${esc(nameOf(e.uid) || '隊友')} 需要幫忙</div>
-      <div class="t2">${clock(+e.ts)}${km != null ? ` · 距離我 ${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'}` : ''}${e.lat == null ? ' · 沒有位置' : ''}</div></div>
+      <div class="t2">${clock(+e.ts)}${km != null ? ` · 距離我 ${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'}` : ''}${old}${e.lat == null ? ' · 沒有位置紀錄' : ''}</div></div>
       ${e.lat != null ? `<button class="btn" data-sosgo="${e.lon},${e.lat}">看位置</button>` : ''}</div>`;
   }).join('');
 }
@@ -470,21 +549,10 @@ async function loadRoute() {
   map.getSource('qx-route')?.setData(routeGeo());
   renderProgress();
   if (X.open === 'route') render();
-  setTimeout(idleFit, 300);
+  // 還沒有人在騎時，鏡頭先框路線（trip.js fitFallback：沒有路線就框有位置的人，再不行就框台灣）
+  S.routeCoords = X.route?.coords || null;
+  S.fitFallback?.();
 }
-
-// 還沒有人有位置時，鏡頭先對準路線（沒有路線就對準全台），不要停在預設位置
-let idleFitted = false;
-function idleFit() {
-  if (idleFitted || [...S.members.values()].some((m) => m.pos) || Date.now() - (S.lastInteract || 0) < 10000) return;
-  idleFitted = true;
-  S.pad = S.refreshPad ? (S.refreshPad(), S.pad) : S.pad;
-  const c = X.route?.coords;
-  const b = c?.length ? c.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(c[0], c[0]))
-    : new maplibregl.LngLatBounds([119.9, 21.8], [122.1, 25.4]);
-  map.fitBounds(b, { padding: S.pad, maxZoom: 14, duration: 0 });
-}
-setTimeout(idleFit, 2500);
 
 // 集合點投影到路線上（前端算就好：點數少）
 function routeKmOf(lon, lat) {
@@ -528,7 +596,8 @@ function renderProgress() {
 const ARROW = { 7: '↑', 8: '↑', 22: '↑', 9: '↗', 10: '↱', 11: '↱', 12: '⤸', 13: '⤹', 14: '↰', 15: '↰', 16: '↖', 23: '↗', 24: '↖', 26: '⟳', 27: '⟳', 4: '⚑', 5: '⚑', 6: '⚑', 36: '⚑' };
 function renderTurn() {
   const me = X.prog[S.me];
-  if (!X.route || !me || S.trip?.status !== 'live' || !S.members.get(S.me)?.u.active) { turnCard.hidden = true; return; }
+  // 自己的位置不是即時的（定位被拒、失聯、還沒回報）：舊位置算出來的「偏離路線」「N m 後右轉」會誤導，先收起來（UX-31）
+  if (!X.route || !me || S.trip?.status !== 'live' || !S.members.get(S.me)?.u.active || !S.isLive?.(S.me)) { turnCard.hidden = true; return; }
   turnCard.hidden = false;
   if (me.off > 150) {
     turnCard.className = 'qx-turn glass off';
