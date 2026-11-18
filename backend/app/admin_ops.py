@@ -62,28 +62,11 @@ async def trips():
 
 @router.post("/trips/{tid}/end")
 async def end_trip(tid: str):
-    from . import events
+    from .trips import end_whole_trip
     trip = await get_trip(tid)
     if trip.get("status") != "live":
         raise HTTPException(409, "只有進行中的行程可以強制結束")
-    members = await r.smembers(K.members(tid))
-    active = await r.smembers(K.active(tid))
-    now = int(time.time() * 1000)
-    async with r.pipeline(transaction=True) as p:
-        p.hset(K.trip(tid), mapping={"status": "ended", "ended_at": now, "ended_reason": "管理者強制結束"})
-        p.delete(K.active(tid))
-        for uid in members | active:
-            if await r.get(K.active_trip(uid)) == tid:
-                p.delete(K.active_trip(uid))
-            p.delete(K.hb(tid, uid))
-            if uid in active:
-                p.hset(K.state(tid, uid), "status", "done")
-        await p.execute()
-    await events.emit(tid, "end", None, "管理者強制結束行程")
-    await events.publish(tid, {"kind": "trip", "status": "ended"})
-    from . import replay
-    import asyncio
-    asyncio.create_task(replay.warm(tid))  # 重算每個人的統計（跟回放一致）並預熱回放
+    await end_whole_trip(tid, "管理者強制結束")  # 重算每個人的統計（跟回放一致）並預熱回放
     return {"ok": True, "id": tid}
 
 

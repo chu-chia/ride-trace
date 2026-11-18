@@ -34,6 +34,18 @@ async def my_position(tid: str, uid: str):
     return (float(lat), float(lon), int(float(ts))) if lat and lon else None
 
 
+def ago_text(sec: float) -> str:
+    """推播、事件用的「N 秒／分鐘／小時前」。"""
+    sec = max(0, int(sec))
+    if sec < 60:
+        return f"{sec} 秒前"
+    if sec < 3600:
+        return f"{sec // 60} 分鐘前"
+    if sec < 86400:
+        return f"{sec // 3600} 小時前"
+    return f"{sec // 86400} 天前"
+
+
 async def event_ts(tid: str, uid: str) -> int | None:
     """和人有關的事件用他裝置回報的時間（交接紀錄設計決定 4）：模擬器重播、斷訊補傳時回放才對得上軌跡。
     但只在他最近 60 秒內有回報時才用；只看不回報的人用伺服器時間（回傳 None）。"""
@@ -154,8 +166,14 @@ async def raise_sos(tid: str, uid: str, via: str = "") -> dict | None:
     if await r.hexists(K.sos(tid), uid):
         return None
     pos = await my_position(tid, uid)
-    extra = {"lat": pos[0], "lon": pos[1]} if pos else {}
-    text = "發出 SOS 求救" + (f"（{via}）" if via else "") + ("" if pos else "（還沒有位置）")
+    if not pos:
+        # 這趟還沒有位置（例如 Traccar 在行程開始前送的點、或剛加入）：退回這個人最後一個軌跡點（UX-04）
+        lat, lon, ts = await r.hmget(K.last(uid), "lat", "lon", "ts")
+        pos = (float(lat), float(lon), int(float(ts))) if lat and lon and ts else None
+    extra = {"lat": pos[0], "lon": pos[1], "pos_ts": pos[2]} if pos else {}
+    age_s = (time.time() * 1000 - pos[2]) / 1000 if pos else None
+    where = ("" if age_s is not None and age_s < 60 else f"（最後位置 {ago_text(age_s)}）") if pos else "（沒有任何位置紀錄）"
+    text = "發出 SOS 求救" + (f"（{via}）" if via else "") + where
     ev = await events.emit(tid, "sos", uid, text, ts=await event_ts(tid, uid), **extra)
     # HSETNX：兩個請求同時進來時只留第一個事件
     await r.hsetnx(K.sos(tid), uid, ev["id"])

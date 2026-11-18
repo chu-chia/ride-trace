@@ -179,6 +179,39 @@ async def end_my_record(tid: str, uid: str = Depends(current_uid)):
     return await finish_record(tid, uid)
 
 
+@router.post("/{tid}/finish")
+async def finish_whole_trip(tid: str, uid: str = Depends(current_uid)):
+    """建立者結束整趟行程（UX-10）：不用等每個人都按「我騎完了」。"""
+    t = await trip_or_404(tid)
+    if t.get("owner") != uid:
+        raise HTTPException(403, "只有建立者可以結束整趟行程")
+    if t.get("status") != "live":
+        raise HTTPException(409, "只有進行中的行程可以結束")
+    await end_whole_trip(tid, "建立者結束行程", uid)
+    return {"ok": True, "ended": True}
+
+
+async def end_whole_trip(tid: str, reason: str, by: str | None = None):
+    """一次結束整趟行程：所有人的紀錄一起停、行程變 ended（建立者結束、管理者強制結束共用）。"""
+    members = await r.smembers(K.members(tid))
+    active = await r.smembers(K.active(tid))
+    olds = {m: await r.get(K.active_trip(m)) for m in members | active}
+    async with r.pipeline(transaction=True) as p:
+        p.hset(K.trip(tid), mapping={"status": "ended", "ended_at": now_ms(), "ended_reason": reason})
+        p.delete(K.active(tid))
+        for m, old in olds.items():
+            if old == tid:
+                p.delete(K.active_trip(m))
+            p.delete(K.hb(tid, m))
+            if m in active:
+                p.hset(K.state(tid, m), "status", "done")
+        await p.execute()
+    await events.emit(tid, "end", by, "結束整趟行程" if by else reason)
+    await events.publish(tid, {"kind": "trip", "status": "ended"})
+    from . import replay  # replay 也 import trips，放這裡避免循環
+    asyncio.create_task(replay.warm(tid))  # 重算每個人的統計（跟回放一致）並預熱回放
+
+
 async def leave_old_active(uid: str, old: str | None, new_tid: str):
     """一個人同時只會在一個行程裡回報。加入／開始新行程前，把他從舊行程的 active 移出（等同在舊行程按「結束紀錄」），
     不然舊行程會因為他永遠是 live、他的心跳不再續期而被當成失聯，全員到齊也永遠等不到他。"""
