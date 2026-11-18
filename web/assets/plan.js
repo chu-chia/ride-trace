@@ -1,6 +1,6 @@
 // 規劃路線頁：在網頁裡搜尋地點、加停靠點（自動插在繞路最少的位置）、選交通工具、比較 1～3 條路線、
 // 沿路線找加油站等，最後套用到行程。Google Maps 匯入只是選用。
-import { api, $, esc, toast } from '/assets/common.js';
+import { api, $, esc, toast, initPanel, setLabel, press } from '/assets/common.js';
 import { createMap, addCompass } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('trip');
@@ -21,7 +21,11 @@ const VEH_NOTE = {
   car: '汽車：國道、快速道路都可以',
 };
 const hm = (min) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
-const pad = () => (innerWidth <= 760 ? { top: 60, bottom: innerHeight * 0.58 + 30, left: 30, right: 30 } : { top: 60, bottom: 60, left: 440, right: 80 });
+initPanel($('#panel'), 'plan', { defaultSmall: false });
+// 地圖留白：避開左側欄（手機是下方抽屜）與右上工具列
+const pad = () => (innerWidth <= 760
+  ? { top: 60, bottom: innerHeight - $('#panel').getBoundingClientRect().top + 30, left: 30, right: 64 }
+  : { top: 60, bottom: 60, left: $('#panel').offsetWidth + 50, right: 90 });
 const dist = (a, b) => new maplibregl.LngLat(a.lon, a.lat).distanceTo(new maplibregl.LngLat(b.lon, b.lat));
 
 /* ---------- 地圖圖層：選中的路線＋其他方案（灰色，可點） ---------- */
@@ -34,13 +38,13 @@ M.onStyle(() => {
   if (!map.getLayer('plan-alt')) map.addLayer({ id: 'plan-alt', type: 'line', source: 'plan', filter: ['!', ['get', 'on']], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#8e8e93', 'line-width': 5, 'line-opacity': 0.7 } });
   if (!map.getLayer('plan-casing')) map.addLayer({ id: 'plan-casing', type: 'line', source: 'plan', filter: ['get', 'on'], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#0b3d91', 'line-width': 8, 'line-opacity': 0.6 } });
   if (!map.getLayer('plan-line')) map.addLayer({ id: 'plan-line', type: 'line', source: 'plan', filter: ['get', 'on'], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#2997ff', 'line-width': 4.5 } });
-  $('#bStyle').textContent = M.styleName;
+  setLabel($('#bStyle'), M.styleName);
 });
 map.on('click', 'plan-alt', (e) => { const i = e.features?.[0]?.properties?.i; if (i != null) { e.preventDefault(); selectRoute(+i); } });
 map.on('mouseenter', 'plan-alt', () => (map.getCanvas().style.cursor = 'pointer'));
 map.on('mouseleave', 'plan-alt', () => (map.getCanvas().style.cursor = ''));
-$('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
-$('#b3d').onclick = () => { M.set3d(!M.is3d); $('#b3d').classList.toggle('on', M.is3d); };
+$('#bStyle').onclick = () => setLabel($('#bStyle'), M.nextStyle());
+$('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 
 /* ---------- 停靠點 ---------- */
 const label = (i) => (i === 0 ? '起' : i === P.pts.length - 1 && P.pts.length > 1 ? '終' : String(i));
@@ -182,11 +186,12 @@ function showRoutes(fit) {
   $('#result').hidden = !r;
   $('#apply').disabled = !r || !P.trip?.is_owner;
   clearAlong();
-  if (!r) { $('#msg').innerHTML = ''; return; }
+  if (!r) { $('#msg').innerHTML = ''; $('#miniRoute').textContent = '還沒有路線'; return; }
   const w = r.warnings || [];
   $('#msg').innerHTML = (w.length ? `<div class="warn">⚠ 這條路線用到${{ scooter: '機車', heavy: '重機' }[P.vehicle] || ''}不能走的路段：${w.map(esc).join('、')}。可能是沒有其他路可以到，請加停靠點改道。</div>` : '')
     + (r.uses_3a ? '<div class="note">這條路線有走國道3甲（重機可以行駛）。</div>' : '');
-  $('#optTitle').textContent = P.routes.length > 1 ? `路線（${P.routes.length} 個方案，點選或點地圖上的灰線切換）` : '路線';
+  $('#optTitle').textContent = P.routes.length > 1 ? `${P.routes.length} 個方案` : '路線';
+  $('#miniRoute').textContent = `${r.summary.km.toFixed(1)} km · ${hm(r.summary.min_personal || r.summary.min)}`;
   $('#opts').innerHTML = P.routes.map((x, i) => {
     const s = x.summary;
     return `<button class="opt${i === P.sel ? ' on' : ''}" data-opt="${i}">
@@ -195,7 +200,7 @@ function showRoutes(fit) {
         <span class="tag">${s.km.toFixed(1)} km</span></div>
       <div class="r2">${esc(x.via || '')}</div></button>`;
   }).join('');
-  $('#paceNote').textContent = r.summary.min_personal ? '「依你的速度」是用你過去一年的足跡，依道路種類（省道／縣道、市區／郊區、彎路）算出的實際平均速度，含紅燈等短暫停車。' : '';
+  $('#paceNote').textContent = '';
   $('#turnCount').textContent = `${r.maneuvers.length} 個`;
   $('#turns').innerHTML = r.maneuvers.map((m) => `<div class="turn"><i class="num">${m.km.toFixed(1)} km</i><span>${esc(m.act)}${m.street ? ' · ' + esc(m.street) : ''}</span></div>`).join('');
   if (fit) {
