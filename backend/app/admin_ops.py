@@ -70,7 +70,7 @@ async def end_trip(tid: str):
     active = await r.smembers(K.active(tid))
     now = int(time.time() * 1000)
     async with r.pipeline(transaction=True) as p:
-        p.hset(K.trip(tid), mapping={"status": "ended", "ended_at": now})
+        p.hset(K.trip(tid), mapping={"status": "ended", "ended_at": now, "ended_reason": "管理者強制結束"})
         p.delete(K.active(tid))
         for uid in members | active:
             if await r.get(K.active_trip(uid)) == tid:
@@ -79,6 +79,7 @@ async def end_trip(tid: str):
             if uid in active:
                 p.hset(K.state(tid, uid), "status", "done")
         await p.execute()
+    await events.emit(tid, "end", None, "管理者強制結束行程")
     await events.publish(tid, {"kind": "trip", "status": "ended"})
     from . import replay
     import asyncio
@@ -100,7 +101,7 @@ async def restart_trip(tid: str):
         raise HTTPException(409, f"成員已有其他進行中的行程：{', '.join(sorted(conflicts))}")
     async with r.pipeline(transaction=True) as p:
         p.hset(K.trip(tid), mapping={"status": "live", "started": int(time.time() * 1000)})
-        p.hdel(K.trip(tid), "ended_at")
+        p.hdel(K.trip(tid), "ended_at", "ended_reason")
         p.sadd(K.active(tid), *members)
         for uid in members:
             p.set(K.active_trip(uid), tid)

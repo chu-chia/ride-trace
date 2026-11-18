@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, Query
 from .auth import current_uid
 from .db import K, r
 from .events import event_from_stream
-from .geo import MAX_SPEED_KMH, MOVING_KMH, haversine_m, is_rough, step
-from .trips import require_member, trip_detail
+from .geo import ALT_MAX_M, ALT_MIN_M, MAX_SPEED_KMH, MOVING_KMH, haversine_m, is_rough, step
+from .trips import former_people, require_member, trip_detail
 
 router = APIRouter(prefix="/api/trips")
 
@@ -60,22 +60,26 @@ def summarize(pts: list[list]) -> dict:
             speeds.append(b[4])
             if not (len(b) > 6 and is_rough(b[6])):
                 reported.append(b[4])
-        if b[3] is not None:
+        if b[3] is not None and ALT_MIN_M <= b[3] <= ALT_MAX_M:  # 海拔明顯不合理（GPS 亂跳）的點不算爬升
             if last_alt is None:
                 last_alt = b[3]
             elif abs(b[3] - last_alt) >= 3:  # 3 公尺門檻，避免 GPS 雜訊灌水
                 if b[3] > last_alt:
                     climb += b[3] - last_alt
                 last_alt = b[3]
-    alts = [p[3] for p in pts if p[3] is not None]
+    alts = [p[3] for p in pts if p[3] is not None and ALT_MIN_M <= p[3] <= ALT_MAX_M]
     speeds.sort()
     # 極速：手機回報速度的最大值（跟即時統計一樣）；沒有回報速度時才用換算速度的 99 百分位（位置換算有跳點）
     max_kmh = max(reported) if reported else (speeds[int(len(speeds) * 0.99)] if speeds else 0)
+    avg = dist / 1000 / (moving / 3600) if moving else 0
+    # 平均不可能比極速快：里程是位置換算、極速是手機回報的速度，資料瞬移（模擬、GPS 亂跳）時兩者會對不上
+    if max_kmh > 0:
+        avg = min(avg, max_kmh)
     return {
         "km": round(dist / 1000, 2),
         "duration_ms": pts[-1][0] - pts[0][0],
         "moving_ms": int(moving * 1000),
-        "avg_kmh": round(dist / 1000 / (moving / 3600), 1) if moving else 0,
+        "avg_kmh": round(avg, 1),
         "max_kmh": round(max_kmh, 1),
         "climb_m": round(climb),
         "max_alt": round(max(alts)) if alts else None,
@@ -183,6 +187,11 @@ async def replay(tid: str, uid: str = Depends(current_uid)):
                     "ts": int(f.get("ts") or i.split("-")[0])})
     evs.sort(key=lambda e: e["ts"])
     detail["events"] = evs
+    detail["people"] = await former_people(detail["members"], evs)
+    if detail.get("status") == "ended" and not detail.get("ended_reason"):
+        # 舊行程沒存 ended_reason：用最後一筆「結束」事件的說明
+        ends = [e for e in evs if e.get("type") == "end"]
+        detail["ended_reason"] = ends[-1]["text"] if ends else ""
     detail["t0"], detail["t1"] = t0, t1
     return detail
 
