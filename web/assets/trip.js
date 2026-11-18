@@ -1,5 +1,5 @@
 import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
-import { createMap, declutter } from '/assets/mapbase.js';
+import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
 import { gpsQueue } from '/assets/gpsqueue.js';
 
@@ -33,6 +33,7 @@ const fmtKm = (km) => (Math.abs(km) < 1 ? Math.round(Math.abs(km) * 1000) + ' m'
 
 // 預設深色＋3D（山的地形＋城市建築）
 const M = createMap($('#map'), { style: 'dark', zoom: 7, terrain: true });
+addCompass(M, document.querySelector('.tools'));  // 指北針：點一下北方朝上
 const map = M.map;
 map.setPitch(55);
 window.qijiMap = map; // 方便在主控台除錯

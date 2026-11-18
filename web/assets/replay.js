@@ -1,6 +1,6 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
 import { api, $, $$, dock, esc, avatar, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
-import { createMap, declutter } from '/assets/mapbase.js';
+import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 
 // 寬螢幕：標題列（返回、行程名）併進右側面板頂端；手機維持浮在左上（先做，避免資料載完才跳版面）
 dock($('.topbar'), $('.panel'), '(min-width: 861px)');
@@ -16,6 +16,7 @@ const PLAY = '<svg width="16" height="16" viewBox="0 0 12 12"><path d="M3 1.5v9l
 const PAUSE = '<svg width="16" height="16" viewBox="0 0 12 12"><rect x="2.5" y="1.5" width="2.6" height="9" fill="currentColor"/><rect x="7" y="1.5" width="2.6" height="9" fill="currentColor"/></svg>';
 
 const M = createMap($('#map'), { style: 'dark', zoom: 7, terrain: true });
+addCompass(M, document.querySelector('.tools'));  // 指北針：點一下北方朝上
 const map = M.map;
 window.qijiMap = map;
 

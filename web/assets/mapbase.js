@@ -48,6 +48,7 @@ const LOOK = {
   },
 };
 const BUILDING_ID = 'qiji-buildings-3d';
+const BUILDING_FLAT_ID = 'qiji-buildings-2d';  // 2D 用的平面建築（不立體，從正上方看才不會歪斜）
 
 // 深藍底圖：把 Liberty 的每一層依「是什麼」換色。只改顏色，不動資料與篩選。
 const NAVY = {
@@ -165,6 +166,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => {}) });  // 其他方法（follow、set3d…）都是空的
   }
   if (!interactive3d && interactive) map.touchZoomRotate.disableRotation();
+  if (!terrain) map.setMaxPitch(0);
 
   // 底圖、地形圖磚還沒出來前畫面是一片黑：先放「地圖載入中」，圖磚到齊就收掉
   const loadingEl = document.createElement('div');
@@ -202,6 +204,36 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
         },
       }, firstSymbol());
     }
+    if (!map.getLayer(BUILDING_FLAT_ID)) {
+      map.addLayer({
+        id: BUILDING_FLAT_ID, type: 'fill', source: 'openmaptiles', 'source-layer': 'building', minzoom: 13,
+        paint: { 'fill-color': lo, 'fill-opacity': look.buildingOpacity, 'fill-outline-color': mid },
+      }, firstSymbol());
+    }
+    applyDim();
+  }
+
+  // 真的 2D：建築改平面、不能傾斜（鏡頭鎖 pitch 0）、沒有天空；3D：立體建築＋地形＋可傾斜
+  function applyDim() {
+    const vis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
+    vis(BUILDING_ID, is3d);
+    vis(BUILDING_FLAT_ID, !is3d);
+    map.setMaxPitch(is3d ? 80 : 0);
+    if (interactive && interactive3d) {
+      // 2D 仍可旋轉（右鍵／Ctrl 拖曳、雙指旋轉），只是不會傾斜
+      if (is3d) { map.touchPitch.enable(); map.dragRotate.enable(); } else map.touchPitch.disable();
+    }
+    renderHint();
+  }
+
+  // 電腦操作 3D 時，下方提示怎麼旋轉視角（手機用雙指，不顯示）
+  const hint = document.createElement('div');
+  hint.className = 'map-hint glass';
+  hint.textContent = '按住 Ctrl 拖曳可以旋轉視角';
+  hint.hidden = true;
+  if (interactive && interactive3d) el.after(hint);
+  function renderHint() {
+    hint.hidden = !(is3d && matchMedia('(hover: hover) and (pointer: fine)').matches);
   }
 
   function applyTerrain() {
@@ -215,12 +247,15 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'dem-hs', paint: LOOK[cur].hillshade }, firstSymbol());
     }
     map.setTerrain(is3d ? { source: 'dem', exaggeration: 1.4 } : null);
-    map.setSky(LOOK[cur].sky);
+    if (is3d) map.setSky(LOOK[cur].sky);
+    applyDim();
   }
 
   // MapLibre 5 的鏡頭動畫被打斷時，地形高度可能停在 0（鏡頭會鑽進 3000 公尺的山裡）。
   // 每次停下來就把畫面中心的高度校正成地形高度。
   let following = false, smoothEl = null, lastT = 0;
+  let busyUntil = 0;  // 鏡頭動畫（指北針、2D/3D）結束前，跟隨模式不要每格重設鏡頭把動畫打斷
+  const animate = (opts) => { busyUntil = performance.now() + (opts.duration ?? 500) + 80; map.easeTo(opts); };
   let grp = null, grpT = 0; // 全隊鏡頭目前的（平滑後）中心與縮放
   function fixElevation() {
     if (following || !is3d || !map.getTerrain() || map.isMoving()) return;
@@ -252,6 +287,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     // 而是周圍取幾個點平均後再慢慢追，看起來就是平穩地沿著山坡移動。
     follow(center, extra = {}) {
       const now = performance.now();
+      if (now < busyUntil) { lastT = now; return; }  // 指北針、切 2D/3D 的動畫進行中，跟隨先讓路
       const dt = Math.min(0.2, (now - (lastT || now)) / 1000);
       lastT = now;
       if (!following) { following = true; map.setCenterClampedToGround(false); smoothEl = null; }
@@ -271,7 +307,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     // 每隔一段時間重新 easeTo 會一頓一頓的，動畫結束時地形高度校正還會讓畫面跳一下）。
     // 有人快跑出畫面時拉遠要快，拉近則慢慢來，避免縮放一直來回。
     followGroup(pts, { padding, maxZoom = 14.5 } = {}) {
-      if (!pts.length) return;
+      if (!pts.length || performance.now() < busyUntil) return;
       const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
       const cam = map.cameraForBounds(b, { padding, maxZoom, bearing: map.getBearing() });
       const c = b.getCenter();
@@ -294,10 +330,17 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       map.setCenterClampedToGround(true);
       fixElevation();
     },
+    resetNorth() { animate({ bearing: 0, duration: 500 }); },
     set3d(on) {
       is3d = on;
-      map.setTerrain(on ? { source: 'dem', exaggeration: 1.4 } : null);
-      map.easeTo({ pitch: on ? 60 : 0, duration: 800 });
+      if (styleLoaded) {
+        map.setTerrain(on ? { source: 'dem', exaggeration: 1.4 } : null);
+        if (on) map.setSky(LOOK[cur].sky);
+      }
+      if (on) { applyDim(); animate({ pitch: 60, duration: 800 }); }
+      // 先把鏡頭放平，再鎖住 pitch（直接鎖會瞬間跳平）
+      else { animate({ pitch: 0, duration: 600 }); setTimeout(() => { if (!is3d) applyDim(); }, 650); }
+      if (!styleLoaded) applyDim();
     },
   };
 }
@@ -319,4 +362,27 @@ export function declutter(map, items, gap = 40) {
     const text = k.n ? `${k.it.name} +${k.n}` : k.it.name;
     if (label && label.textContent !== text) label.textContent = text;
   }
+}
+
+// 指北針：指針跟著地圖方向轉，點一下讓北方朝上（3D 保留傾斜角度）。放進各頁右上的 .tools 按鈕列。
+export function addCompass(M, tools) {
+  const map = M.map;
+  if (M.down || !tools) return null;
+  const b = document.createElement('button');
+  b.className = 'tool glass compass';
+  b.type = 'button';
+  b.title = '指北針：點一下讓北方朝上';
+  b.setAttribute('aria-label', '指北針，點一下讓北方朝上');
+  b.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><g class="needle"><path d="M12 3 L15.5 12 L8.5 12 Z" fill="#ff453a"/><path d="M12 21 L8.5 12 L15.5 12 Z" fill="currentColor" opacity=".55"/></g></svg>';
+  const needle = b.querySelector('.needle');
+  const sync = () => {
+    const bearing = map.getBearing();
+    needle.setAttribute('transform', `rotate(${-bearing} 12 12)`);
+    b.classList.toggle('off-north', Math.abs(bearing) > 0.5);
+  };
+  map.on('rotate', sync);
+  sync();
+  b.onclick = () => M.resetNorth();
+  tools.append(b);
+  return b;
 }

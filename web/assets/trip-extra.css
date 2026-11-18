@@ -127,3 +127,6 @@ body:has(#panel.small) .qx-turn{left:248px;max-width:min(360px,calc(100vw - 320p
   .qc-list{max-height:220px}
 }
 #gpsInfo.warn{color:var(--warn-ink);font-weight:600;opacity:1}
+/* 3D 旋轉提示：放在「全隊進度」上方，跟它對齊 */
+.map-hint{left:calc(50% + 206px);bottom:calc(max(12px,env(safe-area-inset-bottom,0px)) + 84px)}
+body:has(#panel.small) .map-hint{left:calc(50% + 116px)}

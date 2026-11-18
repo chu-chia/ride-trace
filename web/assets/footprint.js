@@ -2,7 +2,7 @@
 // 「迷霧模式」是選配：地圖蓋一層霧，去過的格子把霧擦掉。
 import { api, $, $$ } from '/assets/common.js';
 import { swr } from '/assets/swr.js';
-import { createMap } from '/assets/mapbase.js';
+import { createMap, addCompass } from '/assets/mapbase.js';
 import { initRecords } from '/assets/fp-records.js';
 
 const TAIWAN = [[119.3, 21.85], [122.1, 25.35]];
@@ -15,6 +15,7 @@ if (!TABS.has(tab)) tab = 'footprint';
 let rangeMode = 'all';
 
 const M = createMap($('#map'), { style: 'navy', styles: ['navy', 'dark', 'sat', 'light'], center: [120.95, 23.7], zoom: 7, interactive3d: false });
+addCompass(M, document.querySelector('.tools'));  // 指北針：點一下北方朝上
 const map = M.map;
 const records = initRecords(map, M, () => tab, sidePad);
 const uid = (await api('/api/me')).uid;

@@ -1,13 +1,14 @@
 // 規劃路線頁：在網頁裡搜尋地點、加停靠點（自動插在繞路最少的位置）、選交通工具、比較 1～3 條路線、
 // 沿路線找加油站等，最後套用到行程。Google Maps 匯入只是選用。
 import { api, $, esc, toast } from '/assets/common.js';
-import { createMap } from '/assets/mapbase.js';
+import { createMap, addCompass } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('trip');
 if (!tid) location.href = '/';
 $('#back').href = `/trip?id=${tid}`;
 
 const M = createMap($('#map'), { style: 'dark', center: [121.0, 23.8], zoom: 7, terrain: false });
+addCompass(M, document.querySelector('.tools'));  // 指北針：點一下北方朝上
 const map = M.map;
 window.qijiMap = map;
 const P = { pts: [], routes: [], sel: 0, trip: null, markers: [], seq: 0, sourceUrl: '', vehicle: 'scooter', along: null, alongPins: [] };
