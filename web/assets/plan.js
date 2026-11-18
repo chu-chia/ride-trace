@@ -65,11 +65,11 @@ function renderPts() {
   const n = P.pts.length;
   $('#pts').innerHTML = n ? P.pts.map((p, i) => `
     <div class="pt${i === 0 ? ' s' : i === n - 1 && n > 1 ? ' e' : ''}">
-      <span class="no">${label(i)}</span>
+      <span class="drag no-drag" data-drag="${i}" title="按住拖曳調整順序"><span class="no">${label(i)}</span></span>
       <input value="${esc(p.name)}" placeholder="${i === 0 ? '起點' : i === n - 1 ? '終點' : '停靠點'}（可命名）" maxlength="30" data-name="${i}">
-      <button data-up="${i}" title="往前" ${i ? '' : 'disabled'}>↑</button>
-      <button data-down="${i}" title="往後" ${i < n - 1 ? '' : 'disabled'}>↓</button>
-      <button data-del="${i}" title="移除">✕</button>
+      <button data-up="${i}" title="往前" aria-label="${label(i)} 往前" ${i ? '' : 'disabled'}>↑</button>
+      <button data-down="${i}" title="往後" aria-label="${label(i)} 往後" ${i < n - 1 ? '' : 'disabled'}>↓</button>
+      <button data-del="${i}" title="移除" aria-label="移除 ${label(i)}">✕</button>
     </div>`).join('') : '<div class="empty">搜尋地點，或在地圖上點一下<br>第一個點是起點、第二個是終點，之後加的都是停靠點</div>';
 }
 $('#pts').addEventListener('click', (e) => {
@@ -78,8 +78,59 @@ $('#pts').addEventListener('click', (e) => {
   const i = +(b.dataset.up ?? b.dataset.down ?? b.dataset.del);
   if (b.dataset.up != null) [P.pts[i - 1], P.pts[i]] = [P.pts[i], P.pts[i - 1]];
   else if (b.dataset.down != null) [P.pts[i + 1], P.pts[i]] = [P.pts[i], P.pts[i + 1]];
-  else P.pts.splice(i, 1);
+  else { const [gone] = P.pts.splice(i, 1); offerUndo(gone, i); }
   changed();
+});
+
+// 刪除後 8 秒內可以復原（UX-14）：放回原本的位置
+let undoTimer = 0;
+function offerUndo(pt, i) {
+  const box = $('#ptUndo');
+  box.querySelector('span').textContent = `已移除${pt.name ? '「' + pt.name + '」' : '第 ' + (i + 1) + ' 個點'}`;
+  box.hidden = false;
+  box.querySelector('button').onclick = () => {
+    P.pts.splice(Math.min(i, P.pts.length), 0, pt);
+    box.hidden = true; clearTimeout(undoTimer); changed();
+  };
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => { box.hidden = true; }, 8000);
+}
+
+// 按住左邊的編號拖曳調整順序（滑鼠、手指都可以；鍵盤用 ↑↓）
+$('#pts').addEventListener('pointerdown', (e) => {
+  const h = e.target.closest('[data-drag]');
+  if (!h || e.button > 0) return;
+  // 先讓正在輸入的名稱欄失焦，change 事件才會用排序前的位置存名字（不然重畫後會存到別的點上）
+  document.activeElement?.blur?.();
+  e.preventDefault();
+  const from = +h.dataset.drag;
+  const rows = [...$('#pts').querySelectorAll('.pt')];
+  const row = rows[from];
+  const rects = rows.map((r) => r.getBoundingClientRect());
+  const y0 = e.clientY;
+  let to = from;
+  row.classList.add('dragging'); $('#pts').classList.add('sorting');
+  h.setPointerCapture(e.pointerId);
+  const move = (ev) => {
+    const dy = ev.clientY - y0;
+    row.style.transform = `translateY(${dy}px)`;
+    const mid = rects[from].top + rects[from].height / 2 + dy;
+    // 拿掉自己之後，中心點在它上面的有幾列＝新位置
+    to = rects.reduce((n, r, k) => n + (k !== from && r.top + r.height / 2 < mid ? 1 : 0), 0);
+    const hgt = rects[from].height;
+    rows.forEach((r, k) => {
+      if (k === from) return;
+      const shift = from < to && k > from && k <= to ? -hgt : from > to && k >= to && k < from ? hgt : 0;
+      r.style.transform = shift ? `translateY(${shift}px)` : '';
+    });
+  };
+  const up = () => {
+    h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
+    $('#pts').classList.remove('sorting');
+    if (to !== from) { const [pt] = P.pts.splice(from, 1); P.pts.splice(to, 0, pt); changed(); }
+    else { rows.forEach((r) => { r.style.transform = ''; }); row.classList.remove('dragging'); }
+  };
+  h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
 });
 $('#pts').addEventListener('change', (e) => { const i = e.target.dataset.name; if (i != null) { P.pts[+i].name = e.target.value.trim(); drawMarkers(); } });
 

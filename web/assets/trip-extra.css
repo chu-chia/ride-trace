@@ -8,7 +8,7 @@
 .qx-row .grow{flex:1;min-width:0}
 .qx-row .t1{font-size:13.5px;font-weight:600;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .qx-row .t2{font-size:12px;color:var(--muted)}
-.qx-kind{font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;color:#1d1d1f;background:#ffd60a}
+.qx-kind{font-size:12px;font-weight:700;padding:1px 6px;border-radius:6px;color:#1d1d1f;background:#ffd60a}
 .qx-kind[data-kind="rest"]{background:#64d2ff}
 .qx-x{border:0;background:none;color:var(--crit);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:8px;flex:none}
 .qx-x:hover{background:color-mix(in srgb,var(--crit) 10%,transparent)}
@@ -21,7 +21,7 @@
 .routeStop.end .routeNode{border-color:var(--crit);background:var(--crit);box-shadow:inset 0 0 0 4px var(--surface)}
 .routePlace{min-width:0;border:1px solid var(--line);border-radius:11px;padding:9px 12px;display:flex;flex-direction:column;gap:2px}
 .routeStop.end .routePlace{border-color:var(--accent)}
-.routePlace small{color:var(--muted);font-size:11px}.routePlace b{font-size:14px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.routePlace small{color:var(--muted);font-size:12px}.routePlace b{font-size:14px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
 .routeStop button{border:0;background:var(--surface-2);color:var(--fg);border-radius:9px;min-width:44px;min-height:44px;font:inherit;font-size:12px;cursor:pointer}
 
 /* 地圖上的集合點：注意不要設 position（MapLibre 的標記靠 position:absolute 定位） */
@@ -30,7 +30,7 @@
 .qx-pin[data-kind="rest"] b{background:#64d2ff}
 .qx-pin.all b{background:#30d158;color:#fff}
 .qx-pin.pick{padding:3px}
-.qx-pin.pick b{background:var(--accent);color:#fff}
+.qx-pin.pick b{background:var(--accent-fill);color:#fff}
 /* 測速點：紅框白底，中間是速限（同樣不能設 position） */
 .qx-cam{width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid #e5352b;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:default}
 .qx-cam b{font-size:10.5px;font-weight:800;color:#1d1d1f;letter-spacing:-.03em}
@@ -40,7 +40,7 @@
 /* 和單點（白底紅框、寫速限）分得開：深色底、細紅框、數字是「這附近幾支」 */
 .qx-cam.group{width:24px;height:24px;padding:0;background:rgba(29,29,31,.88);border:2px solid #e5352b;cursor:pointer;font:inherit}
 .qx-cam.group b{color:#fff;font-size:12px}
-.qx-pop code{font-size:11px;word-break:break-all}
+.qx-pop code{font-size:12px;word-break:break-all}
 /* 快速訊息 */
 .qx-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .qx-presets .btn{padding:10px 6px}
@@ -55,22 +55,22 @@
 .qx-kinds label{cursor:pointer}
 .qx-kinds input{position:absolute;opacity:0;pointer-events:none}
 .qx-kinds span{display:inline-block;padding:6px 12px;border-radius:999px;background:var(--surface-2);font-size:13px}
-.qx-kinds input:checked+span{background:var(--accent);color:#fff;font-weight:600}
+.qx-kinds input:checked+span{background:var(--accent-fill);color:#fff;font-weight:600}
 /* SOS：紅色，長按時外圈填滿 */
-.qx-sos{position:relative;height:42px;min-width:56px;padding:0 12px;border:0;border-radius:12px;background:#e5352b;color:#fff;font-weight:800;font-size:13px;cursor:pointer;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+.qx-sos{position:relative;height:42px;min-width:56px;padding:0 12px;border:0;border-radius:12px;background:var(--sos);color:#fff;font-weight:800;font-size:13px;cursor:pointer;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
 .qx-sos i{position:absolute;inset:0;background:rgba(0,0,0,.28);transform:scaleX(var(--p,0));transform-origin:left}
 /* 長按進度：左邊的圓環跟著填滿（trip-extra.js 每一格更新 --p，UX-22） */
 .qx-sos.holding::before{content:"";position:absolute;left:14px;top:50%;width:26px;height:26px;margin-top:-13px;border-radius:50%;background:conic-gradient(#fff calc(var(--p,0) * 360deg),rgba(255,255,255,.28) 0);-webkit-mask:radial-gradient(circle,transparent 8px,#000 9px);mask:radial-gradient(circle,transparent 8px,#000 9px);z-index:1}
 .qx-sos.holding span{padding-left:30px}
 .qx-sos span{position:relative}
-.qx-sos.active{background:#1f9d55}
+.qx-sos.active{background:#157f43}
 .qx-sosbar{position:fixed;z-index:40;top:max(70px,calc(env(safe-area-inset-top,0px) + 60px));left:50%;transform:translateX(-50%);width:min(420px,calc(100% - 24px));display:flex;flex-direction:column;gap:6px}
-.qx-sosrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#e5352b;color:#fff;box-shadow:0 10px 30px rgba(229,53,43,.45);animation:qxpulse 1.2s ease-in-out infinite alternate}
+.qx-sosrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:var(--sos);color:#fff;box-shadow:0 10px 30px rgba(229,53,43,.45);animation:qxpulse 1.2s ease-in-out infinite alternate}
 .qx-sosrow>b{font-size:15px;letter-spacing:.06em}
 .qx-sosrow .grow{flex:1;min-width:0}
 .qx-sosrow .t1{font-weight:700;font-size:14px}
 .qx-sosrow .t2{font-size:12px;opacity:.9}
-.qx-sosrow .btn{background:rgba(255,255,255,.22);color:#fff;padding:7px 12px;font-size:13px}
+.qx-sosrow .btn{background:rgba(0,0,0,.28);color:#fff;padding:7px 12px;font-size:13px}
 @keyframes qxpulse{from{box-shadow:0 6px 20px rgba(229,53,43,.35)}to{box-shadow:0 10px 36px rgba(229,53,43,.8)}}
 /* 全隊進度條 */
 .qx-prog{width:min(420px,calc(100vw - 24px));border-radius:16px;padding:10px 14px 14px}
@@ -86,15 +86,15 @@
 .qx-dot.static{position:static;display:inline-block;margin:0;flex:none}
 /* 我的下一個轉彎（左上，回上一頁按鈕下面） */
 .qx-turn{position:fixed;z-index:8;left:max(12px,env(safe-area-inset-left,0px));top:calc(max(12px,env(safe-area-inset-top,0px)) + 64px);display:flex;align-items:center;gap:12px;padding:10px 16px 10px 10px;border-radius:16px;max-width:min(360px,calc(100vw - 90px))}
-.qx-turn>b{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:26px;background:var(--accent);color:#fff;flex:none}
-.qx-turn.off>b{background:#ff9f0a}
+.qx-turn>b{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:26px;background:var(--accent-fill);color:#fff;flex:none}
+.qx-turn.off>b{background:#ff9f0a;color:#1d1d1f}
 .qx-turn .d{font-size:17px;font-weight:700}
 .qx-turn .s{font-size:12.5px;color:var(--muted)}
 @media (max-width:760px){
   /* 手機：進度條在抽屜上方，SOS 留在面板底部。 */
   .qx-sos{height:40px}
   .qx-prog{width:auto;border-radius:12px;padding:7px 12px 10px}
-  .qx-prog-h{margin-bottom:7px;font-size:11.5px}
+  .qx-prog-h{margin-bottom:7px;font-size:12px}
   .qx-prog-h b{font-size:12px}
   .qx-turn{left:max(10px,env(safe-area-inset-left,0px));top:calc(max(10px,env(safe-area-inset-top,0px)) + 62px);max-width:calc(100vw - 90px);padding:8px 14px 8px 8px}
   .qx-turn>b{width:38px;height:38px;font-size:22px}
@@ -107,7 +107,7 @@
 .qc-more{align-self:center;border:0;background:var(--surface-2);color:var(--fg);font:inherit;font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer}
 .qc-msg{display:flex;flex-direction:column;align-items:flex-start;gap:2px;max-width:86%}
 .qc-msg.me{align-self:flex-end;align-items:flex-end}
-.qc-meta{font-size:11.5px;color:var(--muted)}
+.qc-meta{font-size:12px;color:var(--muted)}
 .qc-meta b{color:var(--fg);font-weight:600}
 .qc-bubble{padding:7px 11px;border-radius:14px 14px 14px 4px;background:var(--surface-2);font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
 .qc-msg.me .qc-bubble{border-radius:14px 14px 4px 14px;background:var(--accent-fill);color:#fff}

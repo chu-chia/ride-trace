@@ -5,8 +5,10 @@
   --accent:#c2410c; --ok:#1f9d55; --warn:#d9a400; --crit:#e5352b;
   /* -fill：白字底色；-ink：小字用的字色（淺色模式加深到 4.5:1） */
   --accent-fill:#c2410c; --accent-ink:#b93d0b; --ok-ink:#116b37; --warn-ink:#8a6100; --crit-ink:#c0221a;
+  /* SOS 底色：白字要 ≥4.5:1（UX-17），深淺色同一個 */
+  --sos:#d70015;
   --hero-a:#ffe9d6; --hero-b:#f5f5f7; --ridge:#e9d6c6;
-  --glass:rgba(250,250,252,.84); --shadow:0 10px 34px rgba(0,0,0,.12);
+  --glass:rgba(250,250,252,.92); --shadow:0 10px 34px rgba(0,0,0,.12);
   --font:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
   --num:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",system-ui,sans-serif;
   color-scheme:light;
@@ -15,16 +17,16 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#000; --surface:#1c1c1e; --surface-2:#2c2c2e; --fg:#f5f5f7; --muted:#98989d; --line:rgba(255,255,255,.1);
   --accent:#ff8a3d; --ok:#30d158; --warn:#ffd60a; --crit:#ff453a;
-  --accent-fill:#d9500f; --accent-ink:#ff8a3d; --ok-ink:#30d158; --warn-ink:#ffd60a; --crit-ink:#ff453a;
+  --accent-fill:#c2410c; --accent-ink:#ff8a3d; --ok-ink:#30d158; --warn-ink:#ffd60a; --crit-ink:#ff453a;
   --hero-a:#24140a; --hero-b:#000; --ridge:#3a2a20;
-  --glass:rgba(28,28,30,.84); --shadow:0 10px 34px rgba(0,0,0,.5); color-scheme:dark;
+  --glass:rgba(28,28,30,.92); --shadow:0 10px 34px rgba(0,0,0,.5); color-scheme:dark;
 }}
 :root[data-theme="dark"]{
   --bg:#000; --surface:#1c1c1e; --surface-2:#2c2c2e; --fg:#f5f5f7; --muted:#98989d; --line:rgba(255,255,255,.1);
   --accent:#ff8a3d; --ok:#30d158; --warn:#ffd60a; --crit:#ff453a;
-  --accent-fill:#d9500f; --accent-ink:#ff8a3d; --ok-ink:#30d158; --warn-ink:#ffd60a; --crit-ink:#ff453a;
+  --accent-fill:#c2410c; --accent-ink:#ff8a3d; --ok-ink:#30d158; --warn-ink:#ffd60a; --crit-ink:#ff453a;
   --hero-a:#24140a; --hero-b:#000; --ridge:#3a2a20;
-  --glass:rgba(28,28,30,.84); --shadow:0 10px 34px rgba(0,0,0,.5); color-scheme:dark;
+  --glass:rgba(28,28,30,.92); --shadow:0 10px 34px rgba(0,0,0,.5); color-scheme:dark;
 }
 *{box-sizing:border-box}
 /* 推播卡片（push.js）：行程頁「裝置與通知」、設定頁、後台共用，所以放在全站樣式 */
@@ -57,10 +59,10 @@ a{color:var(--accent);text-decoration:none}
 .btn.danger{background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit-ink)}
 .btn.block{width:100%;min-height:46px;font-size:15px}
 .btn:disabled{opacity:.5;cursor:default}
-.input{width:100%;padding:11px 14px;border-radius:var(--r-ctl);border:1px solid var(--line);background:var(--surface);font-size:15px}
+.input{width:100%;min-height:44px;padding:11px 14px;border-radius:var(--r-ctl);border:1px solid var(--line);background:var(--surface);font-size:15px}
 .card{background:var(--surface);border-radius:var(--r-card);padding:var(--sp-4)}
-.eyebrow{font-size:11px;letter-spacing:.08em;color:var(--muted);font-weight:600}
-.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.eyebrow{font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
 .chip.ok{color:var(--ok-ink);background:color-mix(in srgb,var(--ok) 14%,transparent)}
 .chip.warn{color:var(--warn-ink);background:color-mix(in srgb,var(--warn) 16%,transparent)}
 .chip.crit{color:var(--crit-ink);background:color-mix(in srgb,var(--crit) 14%,transparent)}
@@ -74,7 +76,7 @@ a{color:var(--accent);text-decoration:none}
 .li .t2{font-size:12.5px;color:var(--muted)}
 a.li{color:inherit}
 .seg{display:flex;background:var(--surface-2);padding:3px;border-radius:10px;gap:2px}
-.seg button{flex:1;border:0;background:none;padding:7px 10px;min-height:34px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap}
+.seg button{flex:1;border:0;background:none;padding:7px 10px;min-height:44px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap}
 .seg button.on{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.14);font-weight:600}
 .err{color:var(--crit-ink);font-size:13px;min-height:1em}
 
@@ -83,7 +85,7 @@ a.li{color:inherit}
 .toast{background:var(--glass);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border-radius:16px;padding:10px 12px;box-shadow:0 10px 28px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center;animation:tin .3s ease}
 .toast .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ink,#fff);font-weight:800;font-size:12px;flex:none;background:var(--c)}
 .toast .tx{font-size:13.5px;font-weight:600}
-.toast .tt{font-size:11.5px;color:var(--muted)}
+.toast .tt{font-size:12px;color:var(--muted)}
 @keyframes tin{from{transform:translateY(-10px);opacity:.3}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.toast{animation:none}}
 
@@ -111,7 +113,7 @@ a.li{color:inherit}
 .rider .dot{position:absolute;inset:0;border-radius:50%;background:var(--c);border:2.5px solid #fff;display:grid;place-items:center;color:var(--ink,#fff);font-weight:700;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .rider .arrow{position:absolute;left:50%;top:50%;width:0;height:0;transform-origin:0 0}
 .rider .arrow::before{content:"";position:absolute;left:-6px;top:-29px;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:9px solid var(--c)}
-.rider .name{position:absolute;top:38px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:9px;background:var(--glass);color:var(--fg)}
+.rider .name{position:absolute;top:38px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:12px;font-weight:600;padding:1px 7px;border-radius:9px;background:var(--glass);color:var(--fg)}
 .rider.me .dot{box-shadow:0 0 0 7px color-mix(in srgb,var(--c) 25%,transparent),0 2px 8px rgba(0,0,0,.35)}
 .rider.lost .dot{background:#8e8e93;color:#fff;border-style:dashed}
 .rider.lost .arrow,.rider.rest .arrow,.rider.done .arrow{display:none}
@@ -143,7 +145,7 @@ a.li{color:inherit}
 
 /* 隊員狀態表（common.js teamTable；回放、行程頁、戰情室共用） */
 .team-rows{display:flex;flex-direction:column}
-.team-row{width:100%;border:0;background:none;color:inherit;font:inherit;cursor:pointer;display:grid;grid-template-columns:minmax(0,2.1fr) repeat(4,minmax(0,1fr));gap:4px;align-items:center;padding:9px 6px;border-top:1px solid var(--line);font-size:12px;text-align:right;border-radius:10px}
+.team-row{min-height:44px;width:100%;border:0;background:none;color:inherit;font:inherit;cursor:pointer;display:grid;grid-template-columns:minmax(0,2.1fr) repeat(4,minmax(0,1fr));gap:4px;align-items:center;padding:9px 6px;border-top:1px solid var(--line);font-size:12px;text-align:right;border-radius:10px}
 .team-row:first-child{border-top:0}
 /* 選中（鏡頭跟隨中）：使用者選的「淡灰底」，不加邊框；滑鼠點擊不顯示焦點框，只在鍵盤操作時顯示細框 */
 .team-row.on{background:var(--surface-2)}
@@ -157,8 +159,8 @@ a.li{color:inherit}
 .team-nm{display:flex;flex-direction:column;min-width:0}
 .team-name b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
 .team-row .num{font-size:14px;font-weight:600}
-.team-row small{display:block;font-size:9.5px;color:var(--muted);white-space:nowrap;font-weight:400}
-.team-row .team-sub{font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.team-row small{display:block;font-size:12px;color:var(--muted);white-space:nowrap;font-weight:400}
+.team-row .team-sub{font-size:12px;overflow:hidden;text-overflow:ellipsis}
 .team-sub.ok{color:var(--ok-ink,var(--ok))}.team-sub.warn{color:var(--warn-ink,var(--warn))}.team-sub.crit{color:var(--crit-ink,var(--crit));font-weight:700}.team-sub.info{color:var(--muted)}
 
 /* ==========================================================================
@@ -169,22 +171,22 @@ a.li{color:inherit}
   /* 間距只用這五級；圓角三種；控制項高度一種 */
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
   --r-panel:24px; --r-card:16px; --r-ctl:12px;
-  --ctl-h:40px; --tool:48px; --edge:12px; --panel-w:380px; --panel-mini-w:300px;
-  --fs-xs:11px; --fs-s:12.5px; --fs-m:14px; --fs-l:17px;
-  /* 液態玻璃（參考北商美食地圖）：側欄比美食地圖濃一些，地圖很花時字才讀得清楚 */
-  --lg-tint:rgba(255,255,255,.55); --lg-float:rgba(255,255,255,.72);
+  --ctl-h:44px; --tool:48px; --edge:12px; --panel-w:380px; --panel-mini-w:300px;
+  --fs-xs:12px; --fs-s:12.5px; --fs-m:14px; --fs-l:17px;
+  /* 液態玻璃（參考北商美食地圖）：有文字的面板底色不透明度 0.9（UX-18），保留圓角、陰影和模糊，地圖上的地名、測速數字才不會透上來跟面板文字疊在一起 */
+  --lg-tint:rgba(255,255,255,.9); --lg-float:rgba(255,255,255,.9);
   --lg-edge:rgba(255,255,255,.55); --lg-inner:rgba(255,255,255,.6);
   --lg-blur:8px; --lg-sat:190%; --lg-shadow:0 10px 36px rgba(0,0,0,.22);
   /* 玻璃裡的卡片、分段按鈕：半透明，整片看起來是同一塊玻璃 */
   --lg-surface:rgba(255,255,255,.5); --lg-surface-2:rgba(118,118,128,.14);
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --lg-tint:rgba(22,22,28,.55); --lg-float:rgba(30,30,36,.66);
+  --lg-tint:rgba(22,22,28,.9); --lg-float:rgba(30,30,36,.9);
   --lg-edge:rgba(255,255,255,.2); --lg-inner:rgba(255,255,255,.22); --lg-sat:170%; --lg-shadow:0 10px 36px rgba(0,0,0,.4);
   --lg-surface:rgba(255,255,255,.07); --lg-surface-2:rgba(255,255,255,.1);
 }}
 :root[data-theme="dark"]{
-  --lg-tint:rgba(22,22,28,.55); --lg-float:rgba(30,30,36,.66);
+  --lg-tint:rgba(22,22,28,.9); --lg-float:rgba(30,30,36,.9);
   --lg-edge:rgba(255,255,255,.2); --lg-inner:rgba(255,255,255,.22); --lg-sat:170%; --lg-shadow:0 10px 36px rgba(0,0,0,.4);
   --lg-surface:rgba(255,255,255,.07); --lg-surface-2:rgba(255,255,255,.1);
 }
@@ -209,7 +211,7 @@ a.li{color:inherit}
 .liquid-glass-filter{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
 
 /* 圖示按鈕（返回、收合）：所有頁同一個尺寸 */
-.icon-btn{width:36px;height:36px;flex:none;border:0;border-radius:var(--r-ctl);background:none;color:var(--fg);display:grid;place-items:center;cursor:pointer;padding:0;text-decoration:none}
+.icon-btn{width:44px;height:44px;flex:none;border:0;border-radius:var(--r-ctl);background:none;color:var(--fg);display:grid;place-items:center;cursor:pointer;padding:0;text-decoration:none}
 .icon-btn:hover{background:var(--surface-2)}
 .icon-btn svg{width:20px;height:20px}
 
@@ -221,7 +223,7 @@ a.li{color:inherit}
 .panel-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .panel-title b{font-size:var(--fs-l);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .panel-title .sub{font-size:var(--fs-s);color:var(--muted);display:flex;gap:var(--sp-2);align-items:center;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.panel-act{flex:none;display:inline-flex;align-items:center;gap:var(--sp-1);height:36px;padding:0 var(--sp-3);border:0;border-radius:var(--r-ctl);background:var(--surface-2);color:var(--fg);font:inherit;font-size:var(--fs-s);font-weight:600;white-space:nowrap;cursor:pointer;text-decoration:none}
+.panel-act{flex:none;display:inline-flex;align-items:center;gap:var(--sp-1);height:44px;padding:0 var(--sp-3);border:0;border-radius:var(--r-ctl);background:var(--surface-2);color:var(--fg);font:inherit;font-size:var(--fs-s);font-weight:600;white-space:nowrap;cursor:pointer;text-decoration:none}
 .panel-act svg{width:16px;height:16px}
 .panel>.panel-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:var(--sp-1) var(--sp-4) var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-3)}
 .panel>.panel-body>*{flex-shrink:0}
@@ -239,7 +241,7 @@ a.li{color:inherit}
 
 /* ---------- 右上工具列 ---------- */
 .tools{position:fixed;z-index:8;top:max(var(--edge),env(safe-area-inset-top,0px));right:max(var(--edge),env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:var(--sp-2)}
-.tool{width:var(--tool);height:var(--tool);padding:0;border-radius:var(--r-card);cursor:pointer;color:var(--fg);font-size:10.5px;font-weight:600;line-height:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-decoration:none}
+.tool{width:var(--tool);height:var(--tool);padding:0;border-radius:var(--r-card);cursor:pointer;color:var(--fg);font-size:12px;font-weight:600;line-height:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-decoration:none}
 .tool.glass{background:var(--lg-float)}
 .tool svg{width:20px;height:20px;flex:none}
 .tool span{max-width:100%;overflow:hidden;white-space:nowrap}
@@ -258,13 +260,13 @@ body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-mini-w
   :root{--tool:44px;--panel-h:min(72dvh,620px)}
   .panel,.panel.small{left:0;right:0;top:auto;bottom:0;width:auto;height:var(--panel-h);border-radius:var(--r-panel) var(--r-panel) 0 0;border-bottom:0;transition:height .28s ease}
   .panel.small{height:auto}
-  .panel .handle{display:grid;place-items:center;border:0;background:none;padding:var(--sp-3) 0 var(--sp-1);cursor:grab;touch-action:none}
+  /* 把手可點範圍 44px 高（UX-14），下面的頂列不再留上邊距，抽屜總高度只多約 19px */
+  .panel .handle{display:grid;place-items:center;border:0;background:none;padding:0;min-height:44px;cursor:grab;touch-action:none}
   .panel .handle::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--muted);opacity:.65}
-  .panel-head{padding:var(--sp-1) var(--sp-3) var(--sp-2) var(--sp-2)}
+  .panel-head{padding:0 var(--sp-3) var(--sp-2) var(--sp-2)}
   .panel-collapse{display:none}
   .panel.small .panel-mini{padding-bottom:max(var(--sp-3),env(safe-area-inset-bottom,0px))}
   .tools{gap:6px}
-  .tool span{font-size:10px}
   body:has(.panel) .maplibregl-ctrl-bottom-left,body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:0}
   /* --sheet-h 是抽屜每一格的實際高度（common.js sheetDrag），拖曳時比例尺跟著走 */
   body:has(.panel) .maplibregl-ctrl-bottom-left,body:has(.panel) .maplibregl-ctrl-bottom-right{bottom:calc(var(--sheet-h,120px) + 4px)}

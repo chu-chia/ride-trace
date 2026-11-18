@@ -23,7 +23,7 @@
   .preview .avatar{width:48px;height:48px;font-size:19px}
   .preview b{font-size:16px;display:block}
   .swatches{display:flex;flex-wrap:wrap;gap:10px}
-  .swatches button{width:36px;height:36px;border-radius:50%;border:0;background:var(--c);cursor:pointer;box-shadow:inset 0 0 0 2px rgba(0,0,0,.12)}
+  .swatches button{width:44px;height:44px;border-radius:50%;border:0;background:var(--c);cursor:pointer;box-shadow:inset 0 0 0 2px rgba(0,0,0,.12)}
   .swatches button[aria-pressed="true"]{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--fg)}
   .msg{font-size:13px;min-height:18px}
   .msg.ok{color:var(--ok-ink)}.msg.err{color:var(--crit-ink)}
@@ -78,6 +78,17 @@
     <h2>省電模式</h2>
     <label class="row" style="cursor:pointer"><span>地圖用較低的更新頻率與畫質</span><input type="checkbox" id="lowPower" style="width:20px;height:20px;accent-color:var(--accent-fill)"></label>
     <p class="small muted" style="margin:10px 0 0">手機預設開啟：地圖 30 fps、解析度最多 2 倍、面板不做背景模糊、戰情室不自動旋轉。騎車時只要用 Traccar Client 回報位置，網頁不必一直開著。</p>
+  </section>
+
+  <!-- UX-59：地圖頁固定深色（跟底圖），非地圖頁跟系統 -->
+  <section class="card" id="appearance">
+    <h2>外觀（深色／淺色）</h2>
+    <p class="small muted" style="margin:0 0 8px">騎跡沒有自己的深淺色開關，規則固定是這樣：</p>
+    <ul class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;line-height:1.55">
+      <li><b>地圖頁固定深色</b>：騎乘、規劃、回放、戰情室、足跡。夜裡、隧道裡看不刺眼，深色底圖上的隊友圖釘也比較清楚。不跟手機或電腦的系統設定切換。</li>
+      <li>在地圖頁右上角把底圖切成「淺色」時，面板會一起變淺色；切回深色或衛星又變回深色。</li>
+      <li><b>其他頁面跟著系統</b>：首頁、設定、登入、關於，手機或電腦設成深色就是深色，淺色就是淺色。</li>
+    </ul>
   </section>
 
   <section class="card">
