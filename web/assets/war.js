@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag } from '/assets/common.js';
+import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
 
@@ -133,6 +133,7 @@ function setSheet(open) {
   $('#sheetHandle').setAttribute('aria-expanded', String(open));
   $('#sheetHandle').setAttribute('aria-label', open ? '收合戰情室資訊' : '展開戰情室資訊');
   map.resize();
+  setTimeout(() => PADS.refresh(), 0); // PADS 在檔案後段才建立
 }
 $('#sheetHandle').onclick = () => setSheet(sheet.classList.contains('small'));
 sheetDrag(sheet, { isOpen: () => !sheet.classList.contains('small'), setOpen: setSheet, scroll: '.sheet-content' });
@@ -183,7 +184,7 @@ M.onStyle(() => {
 /* ---------- 運鏡：手動操作後暫停跟隨 ---------- */
 let lastT = performance.now(), lastTrail = 0;
 let autoFollow = true;
-const pad = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : { top: 90, bottom: 160, left: 395, right: 365 };
+const padRaw = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : { top: 90, bottom: 160, left: 395, right: 365 };
 function pauseFollow(e) {
   if (!e.originalEvent) return;
   autoFollow = false;
@@ -194,7 +195,12 @@ function pauseFollow(e) {
 const syncFollowBtn = () => press($('#centerTeam'), autoFollow && !S.focus);
 for (const type of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart']) map.on(type, pauseFollow);
 $('#centerTeam').addEventListener('click', () => { autoFollow = true; S.focus = null; renderCards(); M.unfollow(); syncFollowBtn(); if (S.route && !S.profile) buildProfile(); });
+const PADS = smoothPad(padRaw);
+const pad = () => PADS.get(); // 抽屜開合後鏡頭慢慢滑到新位置
+addEventListener('resize', () => PADS.refresh());
+const gate = frameGate();
 function frame(now) {
+  if (!gate(now)) { requestAnimationFrame(frame); return; } // 省電模式約 30 fps
   const dt = Math.min(0.2, (now - lastT) / 1000);
   lastT = now;
   for (const m of S.members.values()) {
@@ -217,7 +223,7 @@ function frame(now) {
   }
   const pts = [...S.members.values()].filter((m) => m.pos && m.u.active !== false && m.state.status !== 'lost').map((m) => m.pos);
   if (S.styleReady && pts.length && !S.profiling && autoFollow) {
-    map.setBearing((map.getBearing() + dt * 2) % 360);
+    if (!LOW_POWER) map.setBearing((map.getBearing() + dt * 2) % 360); // 慢慢旋轉；省電時不轉，鏡頭不動地圖就不必重畫
     const fm = S.focus && S.members.get(S.focus);
     if (fm?.pos) M.follow(fm.pos, { padding: pad() });  // 點了隊員表：鏡頭跟著他
     else if (pts.length === 1) M.follow(pts[0], { padding: pad() });

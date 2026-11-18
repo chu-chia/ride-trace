@@ -1,9 +1,10 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, sheetRestH } from '/assets/common.js';
+import { api, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 
 // 側欄收合（電腦收合鈕／手機拉把手）與其他地圖頁一致
-const PANEL = initPanel($('#panel'), 'replay');
+let PADS = null;
+const PANEL = initPanel($('#panel'), 'replay', { onChange: () => setTimeout(() => PADS?.refresh(), innerWidth <= 760 ? 0 : 300) });
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
@@ -135,9 +136,12 @@ for (const m of riders) {
 // 滾輪縮放在 MapLibre 不一定帶 originalEvent，直接聽畫布的 wheel
 map.getCanvasContainer().addEventListener('wheel', () => { if (R.follow !== 'off') setFollow('off'); }, { passive: true });
 // 地圖留白：避開左側欄、下方時間軸、右上工具列
-const pad = () => (innerWidth <= 760
-  ? { top: 80, bottom: sheetRestH($('#panel')) + 80, left: 30, right: 64 } // 用收合時的高度，抽屜拉動時鏡頭不跳
+const padRaw = () => (innerWidth <= 760
+  ? { top: 80, bottom: innerHeight - $('#panel').getBoundingClientRect().top + 80, left: 30, right: 64 }
   : { top: 80, bottom: 100, left: $('#panel').offsetWidth + 50, right: 90 });
+PADS = smoothPad(padRaw);
+const pad = () => PADS.get(); // 抽屜／側欄開合後鏡頭慢慢滑到新位置
+addEventListener('resize', () => PADS.refresh());
 function fitAll(dur = 900) {
   const pts = riders.flatMap((m) => m.track.filter((_, i) => i % 10 === 0).map((p) => [p[2], p[1]]));
   const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
@@ -306,7 +310,9 @@ function update(force) {
     drawCharts();
   }
 }
+const gate = frameGate();
 function frame(now) {
+  if (!gate(now)) { requestAnimationFrame(frame); return; } // 省電模式約 30 fps
   const dt = Math.min(0.1, (now - lastT) / 1000);
   lastT = now;
   if (R.playing) {

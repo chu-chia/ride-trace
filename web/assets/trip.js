@@ -1,4 +1,4 @@
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, sheetRestH } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
 import { gpsQueue } from '/assets/gpsqueue.js';
@@ -133,14 +133,16 @@ M.onStyle(() => {
 function panelPad() {
   const narrow = innerWidth <= 760;
   if (!narrow) return { top: 70, bottom: 90, left: ($('#panel').offsetWidth || 380) + 50, right: 80 };
-  // 手機一律用「抽屜收合時」的高度：抽屜拉上拉下時鏡頭不跟著跳
-  return { top: 80, bottom: Math.max(60, sheetRestH($('#panel'), 160) + 16), left: 30, right: 64 };
+  // 用抽屜實際的高度；開合後 smoothPad 讓鏡頭慢慢滑到新的置中位置（拖曳中不更新，所以不會跟著手指晃）
+  return { top: 80, bottom: Math.max(60, innerHeight - $('#panel').getBoundingClientRect().top + 16), left: 30, right: 64 };
 }
-const refreshPad = () => setTimeout(() => (S.pad = panelPad()), 350);
+let PAD = null;
+const refreshPad = () => setTimeout(() => PAD?.refresh(), innerWidth <= 760 ? 0 : 300); // 電腦側欄寬度有 0.25 秒轉場，等它停
 S.refreshPad = refreshPad;
 addEventListener('resize', refreshPad);
 const PANEL = initPanel($('#panel'), 'trip', { onChange: refreshPad });
-S.pad = panelPad();
+PAD = smoothPad(panelPad);
+Object.defineProperty(S, 'pad', { get: () => PAD.get(), set() {}, configurable: true });
 const setCollapsed = (v) => PANEL.set(v);
 
 // 要跟著誰：選了某個人就跟他；「全隊」但地圖上只有一個人時，也跟著那個人
@@ -174,7 +176,9 @@ function camera(force) {
 
 // 動畫迴圈：標記平滑移動、跟隨的人保持在畫面中間、軌跡線尾巴接著標記
 let lastTrailDraw = 0, lastDeclutter = 0;
+const gate = frameGate();
 function tick(now) {
+  if (!gate(now)) { requestAnimationFrame(tick); return; } // 省電模式約 30 fps
   for (const m of S.members.values()) {
     if (!m.anim) continue;
     const k = Math.min(1, (now - m.anim.t0) / m.anim.dur);
@@ -214,7 +218,7 @@ function tick(now) {
       .sort((a, b) => (b.u.uid === S.me) - (a.u.uid === S.me) || (b === ft) - (a === ft));
     declutter(map, list.map((m) => ({ el: m.el, pos: m.pos, name: m.u.nickname })));
   }
-  if (now - lastTrailDraw > 150 && map.getSource('trails')) {
+  if (now - lastTrailDraw > (LOW_POWER ? 1000 : 150) && map.getSource('trails')) {
     lastTrailDraw = now;
     map.getSource('trails').setData(trailsGeo());
   }

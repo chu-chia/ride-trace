@@ -154,6 +154,9 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     if (window.qijiMapDown) throw new Error(window.qijiMapDown);
     map = new maplibregl.Map({
       container, style: STYLES[cur].url, center, zoom, interactive,
+      // 省電模式（common.js 在 <html> 加 .low-power）：手機 3 倍螢幕只畫 2 倍，像素少一半以上
+      pixelRatio: document.documentElement.classList.contains('low-power') ? Math.min(devicePixelRatio, 2) : devicePixelRatio,
+      fadeDuration: document.documentElement.classList.contains('low-power') ? 0 : 300, // 省電：文字不做淡入（淡入期間會一直重畫）
       maxPitch: 80, attributionControl: false,  // 來源標示統一放在「關於網頁」（頭像選單），地圖右下角不放 ⓘ
       dragRotate: interactive3d, pitchWithRotate: interactive3d, touchPitch: interactive3d,
     });
@@ -166,6 +169,19 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => {}) });  // 其他方法（follow、set3d…）都是空的
   }
   if (!interactive3d && interactive) map.touchZoomRotate.disableRotation();
+  // 省電：地圖自己的重畫最多 30 fps（圖磚載入、資料更新時 MapLibre 會連續重畫）；手指在地圖上時不限制，拖曳縮放才跟手
+  if (document.documentElement.classList.contains('low-power')) {
+    const repaint = map.triggerRepaint.bind(map);
+    let last = 0, pending = 0, touching = false;
+    const box = map.getCanvasContainer();
+    box.addEventListener('touchstart', () => { touching = true; }, { passive: true });
+    for (const ev of ['touchend', 'touchcancel']) box.addEventListener(ev, (e) => { if (!e.touches.length) touching = false; }, { passive: true });
+    map.triggerRepaint = () => {
+      const wait = last + 33 - performance.now();
+      if (touching || wait <= 0) { last = performance.now(); repaint(); return; }
+      if (!pending) pending = setTimeout(() => { pending = 0; last = performance.now(); repaint(); }, wait);
+    };
+  }
   if (!terrain) map.setMaxPitch(0);
 
   // 底圖、地形圖磚還沒出來前畫面是一片黑：先放「地圖載入中」，圖磚到齊就收掉
@@ -243,7 +259,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
 
   // MapLibre 5 的鏡頭動畫被打斷時，地形高度可能停在 0（鏡頭會鑽進 3000 公尺的山裡）。
   // 每次停下來就把畫面中心的高度校正成地形高度。
-  let following = false, smoothEl = null, lastT = 0;
+  let following = false, smoothEl = null, lastT = 0, lastKey = '';
   let busyUntil = 0;  // 鏡頭動畫（指北針、2D/3D）結束前，跟隨模式不要每格重設鏡頭把動畫打斷
   const animate = (opts) => { busyUntil = performance.now() + (opts.duration ?? 500) + 80; map.easeTo(opts); };
   let grp = null, grpT = 0; // 全隊鏡頭目前的（平滑後）中心與縮放
@@ -291,6 +307,10 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
         smoothEl = smoothEl == null ? target : smoothEl + (target - smoothEl) * (1 - Math.exp(-dt / 1.6));
         el = smoothEl;
       }
+      // 鏡頭沒有變（人停著、全隊沒動）就不要 jumpTo，地圖才不會每一格白白重畫
+      const key = `${center[0].toFixed(7)},${center[1].toFixed(7)},${el.toFixed(1)},${JSON.stringify(extra, (k, v) => (typeof v === 'number' ? +v.toFixed(4) : v))}`;
+      if (key === lastKey) return;
+      lastKey = key;
       map.jumpTo({ center, elevation: el, ...extra });
     },
     // 全隊鏡頭：每一格算「框住所有人」需要的中心和縮放，鏡頭往那裡平滑地追（不用 easeTo：
@@ -318,7 +338,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     unfollow() {
       grp = null; grpT = 0;
       if (!following) return;
-      following = false; lastT = 0;
+      following = false; lastT = 0; lastKey = '';
       map.setCenterClampedToGround(true);
       fixElevation();
     },

@@ -174,6 +174,43 @@ export function liquidGlass(el, { radius = 24, bezel = 20, scale = 90 } = {}) {
   ro.observe(el);
 }
 
+// ---------- 省電模式（手機預設開，設定頁可關） ----------
+// 地圖頁每一格都在移動鏡頭，地圖就每一格重畫；手機上再乘上 3 倍解析度、3D 地形和玻璃模糊，很吃電。
+// 省電時：鏡頭與標記 30 fps、地圖解析度最多 2 倍、面板不做背景模糊、戰情室不自動旋轉。
+export const LOW_POWER = (() => {
+  let v = null;
+  try { v = localStorage.getItem('qiji:lowpower'); } catch { /* 私密模式 */ }
+  return v ? v === '1' : matchMedia('(pointer: coarse)').matches;
+})();
+document.documentElement.classList.toggle('low-power', LOW_POWER);
+// 動畫迴圈用：回傳 false 表示這一格跳過（省電時約 30 fps）
+export function frameGate() {
+  const ms = LOW_POWER ? 1000 / 30 - 2 : 0;
+  let last = 0;
+  return (now) => { if (now - last < ms) return false; last = now; return true; };
+}
+
+// 地圖留白平滑過渡：抽屜或側欄開合後，鏡頭用 0.45 秒滑到新的置中位置，不會一下子閃過去
+export function smoothPad(compute, ms = 450) {
+  let from = compute(), to = from, t0 = 0;
+  const get = () => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    if (k >= 1) return to;
+    const e = 1 - (1 - k) ** 3;
+    return Object.fromEntries(Object.keys(to).map((key) => [key, (from[key] ?? to[key]) + (to[key] - (from[key] ?? to[key])) * e]));
+  };
+  return { get, refresh() { from = get(); to = compute(); t0 = performance.now(); } };
+}
+
+// iOS：鍵盤收起後整頁可能停在捲動過的位置，固定在畫面上的按鈕看起來在原處、實際點擊位置卻偏了。
+// 地圖頁本來就不該捲動，鍵盤收起或視窗大小變了就捲回頂端。
+const unscroll = () => setTimeout(() => {
+  if (document.getElementById('map') && (scrollX || scrollY)) scrollTo(0, 0);
+}, 80);
+addEventListener('focusout', unscroll);
+window.visualViewport?.addEventListener('resize', unscroll);
+addEventListener('orientationchange', unscroll);
+
 // 手機底部抽屜拖曳（參考美食地圖 useSheetDrag）：
 // 抽屜整塊都能拖（頂列、摘要、把手，按鈕上也行），抽屜跟著手指走；放開時看速度（快速一甩）或距離決定開合。
 // 展開時在清單裡往下拉：清單已在最頂端就改成拖抽屜收合，否則照常捲動。

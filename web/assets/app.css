@@ -29,6 +29,8 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%}
+/* 地圖頁整頁不捲動：iOS 鍵盤收起後頁面停在捲過的位置，固定按鈕的點擊位置會跟畫面錯開 */
+html:has(#map),html:has(#map) body{height:100%;overflow:hidden;overscroll-behavior:none}
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.45}
 button,input,select{font:inherit;color:inherit}
 a{color:var(--accent);text-decoration:none}
@@ -173,6 +175,9 @@ a.li{color:inherit}
 @media (prefers-reduced-transparency: reduce){
   .glass{background:var(--glass);-webkit-backdrop-filter:none;backdrop-filter:none}
 }
+/* 省電模式：不做背景模糊（地圖每重畫一格就要重算一次模糊），改用比較不透明的底色 */
+.low-power .glass{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--glass)}
+.low-power .tool.glass{background:var(--glass)}
 .liquid-glass-filter{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
 
 /* 圖示按鈕（返回、收合）：所有頁同一個尺寸 */
