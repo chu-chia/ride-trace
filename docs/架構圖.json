@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "騎跡：系統架構",
+    "output": "架構圖.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "gps-path",
+        "label": "一筆位置回報的路徑",
+        "focus": ["traccar", "webapp", "edge", "api", "redis", "ingest", "worker"],
+        "note": "GPS 從手機進 API，一次 Pipeline 寫進 Redis，同時丟一份給背景 worker。"
+      },
+      {
+        "id": "realtime",
+        "label": "即時廣播",
+        "focus": ["desk", "webapp", "edge", "api", "redis"],
+        "note": "Redis Pub/Sub 的位置與事件，經 WebSocket 推給同一團所有人的瀏覽器。"
+      },
+      {
+        "id": "alerts",
+        "label": "警示與推播",
+        "focus": ["ingest", "worker", "pushsvc", "opendata", "redis"],
+        "note": "worker 三個 consumer group 分別做統計、警示判斷、推播；外部資料一律 cache-aside。"
+      },
+      {
+        "id": "local-only",
+        "label": "本機界線",
+        "focus": ["api", "redis", "valhalla", "opendata"],
+        "note": "地圖比對與路網都在本機 Valhalla，個人座標不出主機。"
+      }
+    ]
+  },
+  "components": [
+    { "id": "traccar", "type": "external", "label": "Traccar Client", "sublabel": "iOS 背景回報", "pos": [28, 92], "size": [156, 64] },
+    { "id": "webapp", "type": "external", "label": "騎乘頁／規劃頁", "sublabel": "手機瀏覽器", "pos": [28, 214], "size": [156, 64] },
+    { "id": "desk", "type": "external", "label": "戰情室／後台", "sublabel": "電腦瀏覽器", "pos": [28, 336], "size": [156, 64] },
+    { "id": "edge", "type": "security", "label": "Tailscale serve", "sublabel": "HTTPS :8443", "pos": [262, 214], "size": [148, 64], "tag": "tailnet" },
+    { "id": "api", "type": "backend", "label": "FastAPI", "sublabel": "REST＋WebSocket :8750", "pos": [512, 212], "size": [176, 68], "tag": "含靜態前端" },
+    { "id": "redis", "type": "database", "label": "Redis 8.2", "sublabel": "GEO・JSON・TimeSeries・RediSearch", "pos": [830, 210], "size": [186, 72], "tag": "唯一儲存" },
+    { "id": "valhalla", "type": "backend", "label": "Valhalla", "sublabel": "本機台灣路網 :8002", "pos": [830, 62], "size": [186, 64] },
+    { "id": "ingest", "type": "messagebus", "label": "stream:ingest", "sublabel": "Redis Streams", "pos": [512, 428], "size": [176, 64] },
+    { "id": "worker", "type": "backend", "label": "Worker ×N", "sublabel": "stats・alerts・push", "pos": [830, 428], "size": [186, 68] },
+    { "id": "opendata", "type": "external", "label": "TDX／氣象署", "sublabel": "省道事件・鄉鎮預報", "pos": [1150, 428], "size": [150, 64] },
+    { "id": "pushsvc", "type": "external", "label": "APNs／FCM", "sublabel": "Web Push", "pos": [830, 600], "size": [186, 64] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "本機 docker compose", "wraps": ["api", "redis", "valhalla", "worker"], "pad": 22 },
+    { "kind": "security-group", "label": "只收 HTTPS（tailnet）", "wraps": ["edge"], "pad": 14 }
+  ],
+  "connections": [
+    { "from": "traccar", "to": "edge", "label": "/osmand", "variant": "emphasis", "toSide": "top" },
+    { "from": "webapp", "to": "edge", "label": "/api/track", "variant": "emphasis" },
+    { "from": "desk", "to": "edge", "label": "REST／WS" },
+    { "from": "edge", "to": "api", "label": "127.0.0.1:8750", "variant": "emphasis" },
+    { "from": "api", "to": "redis", "label": "Pipeline 十幾個指令", "variant": "emphasis" },
+    { "from": "redis", "to": "api", "label": "Pub/Sub → WebSocket", "variant": "dashed", "fromSide": "bottom", "toSide": "bottom" },
+    { "from": "api", "to": "ingest", "label": "XADD", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 66 },
+    { "from": "ingest", "to": "worker", "label": "XREADGROUP／XAUTOCLAIM" },
+    { "from": "worker", "to": "redis", "label": "Lua 統計與警示、XACK", "fromSide": "top", "toSide": "bottom", "labelDy": -46 },
+    { "from": "api", "to": "valhalla", "label": "/route・trace_attributes", "variant": "dashed", "fromSide": "top", "toSide": "left" },
+    { "from": "worker", "to": "pushsvc", "label": "pywebpush", "fromSide": "bottom", "toSide": "top", "labelAt": [923, 524] },
+    { "from": "worker", "to": "opendata", "label": "cache-aside＋SET NX", "variant": "dashed", "fromSide": "right", "toSide": "left", "labelAt": [1083, 446] }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "即時主軸",
+      "items": [
+        "一筆 GPS 只走一條路：API 一次 Pipeline 寫入足跡、軌跡 Stream、GEO、行程狀態、心跳",
+        "Pub/Sub trip:{id}:live 經 WebSocket 推給同團每一個人",
+        "心跳 key hb:* 90 秒過期 → Keyspace Notification → 標記失聯並廣播"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "背景 worker",
+      "items": [
+        "stats：里程、極速、熱力圖、點亮鄉鎮（Lua 依 ts 去重）",
+        "alerts：落隊、抵達、測速、偏離路線、異常久停、路況與降雨",
+        "push：要推播的事件另走 stream:notify → APNs／FCM；多開 worker 自動分攤"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "資料界線",
+      "items": [
+        "個人座標只進本機 Redis 與本機 Valhalla，不送外部地圖服務",
+        "只有 TDX 與氣象署是對外呼叫：cache-aside＋SET NX 鎖防 stampede",
+        "沒有進行中的行程、沒人開規劃頁時，外部 API 一次也不呼叫"
+      ]
+    }
+  ]
+}
