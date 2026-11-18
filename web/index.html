@@ -51,6 +51,8 @@
   @media (prefers-reduced-motion:reduce){.live .pulse{animation:none}}
   .live b{font-size:16px}
   .live .btn{flex:none}
+  .live[hidden]{display:none}
+  .live-acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .row2 form{display:flex;flex-direction:column;gap:10px}
@@ -85,13 +87,12 @@
     </div>
     <div class="art"><img class="preview" id="fpPreview" alt="" hidden><canvas id="fpCanvas" aria-hidden="true"></canvas><span class="go" aria-hidden="true">›</span></div>
   </a>
-  <a class="melink" href="/footprint?tab=towns">點亮鄉鎮 · 熱力圖 · 統計<span aria-hidden="true">›</span></a>
 
-  <a class="live" id="live" hidden>
+  <div class="live" id="live" hidden>
     <span class="pulse" aria-hidden="true"></span>
     <div style="flex:1;min-width:0"><div class="small muted">進行中的行程</div><b id="liveName"></b><div class="small muted" id="liveSub"></div></div>
-    <span class="btn primary">回到地圖</span>
-  </a>
+    <div class="live-acts"><a class="btn" id="liveWar">戰情室</a><a class="btn primary" id="liveMap">回到地圖</a></div>
+  </div>
 
   <div class="row2">
     <form class="card" id="createF">
@@ -142,7 +143,8 @@ async function loadTrips() {
   const live = trips.find((t) => t.status === 'live');
   if (live) {
     $('#live').hidden = false;
-    $('#live').href = '/trip?id=' + live.id;
+    $('#liveMap').href = '/trip?id=' + live.id;
+    $('#liveWar').href = '/war?id=' + live.id;
     $('#liveName').textContent = live.name;
     $('#liveSub').textContent = `${tripWhen(live)} · ${live.member_count} 人`;
   }
