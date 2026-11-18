@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus } from '/assets/common.js';
+import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -316,7 +316,7 @@ function status(m) {
   if (s.status === 'done') return ['已結束', 'muted'];
   if (s.status === 'lost') return ['失聯', 'crit'];
   if (!numeric(s.lat)) return ['尚未回報', 'muted'];
-  if (Date.now() - (+s.seen || +s.ts) > 30000) return ['訊號弱', 'warn'];
+  if (isWeak(s)) return ['訊號弱', 'warn'];
   return (+s.speed || 0) * 3.6 < 5 ? ['停車', 'info'] : ['騎乘中', 'ok'];
 }
 function routeKmOf(lon, lat) {

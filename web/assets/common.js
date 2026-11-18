@@ -69,6 +69,9 @@ export function toast(text, { icon = '騎', color = '#d9500f', sub = '' } = {}) 
   setTimeout(() => el.remove(), 5000);
 }
 
+// 訊號弱：移動中 30 秒沒新點；停著（< 5 km/h）3 分鐘（停著時手機本來就少送，甚至休眠不送；10 分鐘才算失聯）
+export const isWeak = (s) => Date.now() - (+s.seen || +s.ts) > ((+s.speed || 0) * 3.6 < 5 ? 180000 : 30000);
+
 // 騎士標記的落隊光暈：flagged＝有落隊／超前旗標；超過門檻越多越紅（剛超過黃、超過兩倍門檻就是紅）
 export function gapGlow(el, flagged, gapKm, lagKm) {
   el.classList.toggle('gapflag', !!flagged);

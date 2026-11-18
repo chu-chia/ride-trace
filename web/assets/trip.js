@@ -1,4 +1,4 @@
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -48,7 +48,7 @@ function statusOf(m) {
   if (s.status === 'done') return 'done';
   if (s.status === 'lost') return 'lost';
   if (s.lat == null || s.lat === '') return 'none';
-  if (Date.now() - (+s.seen || +s.ts) > 30000) return 'weak';
+  if (isWeak(s)) return 'weak';
   return (+s.speed || 0) * 3.6 < 5 ? 'rest' : 'ride';
 }
 

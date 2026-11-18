@@ -84,8 +84,10 @@ async def expiry_listener():
                 _, tid, uid = key.split(":", 2)
                 if not await r.sismember(K.active(tid), uid):
                     continue
+                hbs = int(await r.hget(K.state(tid, uid), "hbs") or 90)
                 await r.hset(K.state(tid, uid), "status", "lost")
-                await events.emit(tid, "lost", uid, "失聯：90 秒沒有回報位置", ts=await events.last_fix_ts(tid, uid))
+                text = "失聯：90 秒沒有回報位置" if hbs < 120 else f"失聯：停車後 {hbs // 60} 分鐘沒有回報位置"
+                await events.emit(tid, "lost", uid, text, ts=await events.last_fix_ts(tid, uid))
                 await events.publish(tid, {"kind": "status", "uid": uid, "status": "lost"})
         except asyncio.CancelledError:
             raise

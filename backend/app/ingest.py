@@ -13,7 +13,15 @@ from .db import K, r
 from .geo import bucket_of, day_key, is_rough, segment_cells, step
 
 router = APIRouter()
-HEARTBEAT_S = 90
+HEARTBEAT_S = 90         # 移動中：90 秒沒有回報就算失聯（騎車中斷訊要馬上知道）
+HEARTBEAT_REST_S = 600   # 停著（< 5 km/h）：10 分鐘。iPhone 停著時定位 App 會休眠、要離開原地一段距離才醒，
+                         # 停紅燈、休息、出發前在室內等都不會有新點；停太久的安全問題交給「久停」警示
+REST_KMH = 5
+
+
+def heartbeat_s(speed_ms: float | None) -> int:
+    """心跳 TTL：最後一點是停著的就放寬。沒有速度的點當成移動中（保守）。"""
+    return HEARTBEAT_REST_S if speed_ms is not None and speed_ms * 3.6 < REST_KMH else HEARTBEAT_S
 TS_RETENTION_MS = 0  # 0 = 永久保存
 
 
@@ -140,8 +148,9 @@ async def ingest(uid: str, fix: Fix) -> dict:
             p.execute_command("TS.INCRBY", "ts:sys:pubsub", 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000,
                               "LABELS", "metric", "sys", "kind", "pubsub")
         if live:
-            p.hset(K.state(tid, uid), mapping={**(fields if fresh or not personal else {}), "status": "ok", "seen": now})
-            p.set(K.hb(tid, uid), now, ex=HEARTBEAT_S)
+            hb = heartbeat_s(fix.speed)
+            p.hset(K.state(tid, uid), mapping={**(fields if fresh or not personal else {}), "status": "ok", "seen": now, "hbs": hb})
+            p.set(K.hb(tid, uid), now, ex=hb)
         p.zadd("online:report", {uid: now})  # 後台「線上人數」：最近 2 分鐘有回報位置的人（ZCOUNT）
         # 交給 worker：行程中的回報（警示、統計），以及所有新的足跡點（熱力圖、點亮鄉鎮）
         if fresh or not personal:
