@@ -4,7 +4,14 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="theme-color" content="#d9500f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="騎跡">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>我的足跡｜騎跡 RideTrace</title>
 <link rel="stylesheet" href="/vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
@@ -34,55 +41,51 @@
   .legend{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
   .legend i{flex:1;height:8px;border-radius:4px}
   :root{--track:#d9500f}:root[data-theme="dark"]{--track:#ff8a3d}
-  .side{position:fixed;z-index:9;left:12px;top:12px;bottom:12px;width:420px;max-width:calc(100vw - 24px);border-radius:22px;display:flex;flex-direction:column;overflow:hidden;background:rgba(24,25,30,.88);--fg:#f5f5f7;--muted:#a8a8b3;--surface:#303038;--surface-2:#383840;--line:#484850;color:var(--fg)}
-  .fp-handle{display:none}
-  .fp-head{padding:16px 16px 8px;display:flex;gap:10px;align-items:start;flex:none}.fp-head a{color:var(--fg);font-size:24px;line-height:1}.fp-head>div{min-width:0}.fp-head h1{margin:0;font-size:21px}.fp-head .small{margin-top:3px}.refreshing{font-size:11px;color:var(--muted)}
-  .side .seg{margin:6px 12px 8px;flex:none}.side .seg button{font-size:13px;min-width:0;padding:8px 0}
-  .body{flex:1;min-height:0;overflow-y:auto;padding:6px 16px 18px;display:flex;flex-direction:column;gap:12px;overscroll-behavior:contain}.body[hidden]{display:none}.body>*{flex-shrink:0}
+  .refreshing{font-size:var(--fs-xs);color:var(--muted);font-weight:400}
+  .panel-body[hidden]{display:none!important}
+  .panel-body{overscroll-behavior:contain}
   .fp-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.fp-stats div{min-width:0;border-radius:12px;background:var(--surface-2);padding:9px 7px;display:flex;flex-direction:column}.fp-stats b{font-size:18px;line-height:1.2}.fp-stats span{font-size:10px;color:var(--muted)}
   .fp-label{font-size:12px;color:var(--muted);font-weight:600}.fp-range{font-size:15px;font-weight:700}.fp-seg{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;padding:3px;border-radius:12px;background:var(--surface-2)}.fp-seg button{border:0;border-radius:9px;background:none;color:var(--muted);font:inherit;font-size:11px;padding:8px 1px;cursor:pointer}.fp-seg button.on{background:#d9500f;color:white}
   .fp-custom[hidden]{display:none}.fp-custom{display:flex;flex-direction:column;gap:8px}.fp-months{display:flex;gap:5px;overflow-x:auto;max-width:100%;scrollbar-width:none}.fp-months button,.fp-buckets button{border:0;border-radius:999px;background:var(--surface-2);color:var(--fg);font:inherit;font-size:11px;padding:5px 8px;white-space:nowrap;cursor:pointer}.fp-months button.on,.fp-buckets button.on{background:#d9500f;color:white}.fp-dates{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:center}.fp-dates input{width:100%;min-width:0;padding:7px 5px;font-size:12px}.fp-buckets{display:flex;gap:5px;flex-wrap:wrap}
   #cal{overflow-x:auto;max-width:100%;touch-action:pan-x;scrollbar-color:var(--muted) transparent}#cal svg{display:block;max-width:none}#cal rect{cursor:pointer}#cal rect:focus-visible{outline:none;stroke:#fff;stroke-width:2}.fp-tip{position:fixed;z-index:30;pointer-events:none;padding:5px 8px;border-radius:8px;background:#17181d;color:white;font-size:12px;box-shadow:0 4px 12px #0008}.fp-opts{display:flex;flex-direction:column;gap:7px;font-size:12px}.fp-opts label{display:flex;gap:7px;align-items:center}.fp-play{align-self:flex-start;font-size:12px;padding:7px 10px}
-  #fog{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}.loading{position:fixed;z-index:9;top:16px;left:50%;transform:translateX(-50%);padding:6px 14px;border-radius:999px;font-size:12px}.tools{right:12px;top:12px}
-  .maplibregl-ctrl-bottom-left{left:432px}
-  @media(max-width:760px){.side{left:0;right:0;top:auto;bottom:0;width:auto;max-width:none;height:min(64dvh,560px);border-radius:20px 20px 0 0;padding-bottom:env(safe-area-inset-bottom);transition:height .25s ease}.side.small{height:calc(118px + env(safe-area-inset-bottom))}.side.small .body{display:none}.fp-handle{display:grid;place-items:center;border:0;background:none;padding:8px 0 2px;touch-action:none}.fp-handle:before{content:"";width:38px;height:5px;border-radius:5px;background:var(--muted)}.fp-head{padding:6px 14px 4px}.fp-head h1{font-size:17px}.fp-head .small{font-size:11px}.side .seg{margin:5px 10px}.side .seg button{padding:7px 0;font-size:12px}.body{padding:6px 14px 16px}.tools{top:max(12px,env(safe-area-inset-top));right:10px}.maplibregl-ctrl-bottom-left{left:0;bottom:min(64dvh,560px)}body:has(.side.small) .maplibregl-ctrl-bottom-left{bottom:calc(118px + env(safe-area-inset-bottom))}}
+  #fog{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}.loading{position:fixed;z-index:9;top:16px;left:50%;transform:translateX(-50%);padding:6px 14px;border-radius:999px;font-size:12px}
 </style>
 </head>
 <body>
 <div class="mapwrap"><div id="map"></div><canvas id="fog"></canvas></div>
 <div class="tools">
-  <button class="tool glass" id="bStyle" title="切換地圖風格（深藍 → 深色 → 衛星 → 淺色）">深藍</button>
+  <button class="tool glass" id="bStyle" data-icon="layers">深藍</button>
 </div>
 <div class="loading glass" id="loading" hidden>載入中…</div>
 
-<aside class="side glass small" id="side">
-  <button class="fp-handle" id="handle" aria-label="展開足跡面板" aria-expanded="false"></button>
-  <div class="fp-head"><a href="/" aria-label="回首頁">‹</a><div><h1>我的足跡 <span class="refreshing" id="refreshing" hidden>更新中…</span></h1><div class="small muted" id="overall">讀取中…</div></div></div>
+<aside class="panel glass" id="side">
+  <button class="handle" id="handle" aria-expanded="true"></button>
+  <div class="panel-head"><a class="icon-btn" href="/" data-icon="back" aria-label="回首頁"></a><div class="panel-title"><b>我的足跡 <span class="refreshing" id="refreshing" hidden>更新中…</span></b><div class="sub" id="overall">讀取中…</div></div><button class="icon-btn panel-collapse" data-icon="collapse" aria-expanded="true"></button></div>
   <div class="seg" id="tabs" role="tablist" aria-label="足跡分頁"><button data-t="footprint" role="tab">足跡</button><button data-t="towns" role="tab">鄉鎮</button><button data-t="heat" role="tab">熱力圖</button><button data-t="stats" role="tab">統計</button></div>
-  <div class="body" data-b="footprint" role="tabpanel">
+  <div class="panel-body" data-b="footprint" role="tabpanel">
     <div><div class="fp-range" id="rangeTitle">全部</div><div class="small muted" id="rangeSub"></div></div>
     <div class="fp-stats"><div><b class="num" id="stArea">–</b><span>km² 探索面積</span></div><div><b class="num" id="stCells">–</b><span>個格子</span></div><div><b class="num" id="stKm">–</b><span>km 里程</span></div><div><b class="num" id="stDays">–</b><span>天有紀錄</span></div></div>
     <div class="fp-label">時間範圍</div><div class="fp-seg" id="presets"><button data-p="all" class="on">全部</button><button data-p="7">7 天</button><button data-p="30">30 天</button><button data-p="90">3 個月</button><button data-p="custom">自訂</button></div>
     <div class="fp-custom" id="customRange" hidden><div class="fp-months" id="months"></div><div class="fp-dates"><input class="input num" type="date" id="from"><span class="muted">到</span><input class="input num" type="date" id="to"></div></div>
     <div class="fp-label">一天中的時段</div><div class="fp-buckets" id="buckets"><button data-b="dawn" class="on">清晨 4–8</button><button data-b="day" class="on">白天 8–17</button><button data-b="dusk" class="on">傍晚 17–20</button><button data-b="night" class="on">夜間 20–4</button></div>
-    <div class="fp-label">每日里程長條圖 <span class="muted">點一天；Shift 點另一日選區間</span></div><div id="cal" aria-label="每日里程長條圖"></div>
+    <div class="fp-label">每日里程</div><div id="cal" aria-label="每日里程長條圖"></div>
     <div class="fp-opts"><label><input type="checkbox" id="optLines" checked> 顯示軌跡線</label><label><input type="checkbox" id="optAll" checked> 其他時間去過的路淡淡顯示</label><label><input type="checkbox" id="optFog"> 迷霧模式：沒去過的地方蓋起來</label></div>
     <button class="btn fp-play" id="play">▶ 逐月播放</button>
   </div>
-  <div id="recordError" class="small muted" role="status"></div>
-  <div class="body" data-b="towns">
+  <div id="recordError" class="small muted keep" role="status" style="padding:0 var(--sp-4)"></div>
+  <div class="panel-body" data-b="towns">
     <div class="hero"><b class="num" id="tLit">–</b><span id="tOf">/ 368 個鄉鎮市區</span></div>
     <div class="bar"><i id="tBar" style="width:0"></i></div>
     <div class="note">騎過的鄉鎮會亮起來。每個位置點都用 Redis 的 GEOSHAPE 空間索引查出所在鄉鎮（FT.SEARCH … CONTAINS），第一次點亮時 SADD 回傳 1。</div>
     <div class="card2"><h4>最近點亮</h4><div id="tRecent"></div></div>
-    <div class="card2"><h4>各縣市完成度（點一下看位置）</h4><div id="tCounties"></div></div>
+    <div class="card2"><h4>各縣市完成度</h4><div id="tCounties"></div></div>
   </div>
-  <div class="body" data-b="heat" hidden>
+  <div class="panel-body" data-b="heat" hidden>
     <div class="note">所有足跡疊在一起，越亮代表經過越多次。每個格子約 160 m，用 Sorted Set（ZINCRBY）累計，ZREVRANGE 取出前幾名就是最常走的路；放大到街道時改用 GEO 的 GEOSEARCH BYBOX 只取畫面內的每一個足跡點。</div>
     <div class="legend">少<i style="background:linear-gradient(90deg,rgba(255,138,61,.15),#ff8a3d,#ffd60a,#fff)"></i>多</div>
     <div class="card2"><h4>最常去的地方</h4><div id="hPlaces"></div></div>
   </div>
-  <div class="body" data-b="stats" hidden>
+  <div class="panel-body" data-b="stats" hidden>
     <div class="kpi"><div><b class="num" id="sKm">–</b><span>總里程 km</span></div><div><b class="num" id="sDays">–</b><span>有騎車的天數</span></div><div><b class="num" id="sTrips">–</b><span>車隊行程</span></div></div>
     <div class="card2"><h4>每月里程（km）</h4><div class="chart" id="sChart"></div></div>
     <div class="card2"><h4>你在各種路的實際速度</h4><div id="sPace"></div><div class="note" style="margin-top:6px">規劃路線時的「依你的速度」就是用這些數字（TimeSeries：TS.MRANGE … GROUPBY cat REDUCE sum）。</div></div>

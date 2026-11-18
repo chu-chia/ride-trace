@@ -1,7 +1,8 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable } from '/assets/common.js';
+import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
+import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -17,6 +18,22 @@ const FEED_FILTER_KEY = 'qiji:war:feed-filter';
 const panels = [...document.querySelectorAll('.war-panel')];
 const stage = $('#stage');
 const mobile = matchMedia('(max-width:1100px)');
+// 手機（觸控、螢幕窄）才出現「電腦版／手機版」切換鈕；切換後重新載入，讓整頁用新的版面寬度重排
+// 直拿手機看電腦版：版面是 1280 寬、2700 多高的直長畫面，改用「上面地圖、下面分析圖表」的固定排法（html.desk-portrait）
+const deskPortrait = () => document.documentElement.classList.contains('desk-portrait');
+{
+  const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 820;
+  let desk = false;
+  try { desk = localStorage.getItem('qiji:war:desk') === '1'; } catch { /* 私密模式 */ }
+  const b = $('#deskView');
+  if (phone) {
+    b.style.display = '';
+    setLabel(b, desk ? '手機版' : '電腦版');
+    b.onclick = () => { try { localStorage.setItem('qiji:war:desk', desk ? '0' : '1'); } catch { /* 私密模式 */ } location.reload(); };
+    const portrait = () => document.documentElement.classList.toggle('desk-portrait', desk && innerHeight > innerWidth * 1.2);
+    portrait(); addEventListener('resize', portrait);
+  }
+}
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const snap = (v) => Math.round(v / 12) * 12;
 let editing = false, topLayer = 5;
@@ -28,6 +45,7 @@ function saveLayout() {
   try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* 瀏覽器停用儲存時仍可操作 */ }
 }
 function restoreLayout() {
+  if (deskPortrait()) { panels.forEach((el) => { el.style.cssText = ''; }); return; } // 直式電腦版用固定排法
   let layout;
   try { layout = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null'); } catch { return; }
   if (!layout || typeof layout !== 'object') return;
@@ -46,7 +64,7 @@ function restoreLayout() {
   }
 }
 function setEditing(on) {
-  editing = on && !mobile.matches;
+  editing = on && !mobile.matches && !deskPortrait();
   stage.classList.toggle('editing', editing);
   $('#editLayout').setAttribute('aria-pressed', String(editing));
   $('#editLayout').textContent = editing ? '完成編輯' : '編輯版面';
@@ -93,7 +111,18 @@ $('#resetLayout').onclick = () => {
 restoreLayout();
 window.addEventListener('resize', () => { if (!mobile.matches) restoreLayout(); else setEditing(false); map.resize(); });
 $('#tripLink').href = `/trip?id=${encodeURIComponent(tid)}`;
-$('#mapStyle').onclick = () => { $('#mapStyle').textContent = `${M.nextStyle()}地圖`; };
+$('#mapStyle').onclick = () => setLabel($('#mapStyle'), M.nextStyle());
+panels.forEach((el) => liquidGlass(el));
+// 工具列放在右上、右側面板的左邊；面板被拖動或縮放後重新計算
+function placeTools() {
+  if (mobile.matches) return document.documentElement.style.removeProperty('--tools-right');
+  const right = panels.map((el) => el.getBoundingClientRect()).filter((r) => r.top < 160 && r.left > innerWidth / 2);
+  const x = right.length ? Math.min(...right.map((r) => r.left)) : innerWidth;
+  document.documentElement.style.setProperty('--tools-right', `${Math.round(innerWidth - x + 12)}px`);
+}
+placeTools();
+addEventListener('resize', placeTools);
+addEventListener('pointerup', () => setTimeout(placeTools, 0));
 
 /* 手機抽屜沿用行程頁的收合概念，內容移入目前分頁避免複製資料。 */
 const sheet = $('#mobileSheet');
@@ -107,17 +136,13 @@ function placeMobile() {
 }
 function setSheet(open) {
   sheet.classList.toggle('small', !open);
-  $('#sheetToggle').textContent = open ? '收合' : '展開';
-  $('#sheetToggle').setAttribute('aria-expanded', String(open));
   $('#sheetHandle').setAttribute('aria-expanded', String(open));
   $('#sheetHandle').setAttribute('aria-label', open ? '收合戰情室資訊' : '展開戰情室資訊');
   map.resize();
+  setTimeout(() => PADS.refresh(), 0); // PADS 在檔案後段才建立
 }
-$('#sheetToggle').onclick = () => setSheet(sheet.classList.contains('small'));
-$('#sheetHandle').onclick = $('#sheetToggle').onclick;
-let touchStart = null;
-$('#sheetHandle').addEventListener('touchstart', (e) => { touchStart = e.touches[0].clientY; }, { passive: true });
-$('#sheetHandle').addEventListener('touchend', (e) => { if (touchStart == null) return; const dy = e.changedTouches[0].clientY - touchStart; if (Math.abs(dy) > 35) setSheet(dy < 0); touchStart = null; });
+$('#sheetHandle').onclick = () => setSheet(sheet.classList.contains('small'));
+sheetDrag(sheet, { isOpen: () => !sheet.classList.contains('small'), setOpen: setSheet, scroll: '.sheet-content' });
 document.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => {
   currentTab = b.dataset.tab;
   document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
@@ -141,7 +166,7 @@ function upsert(u, state = {}) {
     el.style.setProperty('--c', u.color);
     el.style.setProperty('--ink', inkOn(u.color));
     el.innerHTML = `<div class="arrow"></div><div class="dot">${esc(initialOf(u.nickname))}</div><div class="name">${esc(u.nickname)}</div>`;
-    m = { u, state: {}, recent: [], el, marker: new maplibregl.Marker({ element: el, anchor: 'center' }), trail: [], pos: null, from: null, to: null, t0: 0, onMap: false };
+    m = { u, state: {}, recent: [], el, marker: new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1' }), trail: [], pos: null, from: null, to: null, t0: 0, onMap: false };
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
@@ -164,16 +189,44 @@ M.onStyle(() => {
 
 /* ---------- 運鏡：手動操作後暫停跟隨 ---------- */
 let lastT = performance.now(), lastTrail = 0;
-let autoFollow = true;
-const pad = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : { top: 90, bottom: 160, left: 395, right: 365 };
-function pauseFollow(e) {
-  if (!e.originalEvent) return;
+let autoFollow = true;  // false＝暫離（使用者拖了地圖）
+let awayAt = 0;
+const padRaw = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : deskPortrait() ? { top: 120, bottom: Math.round(innerHeight * .56), left: 60, right: 120 } : { top: 90, bottom: 160, left: 395, right: 365 };
+// 手勢規則（docs/地圖手勢規則.md）：拖曳＝暫離（按鈕／列變外框，10 秒沒動自動回去）；縮放、旋轉、傾斜繼續跟隨；
+// 全隊模式下縮放也算暫離
+function goAway() {
+  awayAt = Date.now();
+  if (!autoFollow) return;
   autoFollow = false;
   M.unfollow();
+  syncFollowBtn();
+  renderCards();
 }
-for (const type of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart']) map.on(type, pauseFollow);
-$('#centerTeam').addEventListener('click', () => { autoFollow = true; S.focus = null; renderCards(); M.unfollow(); if (S.route && !S.profile) buildProfile(); });
+function resumeFollow() {
+  autoFollow = true;
+  M.regroup();
+  GEST.sync();
+  syncFollowBtn();
+  renderCards();
+}
+// 「全隊」鈕：實心＝自動框住全隊；外框＝暫離（點了回去）；跟著某人時放開
+const syncFollowBtn = () => {
+  press($('#centerTeam'), autoFollow && !S.focus);
+  $('#centerTeam').classList.toggle('away', !autoFollow && !S.focus);
+};
+const GEST = cameraGestures(M, {
+  centered: () => autoFollow && !!S.focus,
+  onPan: goAway,
+  onZoom: () => { if (!S.focus && autoFollow) goAway(); },
+  onActivity: () => { if (!autoFollow) awayAt = Date.now(); },
+});
+$('#centerTeam').addEventListener('click', () => { S.focus = null; resumeFollow(); if (S.route && !S.profile) buildProfile(); });
+const PADS = smoothPad(padRaw);
+const pad = () => PADS.get(); // 抽屜開合後鏡頭慢慢滑到新位置
+addEventListener('resize', () => PADS.refresh());
+const gate = frameGate();
 function frame(now) {
+  if (!gate(now)) { requestAnimationFrame(frame); return; } // 省電模式約 30 fps
   const dt = Math.min(0.2, (now - lastT) / 1000);
   lastT = now;
   for (const m of S.members.values()) {
@@ -195,8 +248,10 @@ function frame(now) {
     }
   }
   const pts = [...S.members.values()].filter((m) => m.pos && m.u.active !== false && m.state.status !== 'lost').map((m) => m.pos);
+  const back = resumeMs();
+  if (!autoFollow && back > 0 && !M.busy && Date.now() - awayAt > back) resumeFollow();
   if (S.styleReady && pts.length && !S.profiling && autoFollow) {
-    map.setBearing((map.getBearing() + dt * 2) % 360);
+    if (!LOW_POWER && !M.busy) map.setBearing((map.getBearing() + dt * 2) % 360); // 慢慢旋轉；省電時不轉，鏡頭不動地圖就不必重畫
     const fm = S.focus && S.members.get(S.focus);
     if (fm?.pos) M.follow(fm.pos, { padding: pad() });  // 點了隊員表：鏡頭跟著他
     else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
@@ -255,12 +310,12 @@ function renderCards() {
     const avg = recentSpeed(m), eta = avg && remaining != null && Number.isFinite(remaining) ? clock(Date.now() + remaining / avg * 3600000) : null;
     const left = S.route && numeric(p?.km) ? Math.max(0, S.route.cum_km.at(-1) - +p.km) : null;
     return {
-      uid: m.u.uid, name: m.u.nickname, color: m.u.color, on: S.focus === m.u.uid,
+      uid: m.u.uid, name: m.u.nickname, color: m.u.color, on: S.focus === m.u.uid && autoFollow, away: S.focus === m.u.uid && !autoFollow,
       sub: [alert[0], eta && stop ? `${stop.name === '終點' ? '' : stop.name + ' '}預計 ${eta}` : ''].filter(Boolean).join(' · '), subCls: alert[1],
       cols: [[off ? '–' : Math.round((+s.speed || 0) * 3.6), 'km/h'], [numeric(s.alt) ? Math.round(+s.alt) : '–', 'm 海拔'],
              [(+m.u.stats?.km || 0).toFixed(1), 'km 已騎'], [left == null ? '–' : left.toFixed(1), 'km 距終點']],
     };
-  }), (uid) => { S.focus = S.focus === uid ? null : uid; autoFollow = true; M.unfollow(); renderCards(); });
+  }), (uid) => { S.focus = S.focus === uid && autoFollow ? null : uid; M.unfollow(); resumeFollow(); });
   if (!list.length) $('#cards').innerHTML = '<p class="empty">還沒有隊友</p>';
 }
 
@@ -344,7 +399,12 @@ function buildProfile() {
   S.profiling = true;
   if (autoFollow) { map.setPitch(0); map.setBearing(0); }
   map.fitBounds(b, { padding: pad(), duration: 0 });
-  map.once('idle', () => {
+  // 等地圖 idle（地形圖磚到齊）再取高度；但軌跡每 0.5 秒更新、手機省電重畫時地圖可能一直不 idle，
+  // 最多等 4 秒，不然 S.profiling 一直是 true，鏡頭永遠停在整條路線、不會框住全隊
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
     const total = S.route.cum_km.at(-1), out = [];
     let j = 0;
     for (let k = 0; k <= 160; k++) {
@@ -357,7 +417,9 @@ function buildProfile() {
     if (autoFollow) map.setPitch(60);
     S.profiling = false;
     renderProgress();
-  });
+  };
+  map.once('idle', finish);
+  setTimeout(finish, 4000);
 }
 function renderProgress() {
   const svg = $('#profile');

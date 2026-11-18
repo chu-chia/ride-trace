@@ -1,9 +1,11 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, $, $$, dock, esc, teamTable, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
+import { api, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
+import { cameraGestures } from '/assets/gestures.js';
 
-// 寬螢幕：標題列（返回、行程名）併進右側面板頂端；手機維持浮在左上（先做，避免資料載完才跳版面）
-dock($('.topbar'), $('.panel'), '(min-width: 861px)');
+// 側欄收合（電腦收合鈕／手機拉把手）與其他地圖頁一致
+let PADS = null;
+const PANEL = initPanel($('#panel'), 'replay', { onChange: () => setTimeout(() => PADS?.refresh(), innerWidth <= 760 ? 0 : 300) });
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
@@ -29,7 +31,7 @@ catch (err) {
 }
 const riders = data.members.filter((m) => m.track.length > 1);
 const t0 = data.t0, t1 = data.t1;
-const R = { t: t0, playing: false, rate: 60, follow: 'all', followTarget: 'all', color: 'rider', sel: riders[0]?.uid, bearing: null, zoomed: false };
+const R = { t: t0, playing: false, rate: 60, follow: 'all', away: false, headingUp: true, followTarget: 'all', color: 'rider', sel: riders[0]?.uid, bearing: null, zoomed: false };
 
 $('#tName').textContent = data.name;
 document.title = `${data.name} · 回放`;
@@ -105,7 +107,7 @@ M.onStyle(() => {
   if (!map.getLayer('rp-ghost')) map.addLayer({ id: 'rp-ghost', type: 'line', source: 'rp-ghost', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 3, 'line-opacity': 0.22 } });
   if (!map.getLayer('rp-seg')) map.addLayer({ id: 'rp-seg', type: 'line', source: 'rp-seg', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': colorExpr(), 'line-width': 4, 'line-opacity': 0.95 } });
   applyLayerState();
-  $('#bStyle').textContent = M.styleName;
+  setLabel($('#bStyle'), M.styleName);
   R.styleReady = true;
   $('#b3d').disabled = false;
 });
@@ -123,46 +125,71 @@ for (const m of riders) {
   el.style.setProperty('--c', m.color);
   el.style.setProperty('--ink', inkOn(m.color));
   el.innerHTML = `<div class="arrow" style="visibility:hidden"></div><div class="dot">${esc(initialOf(m.nickname))}</div><div class="name">${esc(m.nickname)}</div>`;
-  el.onclick = () => setFollow(m.uid);
+  el.onclick = () => pick(m.uid);
   m.el = el;
-  m.marker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([m.track[0][2], m.track[0][1]]).addTo(map);
+  m.marker = new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1' }).setLngLat([m.track[0][2], m.track[0][1]]).addTo(map);
 }
 
 /* ---------- 鏡頭 ---------- */
-['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => {
-  if (e.originalEvent && R.follow !== 'off') setFollow('off');
-}));
-// 滾輪縮放在 MapLibre 不一定帶 originalEvent，直接聽畫布的 wheel
-map.getCanvasContainer().addEventListener('wheel', () => { if (R.follow !== 'off') setFollow('off'); }, { passive: true });
-const pad = () => (innerWidth <= 860 ? { top: 80, bottom: innerHeight * 0.4 + 140, left: 30, right: 30 } : { top: 80, bottom: 150, left: 40, right: 420 });
+// 手勢規則（docs/地圖手勢規則.md）：拖曳＝暫離（按鈕／列變外框，點了回去；回放不自動回去）；
+// 縮放、傾斜繼續跟拍；旋轉繼續跟拍但不再車頭朝上（像 Apple 地圖「跟隨＋方向」被轉了就變「跟隨」）；全隊模式下縮放也算暫離
+function goAway() {
+  if (R.away) return;
+  R.away = true; R.fly = null;
+  M.unfollow();
+  syncFollowUi();
+}
+const GEST = cameraGestures(M, {
+  centered: () => !R.away && R.follow !== 'all',
+  onPan: goAway,
+  onZoom: () => { if (R.follow === 'all' && !R.away) goAway(); },
+  onRotate: () => { R.headingUp = false; R.bearing = null; },
+});
+// 點隊員：正在跟他就回到全隊；暫離中點同一個人＝回去（保留縮放）；其他人＝改跟他
+function pick(uid) {
+  if (R.follow === uid && !R.away) setFollow('all');
+  else setFollow(uid, { keepZoom: R.follow === uid });
+}
+// 地圖留白：避開左側欄、下方時間軸、右上工具列
+const padRaw = () => (innerWidth <= 760
+  ? { top: 80, bottom: innerHeight - $('#panel').getBoundingClientRect().top + 80, left: 30, right: 64 }
+  : { top: 80, bottom: 100, left: $('#panel').offsetWidth + 50, right: 90 });
+PADS = smoothPad(padRaw);
+const pad = () => PADS.get(); // 抽屜／側欄開合後鏡頭慢慢滑到新位置
+addEventListener('resize', () => PADS.refresh());
 function fitAll(dur = 900) {
   const pts = riders.flatMap((m) => m.track.filter((_, i) => i % 10 === 0).map((p) => [p[2], p[1]]));
   const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
   const cam = map.cameraForBounds(b, { padding: pad(), maxZoom: 15 });
   if (cam) { R.easeUntil = performance.now() + dur + 50; map.easeTo({ ...cam, pitch: M.is3d ? 50 : 0, bearing: 0, duration: dur }); }
 }
-function setFollow(uid) {
-  if (uid !== 'off') R.followTarget = uid;
+function syncFollowUi() {
+  press($('#bAll'), R.follow === 'all' && !R.away);
+  $('#bAll').classList.toggle('away', R.follow === 'all' && R.away);
+  renderRiders();
+}
+function setFollow(uid, { keepZoom = false } = {}) {
+  R.followTarget = uid;
   R.follow = uid;
-  if (uid !== 'all' && uid !== 'off') R.sel = uid;
+  R.away = false;
+  R.headingUp = true;
+  R.keepZoom = keepZoom;
+  if (uid !== 'all') R.sel = uid;
   R.zoomed = false;
   R.fly = null;
   R.bearing = null;
-  if (uid === 'all' || uid === 'off') M.unfollow();  // 換跟拍對象時不放開，鏡頭高度才能連續
-  $('#cam').value = uid;
-  press($('#bFollow'), uid !== 'off');
-  $('#bFollow').textContent = uid === 'off' ? '跟隨視角' : '跟隨中';
+  if (uid === 'all') M.unfollow();  // 換跟拍對象時不放開，鏡頭高度才能連續
+  GEST.sync();
+  press($('#bAll'), uid === 'all');
+  $('#bAll').classList.toggle('away', false);
   if (uid === 'all') fitAll();
   applyLayerState();
   renderRiders();
   renderSummary();
   drawCharts();
 }
-$('#cam').innerHTML = '<option value="off">自由視角</option><option value="all">鏡頭：全隊</option>' + riders.map((m) => `<option value="${m.uid}">跟拍：${esc(m.nickname)}</option>`).join('');
-$('#cam').value = R.follow;
-$('#cam').onchange = (e) => setFollow(e.target.value);
-$('#bFollow').onclick = () => setFollow(R.follow === 'off' ? R.followTarget : 'off');
-press($('#bFollow'), true);
+// 跟隨方式和行程頁一樣：右上「全隊」看全部人，點隊員（列表或地圖上的標記）就跟著他，再點一次回到全隊
+$('#bAll').onclick = () => setFollow('all');
 
 /* ---------- 面板 ---------- */
 // 全隊狀態的每一列就是選人：點了鏡頭跟拍那個人，摘要／曲線也換成他
@@ -188,17 +215,19 @@ function renderTeam() {
   const active = states.filter(({ st }) => !st.before);
   const lead = active.length ? Math.max(...active.map(({ st }) => st.km)) : null;
   $('#teamBrief').textContent = `${riders.length} 人 · ${active.length} 人已出發`;
-  const focus = R.follow !== 'all' && R.follow !== 'off' ? R.follow : R.sel;
+  // 選中＝正在跟隨的人（和行程頁、戰情室一樣）
+  const focus = R.follow;
   teamTable($('#teamRows'), states.map(({ m, st }) => {
     const started = !st.before;
     return {
-      uid: m.uid, name: m.nickname, color: m.color, on: m.uid === focus,
+      uid: m.uid, name: m.nickname, color: m.color, on: m.uid === focus && !R.away, away: m.uid === focus && R.away,
       sub: st.before ? '還沒出發' : st.after ? '已抵達' : (st.kmh ?? 0) < 5 ? '停車' : '騎乘中',
       subCls: st.before || st.after ? 'info' : (st.kmh ?? 0) < 5 ? 'info' : 'ok',
       cols: [[started && st.kmh != null ? Math.round(st.kmh) : '–', 'km/h'], [started && st.alt != null ? Math.round(st.alt) : '–', 'm 海拔'],
              [started ? st.km.toFixed(1) : '–', 'km 已騎'], [started && lead != null ? Math.max(0, lead - st.km).toFixed(1) : '–', 'km 距領先']],
     };
-  }), (uid) => setFollow(uid));
+  }), pick);
+  $('#miniTeam').textContent = `${riders.length} 人 · ${active.length} 人已出發`;
 }
 
 const nameOf = (uid) => data.members.find((m) => m.uid === uid)?.nickname || '';
@@ -256,7 +285,7 @@ function drawCharts() { chart($('#altChart'), ALT, 'm'); chart($('#spdChart'), S
 
 /* ---------- 時間軸 ---------- */
 $('#range').min = t0; $('#range').max = t1; $('#range').step = 1000;
-function seek(t) { R.seekAt = performance.now(); R.t = Math.max(t0, Math.min(t1, t)); R.zoomed = R.follow === 'all' ? R.zoomed : false; update(true); }
+function seek(t) { R.seekAt = performance.now(); R.t = Math.max(t0, Math.min(t1, t)); if (R.follow !== 'all') { R.zoomed = false; R.keepZoom = true; } update(true); }  // 拖時間軸：鏡頭飛到那人在該時間的位置，縮放維持
 $('#range').oninput = (e) => seek(+e.target.value);
 $('#rate').onchange = (e) => { R.rate = +e.target.value; };
 function syncPlay() { $('#play').innerHTML = R.playing ? PAUSE : PLAY; $('#play').setAttribute('aria-label', R.playing ? '暫停' : '播放'); }
@@ -276,7 +305,7 @@ $('#colorBy').onclick = (e) => {
 $('#bStyle').onclick = () => {
   R.styleReady = false;
   $('#b3d').disabled = true;
-  $('#bStyle').textContent = M.nextStyle();
+  setLabel($('#bStyle'), M.nextStyle());
 };
 $('#b3d').onclick = () => {
   M.unfollow();
@@ -306,7 +335,9 @@ function update(force) {
     drawCharts();
   }
 }
+const gate = frameGate();
 function frame(now) {
+  if (!gate(now)) { requestAnimationFrame(frame); return; } // 省電模式約 30 fps
   const dt = Math.min(0.1, (now - lastT) / 1000);
   lastT = now;
   if (R.playing) {
@@ -315,7 +346,7 @@ function frame(now) {
     update(false);
   }
   // 跟拍：人在正中間、車頭朝上（方向平滑轉）、鏡頭高度平滑跟著地形
-  if (R.follow !== 'all' && R.follow !== 'off' && R.styleReady && now > (R.easeUntil || 0)) {
+  if (R.follow !== 'all' && !R.away && R.styleReady && now > (R.easeUntil || 0)) {
     const m = riders.find((x) => x.uid === R.follow);
     const st = stateAt(m, R.t);
     // 切換跟拍對象：不用 easeTo 飛到「按下那一刻」的位置（播放中人早就往前走了，動畫結束會再跳一次），
@@ -324,7 +355,7 @@ function frame(now) {
       R.zoomed = true;
       const c = map.getCenter();
       const km = hav(c.lat, c.lng, st.pos[1], st.pos[0]) / 1000;
-      R.fly = { at: now, from: [c.lng, c.lat], z0: map.getZoom(), p0: map.getPitch(), z1: Math.max(map.getZoom(), 15), p1: M.is3d ? 62 : 0,
+      R.fly = { at: now, from: [c.lng, c.lat], z0: map.getZoom(), p0: map.getPitch(), z1: R.keepZoom ? map.getZoom() : Math.max(map.getZoom(), 15), p1: R.keepZoom ? map.getPitch() : M.is3d ? 62 : 0,
                 dur: Math.min(1800, 700 + km * 40), dip: Math.max(0, Math.min(5, Math.log2(Math.max(1, km / 2)))) };
     }
     let center = st.pos, extra = {};
@@ -336,13 +367,13 @@ function frame(now) {
       if (k >= 1) R.fly = null;
     }
     const target = bearingAt(m, R.t);
-    if (target != null) {
+    if (target != null && R.headingUp) {
       if (R.bearing == null) R.bearing = map.getBearing();
       let d = ((target - R.bearing + 540) % 360) - 180;
       R.bearing += d * (1 - Math.exp(-dt / 1.2));
     }
     M.follow(center, { padding: pad(), ...extra, ...(R.bearing != null ? { bearing: R.bearing } : {}) });
-  } else if (R.follow === 'all' && R.styleReady && (R.playing || now - (R.seekAt || 0) < 1500)
+  } else if (R.follow === 'all' && !R.away && R.styleReady && (R.playing || now - (R.seekAt || 0) < 1500)
              && now > (R.easeUntil || 0)) {
     // 全隊：每一格平滑地框住所有人（暫停時不動，保留整趟總覽或使用者自己調的視角）
     M.followGroup(riders.map((m) => stateAt(m, R.t).pos), { padding: pad(), maxZoom: 14.5 });
@@ -356,11 +387,6 @@ function frame(now) {
 }
 let lastDeclutter = 0;
 
-// 手機版把「鏡頭／上色方式」那一列搬進下方面板，時間軸只留播放列
-const camRow = $('#camRow'), narrow = matchMedia('(max-width:860px)');
-const placeCamRow = () => (narrow.matches ? $('.panel .scroll').prepend(camRow) : $('.timeline').append(camRow));
-narrow.addEventListener('change', placeCamRow);
-placeCamRow();
 
 renderRiders();
 renderSummary();

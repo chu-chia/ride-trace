@@ -1,5 +1,6 @@
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
+import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
 import { gpsQueue } from '/assets/gpsqueue.js';
 
@@ -38,7 +39,7 @@ const map = M.map;
 map.setPitch(55);
 window.qijiMap = map; // 方便在主控台除錯
 window.qijiM = M; // trip-extra.js（M3 互動功能）用
-const S = { trip: null, me: null, members: new Map(), events: [], follow: 'all', lastInteract: 0, nearby: {}, gps: null, wake: null, trailDirty: true };
+const S = { trip: null, me: null, members: new Map(), events: [], follow: 'all', away: false, awayAt: 0, lastInteract: 0, nearby: {}, gps: null, wake: null, trailDirty: true };
 window.qijiState = S; // 除錯用
 
 /* ---------- 成員與標記 ---------- */
@@ -59,8 +60,8 @@ function upsertMember(u, state) {
     el.style.setProperty('--c', u.color);
     el.style.setProperty('--ink', inkOn(u.color));
     el.innerHTML = `<div class="arrow"></div><div class="dot">${esc(initialOf(u.nickname))}</div><div class="name">${esc(u.nickname)}</div>`;
-    el.onclick = () => { setFollow(u.uid); };
-    m = { u, state: {}, el, marker: new maplibregl.Marker({ element: el, anchor: 'center' }), trail: [], onMap: false, pos: null, anim: null, lastAt: 0, lastTarget: null };
+    el.onclick = () => pick(u.uid);
+    m = { u, state: {}, el, marker: new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1' }), trail: [], onMap: false, pos: null, anim: null, lastAt: 0, lastTarget: null };
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
@@ -123,61 +124,75 @@ M.onStyle(() => {
     map.addLayer({ id: 'trails-casing', type: 'line', source: 'trails', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#000', 'line-opacity': 0.25, 'line-width': 6 } });
     map.addLayer({ id: 'trails', type: 'line', source: 'trails', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 3.5, 'line-opacity': 0.9 } });
   }
-  $('#bStyle').textContent = M.styleName;
+  setLabel($('#bStyle'), M.styleName);
   S.styleReady = true; // isStyleLoaded() 在圖磚載入中都是 false，不能拿來判斷
 });
 
 /* ---------- 鏡頭 ---------- */
-['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => { if (e.originalEvent) { S.lastInteract = Date.now(); S.fly = null; S.followZoomed = false; M.unfollow(); } }));
-// 面板收合狀態與螢幕尺寸分開記錄；瀏覽器限制儲存時仍可操作。
-const PANEL_KEY = 'qiji.trip.panel.collapsed';
-let collapsed = innerWidth <= 760;
-try { const saved = localStorage.getItem(PANEL_KEY); if (saved !== null) collapsed = saved === '1'; } catch { /* 私密模式可能停用儲存 */ }
-function setCollapsed(value) {
-  collapsed = value;
-  $('#panel').classList.toggle('small', value);
-  $('#collapseBtn').textContent = value ? '›' : '‹';
-  $('#collapseBtn').setAttribute('aria-label', value ? '展開面板' : '收合面板');
-  $('#collapseBtn').setAttribute('aria-expanded', String(!value));
-  $('#handle').setAttribute('aria-expanded', String(!value));
-  try { localStorage.setItem(PANEL_KEY, value ? '1' : '0'); } catch { /* 略過 */ }
-  refreshPad();
+// 手勢規則（docs/地圖手勢規則.md）：拖曳＝暫離（按鈕變外框，10 秒沒動自動回去）；縮放、旋轉、傾斜繼續跟隨；
+// 全隊模式下縮放也算暫離（全隊會一直改 zoom，跟使用者搶）
+function goAway() {
+  S.lastInteract = Date.now();
+  S.awayAt = Date.now();
+  if (S.away) return;
+  S.away = true; S.fly = null;
+  M.unfollow();
+  syncTools();
+  if (S.trip) renderTeam();
 }
-$('#panel').classList.toggle('small', collapsed);
+S.goAway = goAway; // trip-extra.js：點地點、事件把鏡頭帶過去時也算暫離
+const GEST = cameraGestures(M, {
+  centered: () => !S.away && S.follow !== 'all',
+  onPan: goAway,
+  onZoom: () => { if (S.follow === 'all' && !S.away) goAway(); },
+  onActivity: () => { S.lastInteract = Date.now(); if (S.away) S.awayAt = Date.now(); },
+});
+// 側欄收合（電腦收合鈕／手機拉把手）由 common.js initPanel 統一處理，這裡只更新地圖留白
 function panelPad() {
   const narrow = innerWidth <= 760;
-  if (!narrow) return { top: 70, bottom: 90, left: $('#panel').classList.contains('small') ? 270 : 440, right: 70 };
-  const top = $('#panel').getBoundingClientRect().top;
-  return { top: 80, bottom: Math.max(60, innerHeight - top + 16), left: 30, right: 64 };
+  if (!narrow) return { top: 70, bottom: 90, left: ($('#panel').offsetWidth || 380) + 50, right: 80 };
+  // 用抽屜實際的高度；開合後 smoothPad 讓鏡頭慢慢滑到新的置中位置（拖曳中不更新，所以不會跟著手指晃）
+  return { top: 80, bottom: Math.max(60, innerHeight - $('#panel').getBoundingClientRect().top + 16), left: 30, right: 64 };
 }
-S.pad = panelPad();
-const refreshPad = () => setTimeout(() => (S.pad = panelPad()), 350);
+let PAD = null;
+const refreshPad = () => setTimeout(() => PAD?.refresh(), innerWidth <= 760 ? 0 : 300); // 電腦側欄寬度有 0.25 秒轉場，等它停
 S.refreshPad = refreshPad;
 addEventListener('resize', refreshPad);
-setCollapsed(collapsed);
+const PANEL = initPanel($('#panel'), 'trip', { onChange: refreshPad });
+PAD = smoothPad(panelPad);
+Object.defineProperty(S, 'pad', { get: () => PAD.get(), set() {}, configurable: true });
+const setCollapsed = (v) => PANEL.set(v);
 
+// 「全隊」框哪些人：有位置、這趟有出發（active，或已騎完 done）、沒有失聯。
+// 沒出發的成員（例如建立者自己在家）位置在別處，算進來鏡頭會先拉到全台灣
+const inGroup = (m) => m.pos && (m.u.active !== false || m.state?.status === 'done') && m.state?.status !== 'lost';
 // 要跟著誰：選了某個人就跟他；「全隊」但地圖上只有一個人時，也跟著那個人
 function followTarget() {
   if (S.follow !== 'all') { const m = S.members.get(S.follow); return m?.pos ? m : null; }
-  const shown = [...S.members.values()].filter((m) => m.pos);
+  const shown = [...S.members.values()].filter(inGroup);
   return shown.length === 1 ? shown[0] : null;
 }
-function setFollow(who) {
+function setFollow(who, { keepZoom = false } = {}) {
   S.follow = who;
+  S.away = false;
   S.lastInteract = 0;
   S.followZoomed = false;
+  S.keepZoom = keepZoom;
   S.fly = null;
   syncTools();
+  GEST.sync();
   // 不用 easeTo：動畫迴圈每一格從目前畫面平滑接過去（跟人用 S.fly 內插、全隊用 followGroup），中間沒有交接的跳動
   if (who === 'all') M.regroup();
   if (!S.styleReady) camera(true);
   if (S.trip) renderTeam();  // 隊員表的選取狀態跟著換
 }
+// 點隊員（列表、標記、「跟我」）：正在跟他就回到全隊；暫離中或還沒跟就跟他
+const pick = (uid) => setFollow(S.follow === uid && !S.away ? 'all' : uid);
 const hav = (a, b, c, d) => { const R6 = 6371000, p1 = (a * Math.PI) / 180, p2 = (c * Math.PI) / 180, dl = ((d - b) * Math.PI) / 180; return 2 * R6 * Math.asin(Math.sqrt(Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2)); };
 function camera(force) {
-  if (!force && Date.now() - S.lastInteract < 12000) return;
+  if (!force && S.away) return;
   if (followTarget()) return; // 跟隨模式由動畫迴圈每一格把人放在正中間
-  const pts = [...S.members.values()].filter((m) => m.pos).map((m) => m.pos);
+  const pts = [...S.members.values()].filter(inGroup).map((m) => m.pos);
   if (pts.length < 2) return;
   const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
   const cam = map.cameraForBounds(b, { padding: S.pad, maxZoom: 15, bearing: map.getBearing() });
@@ -187,7 +202,9 @@ function camera(force) {
 
 // 動畫迴圈：標記平滑移動、跟隨的人保持在畫面中間、軌跡線尾巴接著標記
 let lastTrailDraw = 0, lastDeclutter = 0;
+const gate = frameGate();
 function tick(now) {
+  if (!gate(now)) { requestAnimationFrame(tick); return; } // 省電模式約 30 fps
   for (const m of S.members.values()) {
     if (!m.anim) continue;
     const k = Math.min(1, (now - m.anim.t0) / m.anim.dur);
@@ -196,13 +213,16 @@ function tick(now) {
     m.marker.setLngLat(m.pos);
   }
   const t = followTarget();
-  if (t && Date.now() - S.lastInteract > 12000) {
+  // 暫離超過設定秒數（預設 10 秒）、手指也不在地圖上，就回到原本的模式（縮放維持使用者調的）
+  const back = resumeMs();
+  if (S.away && back > 0 && !M.busy && Date.now() - S.awayAt > back) setFollow(S.follow, { keepZoom: true });
+  if (t && !S.away) {
     // 切換跟隨對象：每一格朝他「現在」的位置內插過去（人一直在動，easeTo 到按下時的位置，結束會再跳一次），
-    // 飛完直接接上跟隨。還太遠（例如被地圖載入打斷）就再飛一次。
-    if ((!S.followZoomed || (!S.fly && map.getZoom() < 12)) && S.styleReady) {
+    // 飛完直接接上跟隨。
+    if (!S.followZoomed && S.styleReady) {  // 跟隨中使用者自己拉遠不再強制拉近（手勢規則第 2 條）
       S.followZoomed = true;
       const c = map.getCenter(), km = hav(c.lat, c.lng, t.pos[1], t.pos[0]) / 1000;
-      S.fly = { at: now, from: [c.lng, c.lat], z0: map.getZoom(), z1: Math.max(map.getZoom(), 14.5),
+      S.fly = { at: now, from: [c.lng, c.lat], z0: map.getZoom(), z1: S.keepZoom ? map.getZoom() : Math.max(map.getZoom(), 14.5),
                 dur: Math.min(1800, 700 + km * 40), dip: Math.max(0, Math.min(5, Math.log2(Math.max(1, km / 2)))) };
     }
     if (now > (S.easeUntil || 0)) {
@@ -216,8 +236,8 @@ function tick(now) {
       }
       M.follow(center, { padding: S.pad, ...extra });
     }
-  } else if (!t && S.follow === 'all' && S.styleReady && Date.now() - S.lastInteract > 12000 && now > (S.easeUntil || 0)) {
-    const pts = [...S.members.values()].filter((m) => m.pos).map((m) => m.pos);
+  } else if (!t && S.follow === 'all' && S.styleReady && !S.away && now > (S.easeUntil || 0)) {
+    const pts = [...S.members.values()].filter(inGroup).map((m) => m.pos);
     if (pts.length >= 2) M.followGroup(pts, { padding: S.pad, maxZoom: 15 });
   } else M.unfollow();
   if (now - lastDeclutter > 200) {
@@ -227,7 +247,7 @@ function tick(now) {
       .sort((a, b) => (b.u.uid === S.me) - (a.u.uid === S.me) || (b === ft) - (a === ft));
     declutter(map, list.map((m) => ({ el: m.el, pos: m.pos, name: m.u.nickname })));
   }
-  if (now - lastTrailDraw > 150 && map.getSource('trails')) {
+  if (now - lastTrailDraw > (LOW_POWER ? 1000 : 150) && map.getSource('trails')) {
     lastTrailDraw = now;
     map.getSource('trails').setData(trailsGeo());
   }
@@ -235,20 +255,23 @@ function tick(now) {
 }
 requestAnimationFrame(tick);
 
+// 實心＝正在跟、外框＝暫離（點了回去）
 function syncTools() {
-  press($('#bAll'), S.follow === 'all');
-  press($('#bMe'), S.follow === S.me);
+  press($('#bAll'), S.follow === 'all' && !S.away);
+  press($('#bMe'), S.follow === S.me && !S.away);
+  $('#bAll').classList.toggle('away', S.follow === 'all' && S.away);
+  $('#bMe').classList.toggle('away', S.follow === S.me && S.away);
 }
 $('#bAll').onclick = () => setFollow('all');
-$('#bMe').onclick = () => setFollow(S.me);
-$('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
+$('#bMe').onclick = () => pick(S.me);
+$('#bStyle').onclick = () => setLabel($('#bStyle'), M.nextStyle());
 $('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 
 /* ---------- 面板 ---------- */
 function selectTab(name) {
   const primary = ['wp', 'events', 'mark'].includes(name) ? 'more' : name;
   $$('#tabs button').forEach((x) => x.classList.toggle('on', x.dataset.t === primary));
-  $$('.body[data-b]').forEach((x) => (x.hidden = x.dataset.b !== name));
+  $$('.panel-body[data-b]').forEach((x) => (x.hidden = x.dataset.b !== name));
   setCollapsed(false);
   dispatchEvent(new CustomEvent('qiji:tab', { detail: { tab: name, more: $('#moreNav button.on')?.dataset.moreTab } }));
 }
@@ -261,16 +284,6 @@ $('#tabs').onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) sel
 $('#moreNav').onclick = (e) => { const b = e.target.closest('[data-more-tab]'); if (b) selectMore(b.dataset.moreTab); };
 $$('[data-open-tab]').forEach((b) => { b.onclick = () => selectTab(b.dataset.openTab); });
 $$('[data-back-more]').forEach((b) => { b.onclick = () => selectTab('more'); });
-$('#collapseBtn').onclick = () => setCollapsed(!collapsed);
-let draggedHandle = false;
-$('#handle').onclick = () => { if (draggedHandle) { draggedHandle = false; return; } setCollapsed(!collapsed); };
-let startY = null;
-$('#handle').addEventListener('pointerdown', (e) => { startY = e.clientY; $('#handle').setPointerCapture(e.pointerId); });
-$('#handle').addEventListener('pointerup', (e) => {
-  if (startY == null) return;
-  const delta = e.clientY - startY; startY = null;
-  if (Math.abs(delta) > 36) { draggedHandle = true; setCollapsed(delta > 0); e.preventDefault(); setTimeout(() => { draggedHandle = false; }, 0); }
-});
 addEventListener('qiji:open-tab', (e) => { if (e.detail.more) selectMore(e.detail.more); else selectTab(e.detail.tab); });
 addEventListener('DOMContentLoaded', () => { if (['team', 'route', 'msg', 'more'].includes(location.hash.slice(1))) selectTab(location.hash.slice(1)); });
 
@@ -322,13 +335,13 @@ function renderTeam() {
     const sub = [label, flag && st !== 'done' ? `${flag === 'behind' ? '落隊' : '超前'}${gap != null ? ' ' + fmtKm(gap) : ''}` : '',
                  !moving && (s.seen || s.ts) ? ago(+s.seen || +s.ts) : ''].filter(Boolean).join(' · ');
     return {
-      uid: m.u.uid, name: isMe ? `${m.u.nickname}（我）` : m.u.nickname, color: m.u.color, on: S.follow === m.u.uid,
+      uid: m.u.uid, name: isMe ? `${m.u.nickname}（我）` : m.u.nickname, color: m.u.color, on: S.follow === m.u.uid && !S.away, away: S.follow === m.u.uid && S.away,
       sub, subCls: flag && st !== 'done' ? 'warn' : cls,
       cols: [[moving ? Math.round((+s.speed || 0) * 3.6) : '–', 'km/h'], [s.alt != null && s.alt !== '' ? Math.round(+s.alt) : '–', 'm 海拔'],
              [m.u.stats?.km > 0 ? (+m.u.stats.km).toFixed(1) : '0.0', 'km 已騎'],
              [isMe ? '–' : km == null ? '–' : km < 1 ? Math.round(km * 1000) : km.toFixed(1), km != null && km < 1 && !isMe ? 'm 距離我' : 'km 距離我']],
     };
-  }), (uid) => setFollow(S.follow === uid ? 'all' : uid));
+  }), pick);
   // 建立者：隊員管理（移出）收在表格下面，不和點選跟拍混在一起
   const admin = S.trip.is_owner ? list.filter((m) => m.u.uid !== S.me) : [];
   const open = $('#teamAdmin details')?.open;

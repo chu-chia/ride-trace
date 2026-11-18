@@ -1,6 +1,6 @@
 // 全年足跡：深藍底圖上用黃色畫出騎過的每一條路（可切換日期範圍與一天中的時段）。
 // 「迷霧模式」是選配：地圖蓋一層霧，去過的格子把霧擦掉。
-import { api, $, $$ } from '/assets/common.js';
+import { api, $, $$, initPanel, setLabel } from '/assets/common.js';
 import { swr } from '/assets/swr.js';
 import { createMap, addCompass, labelLayerId } from '/assets/mapbase.js';
 import { initRecords } from '/assets/fp-records.js';
@@ -125,10 +125,10 @@ M.onStyle((style) => {
   if (!map.getLayer('fp-glow')) map.addLayer({ id: 'fp-glow', type: 'line', source: 'fp-lines', layout, paint: { 'line-color': c, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.22, 13, 0.1], 'line-width': width(2.6), 'line-blur': ['interpolate', ['linear'], ['zoom'], 6, 2, 14, 4] } }, below);
   if (!map.getLayer('fp-lines')) map.addLayer({ id: 'fp-lines', type: 'line', source: 'fp-lines', layout, paint: { 'line-color': c, 'line-opacity': 0.92, 'line-width': width(1) } }, below);
   syncLayers();
-  $('#bStyle').textContent = M.styleName;
+  setLabel($('#bStyle'), M.styleName);
   draw();
 });
-$('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
+$('#bStyle').onclick = () => setLabel($('#bStyle'), M.nextStyle());
 
 /* ---------- 讀資料 ---------- */
 let timer = null;
@@ -200,7 +200,7 @@ function loadAllLines() {
 }
 
 function sidePad() {
-  return innerWidth <= 760 ? { top: 70, left: 30, right: 30, bottom: $('#side').offsetHeight + 20 } : { top: 40, bottom: 40, right: 60, left: 460 };
+  return innerWidth <= 760 ? { top: 70, left: 30, right: 64, bottom: $('#side').offsetHeight + 20 } : { top: 40, bottom: 40, right: 90, left: $('#side').offsetWidth + 60 };
 }
 function fitSelection() {
   const f = F.selFlat;
@@ -382,24 +382,22 @@ swr('/api/footprint/summary', { key: uid, onData: applySummary })
   .catch((e) => { $('#overall').textContent = '讀取失敗：' + e.message; })
   .finally(refreshEnd);
 
+// 側欄收合與手機抽屜：和其他地圖頁同一套（common.js initPanel）
+const PANEL = initPanel($('#side'), 'footprint', { onChange: () => map.resize() });
 // 網址分頁與手機抽屜。
 function setTab(next, writeUrl = true) {
   if (!TABS.has(next)) return;
   tab = next;
   if (writeUrl) { const u = new URL(location.href); if (next === 'footprint') u.searchParams.delete('tab'); else u.searchParams.set('tab', next); history.pushState(null, '', u); }
   $$('#tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === tab); b.setAttribute('aria-selected', b.dataset.t === tab); });
-  $$('.body').forEach((b) => { b.hidden = b.dataset.b !== tab; });
+  $$('.panel-body').forEach((b) => { b.hidden = b.dataset.b !== tab; });
   records.applyTab(); syncLayers(); draw();
-  if (innerWidth <= 760) { $('#side').classList.remove('small'); $('#handle').setAttribute('aria-expanded', 'true'); }
+  PANEL.set(false, false);
   map.resize();
 }
 $('#tabs').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b) setTab(b.dataset.t); };
 addEventListener('popstate', () => setTab(new URLSearchParams(location.search).get('tab') || 'footprint', false));
 setTab(tab, false);
-$('#handle').onclick = () => { const small = $('#side').classList.toggle('small'); $('#handle').setAttribute('aria-expanded', String(!small)); map.resize(); };
-let startY = null;
-$('#handle').addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
-$('#handle').addEventListener('touchend', (e) => { if (startY === null) return; const dy = e.changedTouches[0].clientY - startY; if (Math.abs(dy) > 25) { $('#side').classList.toggle('small', dy > 0); $('#handle').setAttribute('aria-expanded', String(dy < 0)); map.resize(); } startY = null; });
 const tip = $('#dayTip');
 $('#cal').addEventListener('pointermove', (e) => { const r = e.target.closest('rect[data-d]'); if (!r || e.pointerType === 'touch') { tip.hidden = true; return; } tip.textContent = `${r.dataset.d} · ${r.dataset.km} km`; tip.style.left = `${Math.min(innerWidth - 140, e.clientX + 10)}px`; tip.style.top = `${e.clientY - 35}px`; tip.hidden = false; });
 $('#cal').addEventListener('pointerleave', () => { tip.hidden = true; });

@@ -71,13 +71,24 @@ async def ingest(uid: str, fix: Fix) -> dict:
     tid = tid_res
     live = False
     prev_status = None
+    demo = False
     if tid:
         async with r.pipeline(transaction=False) as p:
             p.hget(K.trip(tid), "status")
             p.sismember(K.active(tid), uid)
             p.hget(K.state(tid, uid), "status")
-            status, is_active, prev_status = await p.execute()
+            p.hget(K.trip(tid), "demo")
+            status, is_active, prev_status, demo = await p.execute()
         live = status == "live" and bool(is_active)
+    # Demo 行程（tools.simulate --loop）只收模擬器的點：成員真的出去騎時，手機／Traccar 的點不會混進 demo。
+    # 「sim-self」＝模擬器代替真人帳號重播他自己的舊紀錄：只進 demo 行程，不寫個人足跡（不然每圈都污染真的足跡），
+    # 不在 demo 行程時整個忽略。
+    sim = fix.src in ("sim", "sim-self")
+    if demo and not sim:
+        live = False
+    if fix.src == "sim-self" and not (demo and live):
+        return {"ok": True, "trip": None, "footprint": False, "rough": False, "errors": [], "stale": False, "ignored": True}
+    personal = fix.src != "sim-self"
 
     prev = (int(last[0]), float(last[1]), float(last[2])) if last[0] else None
     # 里程從「錨點」算（geo.step）：位移不到 3 m 錨點不動。舊資料沒有錨點就用上一點
@@ -85,7 +96,7 @@ async def ingest(uid: str, fix: Fix) -> dict:
     # 精度太差的點（geo.MAX_ACC_M）：只更新目前位置與心跳，不進足跡、軌跡、里程
     rough = is_rough(fix.acc)
     fresh = prev is None or ts > prev[0]
-    keep = fresh and not rough
+    keep = fresh and not rough and personal
     cells = segment_cells(prev, (ts, fix.lat, fix.lon)) if keep else set()
     dist_m, _, new_anchor = step(anchor, (ts, fix.lat, fix.lon), fix.acc) if keep else (0.0, 0.0, anchor)
     day, bucket = day_key(ts), bucket_of(ts)
@@ -110,7 +121,7 @@ async def ingest(uid: str, fix: Fix) -> dict:
                 p.hincrbyfloat(K.daykm(uid), day, round(dist_m / 1000, 4))
             else:
                 p.hincrbyfloat(K.daykm(uid), day, 0)
-        if live and fresh:
+        if live and (fresh or not personal):
             if not rough:
                 p.xadd(K.track(tid, uid), fields)
             p.geoadd(K.geo(tid), [fix.lon, fix.lat, uid])
@@ -129,13 +140,13 @@ async def ingest(uid: str, fix: Fix) -> dict:
             p.execute_command("TS.INCRBY", "ts:sys:pubsub", 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000,
                               "LABELS", "metric", "sys", "kind", "pubsub")
         if live:
-            p.hset(K.state(tid, uid), mapping={**(fields if fresh else {}), "status": "ok", "seen": now})
+            p.hset(K.state(tid, uid), mapping={**(fields if fresh or not personal else {}), "status": "ok", "seen": now})
             p.set(K.hb(tid, uid), now, ex=HEARTBEAT_S)
         p.zadd("online:report", {uid: now})  # 後台「線上人數」：最近 2 分鐘有回報位置的人（ZCOUNT）
         # 交給 worker：行程中的回報（警示、統計），以及所有新的足跡點（熱力圖、點亮鄉鎮）
-        if fresh:
+        if fresh or not personal:
             # 粗略點也交給 worker（落隊、抵達判斷用得到），但 fp=0 不點亮鄉鎮／熱力圖，統計 Lua 也會略過
-            p.xadd(K.ingest, {"trip": tid if live else "", "uid": uid, "fp": 0 if rough else 1, **fields},
+            p.xadd(K.ingest, {"trip": tid if live else "", "uid": uid, "fp": 0 if rough or not personal else 1, **fields},
                    maxlen=100_000, approximate=True)
         p.execute_command("TS.INCRBY", K.ts_writes, 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000)
         results = await p.execute(raise_on_error=False)

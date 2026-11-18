@@ -71,7 +71,7 @@ export function toast(text, { icon = '騎', color = '#d9500f', sub = '' } = {}) 
 
 // 隊員狀態表（回放、行程頁、戰情室共用的樣式）：每列＝顏色點＋名字（下面一行狀態）＋四欄數字，點一下選那個人。
 // 列只在人員或順序改變時重建，平常只更新文字：每秒重畫整個 innerHTML 的話，點下去的按鈕會被換掉而點不到。
-// rows：[{ uid, name, color, sub, subCls, cols: [[值, 單位] ×4], on }]
+// rows：[{ uid, name, color, sub, subCls, cols: [[值, 單位] ×4], on, away }]
 export function teamTable(el, rows, onPick) {
   const key = rows.map((r) => r.uid).join(',');
   if (el.dataset.key !== key) {
@@ -89,7 +89,251 @@ export function teamTable(el, rows, onPick) {
     sub.className = `team-sub ${r.subCls || ''}`;
     row.querySelectorAll('.num').forEach((n, i) => { const [v, u] = r.cols[i] || ['–', '']; n.innerHTML = `${esc(v)}<small>${esc(u)}</small>`; });
     row.classList.toggle('on', !!r.on);
+    row.classList.toggle('away', !!r.away);  // 暫離：拖了地圖，點一下回去跟他
     row.setAttribute('aria-pressed', String(!!r.on));
-    row.setAttribute('aria-label', `${r.name}，${r.sub || ''}，點一下${r.on ? '取消跟隨' : '鏡頭跟著他'}`);
+    row.setAttribute('aria-label', `${r.name}，${r.sub || ''}，點一下${r.on ? '取消跟隨' : r.away ? '回去跟著他' : '鏡頭跟著他'}`);
   }
+}
+
+/* ==========================================================================
+   統一外框：圖示、側欄收合、液態玻璃（各地圖頁共用）
+   ========================================================================== */
+const SVG = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+export const ICONS = {
+  back: SVG('<path d="M15 5l-7 7 7 7"/>'),
+  collapse: SVG('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9.5 4v16"/><path class="fill" d="M5.5 8h1.5M5.5 11h1.5M5.5 14h1.5"/>'),
+  team: SVG('<circle cx="12" cy="8" r="3"/><circle cx="5" cy="10" r="2.2"/><circle cx="19" cy="10" r="2.2"/><path d="M6.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M1.5 18c.3-2 1.6-3.3 3.5-3.6M22.5 18c-.3-2-1.6-3.3-3.5-3.6"/>'),
+  me: SVG('<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/><circle cx="12" cy="12" r="7"/>'),
+  cube: SVG('<path d="M12 2.8l8 4.4v9.6l-8 4.4-8-4.4V7.2z"/><path d="M4 7.2l8 4.4 8-4.4M12 11.6v9.6"/>'),
+  layers: SVG('<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>'),
+  replay: SVG('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M11 9l4 3-4 3z" fill="currentColor"/>'),
+  screen: SVG('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'),
+  home: SVG('<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>'),
+  edit: SVG('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
+  reset: SVG('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/>'),
+};
+// 有 data-icon 的元素自動補上圖示；工具列按鈕的文字包成 <span>，之後用 setLabel() 改字不會洗掉圖示
+export function decorate(root = document) {
+  root.querySelectorAll('[data-icon]').forEach((el) => {
+    if (el.dataset.decorated) return;
+    el.dataset.decorated = '1';
+    const text = el.textContent.trim();
+    el.innerHTML = (ICONS[el.dataset.icon] || '') + (text ? `<span>${esc(text)}</span>` : '');
+    if (!el.getAttribute('aria-label') && text) el.setAttribute('aria-label', text);
+  });
+}
+export const setLabel = (el, text) => { const s = el.querySelector('span'); if (s) s.textContent = text; else el.textContent = text; };
+decorate();
+
+// 液態玻璃的邊緣折射：中間不位移，越靠近圓角邊框，背景越往內彎（移植自北商美食地圖 liquidGlass.ts）
+function edgeMap(w, h, radius, bezel) {
+  const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const hw = w / 2, hh = h / 2, r = Math.min(radius, hw, hh);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const px = x + 0.5 - hw, py = y + 0.5 - hh;
+      const qx = Math.abs(px) - (hw - r), qy = Math.abs(py) - (hh - r);
+      let nx = 0, ny = 0, d;
+      if (qx > 0 && qy > 0) { const len = Math.hypot(qx, qy) || 1; nx = (Math.sign(px) * qx) / len; ny = (Math.sign(py) * qy) / len; d = r - len; }
+      else if (qx >= qy) { nx = Math.sign(px); d = hw - Math.abs(px); }
+      else { ny = Math.sign(py); d = hh - Math.abs(py); }
+      let m = 0;
+      if (d < bezel) { const t = Math.min(1, Math.max(0, 1 - d / bezel)); m = 1 - Math.sqrt(1 - t * t); }
+      const i = (y * w + x) * 4;
+      img.data[i] = 128 - nx * m * 127; img.data[i + 1] = 128 - ny * m * 127; img.data[i + 2] = 128; img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c.toDataURL();
+}
+// 只有 Chromium 的 backdrop-filter 吃 SVG 濾鏡；其他瀏覽器、手機版維持一般毛玻璃
+const LIQUID_OK = !!(navigator.userAgentData?.brands || []).find((b) => /Chromium/.test(b.brand))
+  && !matchMedia('(prefers-reduced-transparency: reduce)').matches;
+let liquidSeq = 0;
+export function liquidGlass(el, { radius = 24, bezel = 20, scale = 90 } = {}) {
+  if (!LIQUID_OK || !el || !('ResizeObserver' in window)) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'liquid-glass-filter'); svg.setAttribute('aria-hidden', 'true');
+  document.body.append(svg);
+  let key = '', frame = 0;
+  const ro = new ResizeObserver(() => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight);
+      if (!w || !h || !matchMedia('(min-width: 761px)').matches) { el.style.removeProperty('--liquid-filter'); key = ''; return; }
+      if (`${w}x${h}` === key) return;
+      key = `${w}x${h}`;
+      // 尺寸改變就換新的濾鏡 id，Chromium 才會重新讀位移圖
+      const id = `liquid-${++liquidSeq}`;
+      svg.innerHTML = `<filter id="${id}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feImage href="${edgeMap(w, h, radius, bezel)}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="map"/><feDisplacementMap in="SourceGraphic" in2="map" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/></filter>`;
+      el.style.setProperty('--liquid-filter', `url(#${id})`);
+    });
+  });
+  ro.observe(el);
+}
+
+// ---------- 省電模式（手機預設開，設定頁可關） ----------
+// 地圖頁每一格都在移動鏡頭，地圖就每一格重畫；手機上再乘上 3 倍解析度、3D 地形和玻璃模糊，很吃電。
+// 省電時：鏡頭與標記 30 fps、地圖解析度最多 2 倍、面板不做背景模糊、戰情室不自動旋轉。
+export const LOW_POWER = (() => {
+  let v = null;
+  try { v = localStorage.getItem('qiji:lowpower'); } catch { /* 私密模式 */ }
+  return v ? v === '1' : matchMedia('(pointer: coarse)').matches;
+})();
+document.documentElement.classList.toggle('low-power', LOW_POWER);
+// 動畫迴圈用：回傳 false 表示這一格跳過（省電時約 30 fps）
+export function frameGate() {
+  const ms = LOW_POWER ? 1000 / 30 - 2 : 0;
+  let last = 0;
+  return (now) => { if (now - last < ms) return false; last = now; return true; };
+}
+
+// 地圖留白平滑過渡：抽屜或側欄開合後，鏡頭用 0.45 秒滑到新的置中位置，不會一下子閃過去
+export function smoothPad(compute, ms = 450) {
+  let from = compute(), to = from, t0 = 0;
+  const get = () => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    if (k >= 1) return to;
+    const e = 1 - (1 - k) ** 3;
+    return Object.fromEntries(Object.keys(to).map((key) => [key, (from[key] ?? to[key]) + (to[key] - (from[key] ?? to[key])) * e]));
+  };
+  return { get, refresh() { from = get(); to = compute(); t0 = performance.now(); } };
+}
+
+// iOS：鍵盤收起後整頁可能停在捲動過的位置，固定在畫面上的按鈕看起來在原處、實際點擊位置卻偏了。
+// 地圖頁本來就不該捲動，鍵盤收起或視窗大小變了就捲回頂端。
+const unscroll = () => setTimeout(() => {
+  if (document.getElementById('map') && (scrollX || scrollY)) scrollTo(0, 0);
+}, 80);
+addEventListener('focusout', unscroll);
+window.visualViewport?.addEventListener('resize', unscroll);
+addEventListener('orientationchange', unscroll);
+
+// 手機底部抽屜拖曳（參考美食地圖 useSheetDrag）：
+// 抽屜整塊都能拖（頂列、摘要、把手，按鈕上也行），抽屜跟著手指走；放開時看速度（快速一甩）或距離決定開合。
+// 展開時在清單裡往下拉：清單已在最頂端就改成拖抽屜收合，否則照常捲動。
+// 用 touch 事件是因為原生捲動會搶走 pointer 事件；接手拖曳後才 preventDefault。
+// 抽屜每一格的實際高度都寫進 --sheet-h（px）與 --sheet-t（0 收合～1 展開），
+// 進度條、時間軸、比例尺用它貼在抽屜上方，拖曳和動畫中都會順順跟著走，不會在兩個位置之間跳。
+const SHEET_MQ = matchMedia('(max-width: 760px)');
+const NO_DRAG = 'input, select, textarea, [contenteditable], .no-drag';
+const TAP_SLOP = 6, FLICK = 0.45, ANIM = 280; // px、px/ms、ms
+export function sheetDrag(sheet, { isOpen, setOpen, scroll }) {
+  const root = document.documentElement.style;
+  let st = 'idle', scroller = null, x0 = 0, y0 = 0, h0 = 0, minH = 0, maxH = 0, h = 0, trail = [], endAt = 0, timer = 0, busy = false;
+  const publish = () => {
+    const cur = sheet.offsetHeight;
+    if (!busy) { if (isOpen()) maxH = cur; else minH = cur; } // 平常就順便記下兩端的高度
+    if (!busy && !isOpen()) sheet.dataset.minH = cur;
+    root.setProperty('--sheet-h', `${cur}px`);
+    const t = maxH > minH ? (cur - minH) / (maxH - minH) : (isOpen() ? 1 : 0);
+    root.setProperty('--sheet-t', Math.min(1, Math.max(0, t)).toFixed(3));
+  };
+  if ('ResizeObserver' in window) new ResizeObserver(publish).observe(sheet); // 轉場動畫中每一格都會觸發
+  const measure = () => {
+    busy = true;
+    sheet.style.transition = 'none'; sheet.style.height = '';
+    sheet.classList.add('small'); minH = sheet.offsetHeight;
+    sheet.classList.remove('small'); maxH = sheet.offsetHeight;
+    sheet.dataset.minH = minH;
+  };
+  // 從目前高度動畫到開或關，結束後才交回 CSS（點把手和放開拖曳都走這裡）
+  const settle = (open) => {
+    sheet.style.transition = '';
+    sheet.style.height = `${open ? maxH : minH}px`;
+    if (!open) sheet.classList.add('small'); // 收合時內容先藏，只動高度
+    clearTimeout(timer);
+    timer = setTimeout(() => { sheet.style.height = ''; busy = false; setOpen(open); publish(); }, ANIM);
+  };
+  const toggle = (open = !isOpen()) => {
+    if (!SHEET_MQ.matches) { setOpen(open); return; }
+    clearTimeout(timer);
+    const from = sheet.offsetHeight;
+    measure();
+    sheet.style.height = `${from}px`;
+    void sheet.offsetHeight; // 先套用起點，下一步的高度變化才會有轉場
+    settle(open);
+  };
+  sheet.addEventListener('touchstart', (e) => {
+    st = 'idle';
+    if (!SHEET_MQ.matches || e.touches.length !== 1 || e.target.closest(NO_DRAG)) return;
+    scroller = isOpen() && scroll ? e.target.closest(scroll) : null;
+    st = 'pending';
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; trail = [];
+  }, { passive: true });
+  sheet.addEventListener('touchmove', (e) => {
+    if (st === 'idle') return;
+    const t = e.touches[0], dy = t.clientY - y0;
+    if (st === 'pending') {
+      // 清單裡：只有往下拉而且已在頂端才接手，其他交給原生捲動
+      if (scroller && (dy < 0 || scroller.scrollTop > 0)) { st = 'idle'; return; }
+      if (scroller) e.preventDefault();
+      if (Math.abs(dy) < TAP_SLOP && Math.abs(t.clientX - x0) < TAP_SLOP) return;
+      if (Math.abs(t.clientX - x0) > Math.abs(dy)) { st = 'idle'; return; } // 橫向滑動不搶
+      clearTimeout(timer);
+      const from = sheet.offsetHeight;
+      measure();
+      h0 = from;
+      sheet.style.height = `${h0}px`;
+      y0 = t.clientY; // 從接手的位置開始算，抽屜不會突然跳一段
+      st = 'dragging';
+    }
+    e.preventDefault();
+    const now = performance.now();
+    trail.push([now, t.clientY]);
+    while (trail.length > 2 && now - trail[0][0] > 100) trail.shift(); // 速度看最後 0.1 秒，避免單格抖動
+    h = Math.min(maxH, Math.max(minH, h0 - (t.clientY - y0)));
+    sheet.style.height = `${h}px`;
+  }, { passive: false });
+  const end = (e) => {
+    if (st === 'pending' && e?.type === 'touchend' && !isOpen() && !e.target.closest('a, button, input, select, textarea, label')) {
+      st = 'idle'; endAt = performance.now(); toggle(true); return; // 收合時點摘要空白處也能展開
+    }
+    if (st !== 'dragging') { st = 'idle'; return; }
+    st = 'idle'; endAt = performance.now();
+    const [ta, ya] = trail[0] || [0, 0], [tb, yb] = trail.at(-1) || [1, 0];
+    const speed = (yb - ya) / Math.max(1, tb - ta), moved = h - h0, need = Math.min(90, (maxH - minH) / 4);
+    const wasOpen = h0 > (minH + maxH) / 2;
+    // 快速一甩看方向；慢慢拉則要拉超過一段距離（90px 或全程四分之一）才換狀態，否則彈回
+    settle(speed < -FLICK ? true : speed > FLICK ? false : Math.abs(moved) > need ? moved > 0 : wasOpen);
+  };
+  sheet.addEventListener('touchend', end);
+  sheet.addEventListener('touchcancel', end);
+  // 拖曳或點摘要展開後，瀏覽器補送的 click 不要再觸發按鈕（例如把手又切回去）
+  sheet.addEventListener('click', (e) => {
+    if (performance.now() - endAt < 400) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+  return { toggle };
+}
+
+// 地圖留白用：手機抽屜「收合時」的高度。展開或拖曳中都回傳同一個值，
+// 地圖鏡頭不會因為抽屜拉上拉下而跟著跳；抽屜展開時本來就是在看面板。
+export const sheetRestH = (el, fallback = 120) => Number(el?.dataset.minH) || fallback;
+
+// 手機：不給頁面縮放（地圖自己的雙指縮放不受影響），從上一頁返回時也不要自動叫出鍵盤
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+addEventListener('pageshow', (e) => { if (e.persisted) document.activeElement?.blur?.(); });
+
+// 左側欄：收合鈕（電腦）與拉把手（手機）行為一致，每頁各自記住開合狀態
+export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 760 } = {}) {
+  const storeKey = `qiji:panel:${key}`;
+  let small = defaultSmall;
+  try { const v = localStorage.getItem(storeKey); if (v !== null) small = v === '1'; } catch { /* 私密模式 */ }
+  const btn = panel.querySelector('.panel-collapse'), handle = panel.querySelector('.handle');
+  const set = (v, save = true) => {
+    small = !!v;
+    panel.classList.toggle('small', small);
+    for (const el of [btn, handle]) if (el) { el.setAttribute('aria-expanded', String(!small)); el.setAttribute('aria-label', small ? '展開面板' : '收合面板'); }
+    if (save) try { localStorage.setItem(storeKey, small ? '1' : '0'); } catch { /* 私密模式 */ }
+    onChange?.(small);
+  };
+  if (btn) btn.onclick = () => set(!small);
+  set(small, false);
+  const drag = sheetDrag(panel, { isOpen: () => !small, setOpen: (open) => set(!open), scroll: '.panel-body' });
+  if (handle) handle.onclick = () => drag.toggle();
+  liquidGlass(panel);
+  return { set, get small() { return small; } };
 }

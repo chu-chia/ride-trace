@@ -4,20 +4,20 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="theme-color" content="#d9500f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="騎跡">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>規劃路線｜騎跡 RideTrace</title>
 <link rel="stylesheet" href="/vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
 <style>
-  .pl{position:fixed;z-index:9;left:12px;top:12px;bottom:12px;width:400px;border-radius:22px;display:flex;flex-direction:column;overflow:hidden}
-  .pl header{display:flex;align-items:center;gap:10px;padding:12px 14px 6px}
-  .pl header a{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:20px;color:var(--fg);text-decoration:none}
-  .pl header b{font-size:16px;display:block}
-  .pl header span{font-size:12px;color:var(--muted)}
-  .pl .body{flex:1;overflow-y:auto;padding:6px 14px 14px;display:flex;flex-direction:column;gap:10px}
-  .pl .body>*{flex-shrink:0} /* 內容很長時不要把清單擠成 0 高 */
-  .pl h3{margin:6px 2px 0;font-size:13px;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;align-items:baseline}
-  .pl h3 button{border:0;background:none;color:var(--accent);font-size:12.5px;cursor:pointer;padding:2px 4px}
+  .panel h3{margin:var(--sp-2) 2px 0;font-size:13px;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;align-items:baseline}
+  .panel h3 button{border:0;background:none;color:var(--accent);font-size:12.5px;cursor:pointer;padding:2px 4px}
   .input{padding:10px 12px;font-size:14px}
   .note{font-size:12.5px;color:var(--muted)}
   .err{font-size:13px;color:var(--crit)}
@@ -84,36 +84,33 @@
   .turns{max-height:260px;overflow-y:auto;margin:0 -12px -12px}
   .turn{display:grid;grid-template-columns:58px 1fr;gap:8px;padding:7px 12px;font-size:13px;border-top:1px solid var(--line)}
   .turn i{font-style:normal;color:var(--muted);font-size:12px;text-align:right}
-  .foot{padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
-  .foot label{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer}
-  .foot input{width:18px;height:18px;accent-color:var(--accent)}
+  .panel-foot{flex-direction:column;align-items:stretch}
+  .panel-foot label{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer}
+  .panel-foot input{width:18px;height:18px;accent-color:var(--accent)}
   /* 地圖標記：不要設 position（MapLibre 標記要 absolute） */
   .wpno{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px;color:#fff;background:var(--accent);border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:grab}
   .wpno.s{background:#30d158}.wpno.e{background:#ff453a}
   .poipin{display:flex;align-items:center;gap:4px;padding:2px 8px 2px 2px;border-radius:999px;background:var(--glass);box-shadow:0 2px 8px rgba(0,0,0,.35);font-size:12px;font-weight:600;color:var(--fg);white-space:nowrap;cursor:pointer}
   .poipin b{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#ff9f0a;color:#fff;font-size:11px}
-  .tools{right:12px;top:12px}
-  @media (max-width:760px){
-    .pl{left:0;right:0;top:auto;bottom:0;width:auto;height:58dvh;border-radius:22px 22px 0 0}
-  }
 </style>
 </head>
 <body>
 <div class="mapwrap"><div id="map"></div></div>
 <div class="tools">
-  <button class="tool glass" id="bStyle" title="切換地圖風格">深色</button>
-  <button class="tool glass" id="b3d" title="3D 地形">3D</button>
+  <button class="tool glass" id="b3d" data-icon="cube" aria-pressed="false">3D</button>
+  <button class="tool glass" id="bStyle" data-icon="layers">深色</button>
 </div>
-<aside class="pl glass">
-  <header><a id="back" href="/" aria-label="回行程">‹</a><div><b>規劃路線</b><span id="tName">載入中…</span></div></header>
-  <div class="body">
+<aside class="panel glass" id="panel">
+  <button class="handle" aria-expanded="true"></button>
+  <div class="panel-head"><a class="icon-btn" id="back" href="/" data-icon="back" aria-label="回行程"></a><div class="panel-title"><b>規劃路線</b><div class="sub" id="tName">載入中…</div></div><button class="icon-btn panel-collapse" data-icon="collapse" aria-expanded="true"></button></div>
+  <div class="panel-mini"><span id="miniRoute">還沒有路線</span></div>
+  <div class="panel-body">
     <div class="sbox">
-      <input class="input" id="q" placeholder="搜尋地點、車站、景點，加入路線" autocomplete="off" enterkeyhint="search">
+      <input class="input" id="q" placeholder="搜尋地點，或直接點地圖加入" autocomplete="off" enterkeyhint="search">
       <div class="sres" id="sres" hidden></div>
     </div>
     <h3>路線 <button id="useMe" type="button">用我的位置當起點</button></h3>
     <div class="pts" id="pts"></div>
-    <div class="note">也可以直接在地圖上點一下加入停靠點；點會自動插在繞路最少的位置，地圖上的點可以拖曳。</div>
 
     <h3>交通工具</h3>
     <div class="seg" id="veh"><button data-v="scooter" class="on">機車</button><button data-v="heavy">重機</button><button data-v="car">汽車</button></div>
@@ -136,15 +133,14 @@
     </div>
 
     <details id="gBox">
-      <summary>從 Google Maps 匯入（選用）</summary>
+      <summary>從 Google Maps 匯入</summary>
       <div class="in">
         <form class="row" id="gForm"><input class="input" id="gUrl" placeholder="貼上 Google Maps 路線的分享連結" autocomplete="off"><button class="btn">匯入</button></form>
-        <div class="note">連結只帶得出起點、終點和停靠點，路線由騎跡依交通工具重新計算。</div>
       </div>
     </details>
   </div>
-  <div class="foot">
-    <label id="asRestWrap"><input type="checkbox" id="asRest" checked> 中途停靠點也設成休息點（抵達會通知全隊）</label>
+  <div class="panel-foot">
+    <label id="asRestWrap"><input type="checkbox" id="asRest" checked> 停靠點也當休息點</label>
     <button class="btn primary block" id="apply" disabled>套用到行程</button>
     <button class="btn block" id="clear" hidden>清除行程的路線</button>
   </div>

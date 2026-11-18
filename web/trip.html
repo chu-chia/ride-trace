@@ -4,7 +4,11 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="騎跡">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>行程｜騎跡 RideTrace</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
@@ -14,45 +18,19 @@
 <link rel="stylesheet" href="/assets/trip-extra.css">
 <style>
   body{overflow:hidden}
-  .panel{position:fixed;z-index:9;left:12px;top:12px;bottom:12px;width:400px;border-radius:22px;display:flex;flex-direction:column;overflow:hidden;transition:width .25s ease}
-  .panel.small{width:230px;bottom:auto;padding-bottom:12px}
-  .panel .handle{display:none}
-  .topbar{display:flex;align-items:center;gap:8px;min-width:0}
-  .topbar a.back{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:20px;color:var(--fg);flex:none}
-  .topbar b{font-size:17px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .topbar .sub{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
-  .topbar a.go,.collapseBtn{padding:8px;border:0;border-radius:10px;background:var(--surface-2);color:var(--fg);font:inherit;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;flex:none}
-  .collapseBtn{font-size:18px;line-height:1;width:30px;height:34px}
-  .tools{right:max(12px,env(safe-area-inset-right,0px));top:max(12px,env(safe-area-inset-top,0px))}
-  .maplibregl-ctrl-bottom-left{left:420px}
-  .banner{margin:12px 14px 0;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--accent) 12%,transparent);font-size:13.5px;display:flex;flex-direction:column;gap:10px}
-  .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:14px 14px 0}
+  .banner{margin:0 var(--sp-4) var(--sp-3);padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--accent) 12%,transparent);font-size:13.5px;display:flex;flex-direction:column;gap:10px}
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-2);padding:var(--sp-2) var(--sp-4) var(--sp-3)}
   .stats div{display:flex;flex-direction:column;min-width:0}
   .stats b{font-size:22px;line-height:1.1}
   .stats span{font-size:11.5px;color:var(--muted)}
-  .compactStats{display:none;padding:4px 14px 10px;font-size:12px;color:var(--muted);gap:8px}
-  .compactStats b{color:var(--fg)}
-  .panel.small .stats,.panel.small .banner,.panel.small #tabs,.panel.small .body{display:none!important}
-  .panel.small .compactStats{display:flex;flex-wrap:wrap}
-  .panel.small .topbar .sub,.panel.small .topbar .go{display:none}
-  .panel.small .topbar{padding-bottom:6px!important}
-  .panel.small .topbar b{font-size:14px}
-  #tabs{display:flex;flex-wrap:wrap;gap:4px;margin:14px 14px 8px;padding:0;background:none}
-  #tabs button{flex:1;padding:10px 4px;min-height:44px;font-size:13px;border-radius:9px;background:var(--surface-2)}
-  #tabs button.on{background:var(--accent-fill);color:#fff}
   #tabs button[data-badge]:not([data-badge=""])::after{content:attr(data-badge);background:var(--crit);color:#fff;border-radius:9px;padding:0 4px;margin-left:3px;font-size:10px}
-  .body{flex:1;min-height:0;overflow-y:auto;padding:4px 14px 18px;display:flex;flex-direction:column;gap:10px}
-  .body[hidden]{display:none!important}
-  .tab-desc{margin:0 0 6px;font-size:12px;color:var(--muted);line-height:1.5}
-  .panelFoot{flex:none;padding:8px 14px max(12px,env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
-  .warOpen{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:12px;background:var(--surface-2);color:var(--fg);font-weight:700;text-decoration:none}
-  .sosOpen{min-width:54px;min-height:44px;border:0;border-radius:12px;background:var(--crit);color:#fff;font:inherit;font-weight:800;cursor:pointer}
+  .panel-body[hidden]{display:none!important}
+  .sosOpen{min-width:64px;height:var(--ctl-h);border:0;border-radius:var(--r-ctl);background:var(--crit);color:#fff;font:inherit;font-weight:800;cursor:pointer}
   .sosDialog[hidden]{display:none}
   .sosDialog{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.65);display:grid;place-items:center;padding:16px}
   .sosBox{width:min(360px,100%);padding:20px;border-radius:20px;background:var(--surface);color:var(--fg);box-shadow:0 20px 60px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:14px}
   .sosBox h2{margin:0;font-size:20px}.sosBox p{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
   .sosBox .qx-sos{height:52px;font-size:16px}.sosClose{align-self:flex-end;border:0;background:var(--surface-2);color:var(--fg);border-radius:10px;min-width:44px;min-height:44px;cursor:pointer}
-  .rideSummary{display:none}
   .moreQuick{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}.moreQuick button{border:0;border-radius:9px;min-height:44px;background:var(--surface-2);color:var(--fg);font:inherit;cursor:pointer}
   .subBack{align-self:flex-start;border:0;background:none;color:var(--accent);font:inherit;font-size:13px;min-height:36px;cursor:pointer}
   .teamDetails{padding:8px 0 10px 46px;color:var(--muted);font-size:12px;line-height:1.55}
@@ -79,33 +57,9 @@
   .moreSection{display:flex;flex-direction:column;gap:10px}
   .moreSection[hidden]{display:none!important}
   @media(max-width:760px){
-    .panel,.panel.small{left:0;right:0;top:auto;bottom:0;width:auto;height:min(72dvh,620px);border-radius:20px 20px 0 0;padding-bottom:0;transition:height .28s ease}
-    .panel.small{height:calc(176px + env(safe-area-inset-bottom,0px))}
-    .panel .handle{display:grid;place-items:center;border:0;background:none;padding:7px 0 3px;cursor:grab;touch-action:none;flex:none}
-    .panel .handle::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--muted);opacity:.65}
-    .panel .topbar,.panel.small .topbar{padding:4px 14px 8px!important;border-bottom:0!important}
-    .panel .topbar b{font-size:14px}
-    .panel .topbar .sub{font-size:11px}
-    .panel .topbar .go{font-size:11px;padding:7px}
-    .panel.small .topbar .sub{display:none}
-    .stats{padding:6px 16px 0}
+    .stats{padding:var(--sp-1) var(--sp-4) var(--sp-2)}
     .stats b{font-size:18px}
-    .compactStats{display:none!important}
-    .panel.small .stats{display:none!important}
-    .panel.small .rideSummary{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 12px 0}
-    .rideSummary>div{min-width:0;padding:8px 10px;border-radius:10px;background:var(--surface-2)}
-    .rideSummary small{display:block;color:var(--muted);font-size:11px}.rideSummary b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
-    #tabs{margin:8px 12px}
-    .panelFoot{padding:7px 12px max(8px,env(safe-area-inset-bottom,0px))}
-    .panelFoot .qx-sos{height:40px}
-    .panel.small .panelFoot{display:flex;justify-content:space-between;padding-top:3px}
-    .panel.small .panelFoot .sosOpen{min-height:44px}
-    .panel.small .topbar .go{display:none}
-    .tools{top:max(12px,env(safe-area-inset-top,0px));right:max(10px,env(safe-area-inset-right,0px));gap:6px}
-    .tools .tool{height:34px;min-width:40px;padding:0 7px;font-size:11px}
-    .maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{bottom:calc(72dvh + 8px)}
-    body:has(.panel.small) .maplibregl-ctrl-bottom-left,body:has(.panel.small) .maplibregl-ctrl-bottom-right{bottom:calc(176px + env(safe-area-inset-bottom,0px))}
-    .maplibregl-ctrl-bottom-left{left:0}
+    .panel-foot .qx-sos{height:40px}
   }
 </style>
 </head>
@@ -113,32 +67,31 @@
 <div class="mapwrap"><div id="map"></div></div>
 
 <div class="tools">
-  <button class="tool glass" id="bStyle" title="切換地圖風格（深色 → 衛星 → 淺色）">深色</button>
-  <button class="tool glass" id="b3d" title="3D 地形" aria-pressed="false">3D</button>
-  <button class="tool glass on" id="bAll" title="自動顯示全隊" aria-pressed="true">全隊</button>
-  <button class="tool glass" id="bMe" title="跟著我" aria-pressed="false">跟我</button>
+  <button class="tool glass on" id="bAll" data-icon="team" aria-pressed="true">全隊</button>
+  <button class="tool glass" id="bMe" data-icon="me" aria-pressed="false">跟我</button>
+  <button class="tool glass" id="b3d" data-icon="cube" aria-pressed="false">3D</button>
+  <button class="tool glass" id="bStyle" data-icon="layers">深色</button>
 </div>
 
 <aside class="panel glass" id="panel">
-  <button class="handle" id="handle" aria-label="展開或收合行程面板" aria-expanded="true"></button>
-  <div class="topbar"><a class="back" href="/" aria-label="回首頁">‹</a><div style="flex:1;min-width:0"><b id="tName">行程</b><div class="sub"><span id="tStatus" class="chip">載入中</span><span class="num" id="tTimer"></span></div></div><a class="go" id="bReplay" title="回放到目前為止的紀錄">回放</a><button class="collapseBtn" id="collapseBtn" aria-label="收合面板" aria-expanded="true">‹</button></div>
+  <button class="handle" id="handle" aria-expanded="true"></button>
+  <div class="panel-head"><a class="icon-btn" href="/" data-icon="back" aria-label="回首頁"></a><div class="panel-title"><b id="tName">行程</b><div class="sub"><span id="tStatus" class="chip">載入中</span><span class="num" id="tTimer"></span></div></div><a class="panel-act" id="bReplay" data-icon="replay">回放</a><button class="icon-btn panel-collapse" data-icon="collapse" aria-expanded="true"></button></div>
+  <div class="panel-mini"><b id="quickTeam">載入中</b><span>我 <b id="cSpeed">–</b> km/h</span><b id="quickRoute"></b><span hidden id="cOnline"></span></div>
   <div class="stats">
     <div><b class="num" id="sOnline">0/0</b><span>隊友在線</span></div>
     <div><b class="num" id="sSpeed">–</b><span>km/h 我的速度</span></div>
     <div><b class="num" id="sAlt">–</b><span>m 我的海拔</span></div>
   </div>
-  <div class="compactStats"><span>在線 <b id="cOnline">0/0</b></span><span>我的速度 <b id="cSpeed">–</b> km/h</span></div>
-  <div class="rideSummary"><div><small>車隊</small><b id="quickTeam">載入中</b></div><div><small>路線</small><b id="quickRoute">載入中</b></div></div>
   <div class="banner" id="banner" hidden></div>
   <nav class="seg" id="tabs" aria-label="行程功能"><button class="on" data-t="team">隊友</button><button data-t="route">路線</button><button data-t="msg">訊息</button><button data-t="more">更多</button></nav>
-  <div class="body" data-b="team"><p class="tab-desc">點一下隊友，鏡頭就跟著他；再點一次回到全隊。</p><div id="team"></div><div id="teamAdmin"></div></div>
-  <div class="body" data-b="route" hidden><p class="tab-desc">依順序查看起點、途經點與終點；點「查看」可在地圖定位。</p><div class="qx-pop" id="routeContent"></div></div>
-  <div class="body" data-b="wp" hidden><button class="subBack" data-back-more>‹ 返回更多</button><p class="tab-desc">設定大家要會合的地點，抵達時會通知全隊。</p><div class="qx-pop" id="wpContent"></div></div>
-  <div class="body" data-b="msg" hidden><p class="tab-desc">傳快速訊息或聊天，讓全隊即時收到。</p><div class="qx-pop" id="msgContent"></div></div>
-  <div class="body" data-b="events" hidden><button class="subBack" data-back-more>‹ 返回更多</button><p class="tab-desc">查看行程中發生的警示與紀錄。</p><div id="events"></div></div>
-  <div class="body" data-b="mark" hidden><button class="subBack" data-back-more>‹ 返回更多</button><p class="tab-desc">標記路況或推薦地點，隊友靠近時會收到提醒。</p><div class="qx-pop" id="markContent"></div></div>
-  <div class="body" data-b="more" hidden><div class="moreQuick"><button data-open-tab="wp">集合點</button><button data-open-tab="events">事件</button><button data-open-tab="mark">標註</button></div><p class="tab-desc">邀請隊友、設定位置回報與查看騎乘工具。</p><div class="moreNav" id="moreNav"><button class="on" data-more-tab="invite">邀請隊友</button><button data-more-tab="report">回報裝置</button><button data-more-tab="cam">測速照相</button><button data-more-tab="lag">落隊警示</button><button data-more-tab="war">戰情室</button></div>
-    <section class="moreSection" data-more="invite"><p class="tab-desc">分享邀請碼或連結，讓朋友加入行程。</p>
+  <div class="panel-body" data-b="team"><div id="team"></div><div id="teamAdmin"></div></div>
+  <div class="panel-body" data-b="route" hidden><div class="qx-pop" id="routeContent"></div></div>
+  <div class="panel-body" data-b="wp" hidden><button class="subBack" data-back-more>‹ 返回更多</button><div class="qx-pop" id="wpContent"></div></div>
+  <div class="panel-body" data-b="msg" hidden><div class="qx-pop" id="msgContent"></div></div>
+  <div class="panel-body" data-b="events" hidden><button class="subBack" data-back-more>‹ 返回更多</button><div id="events"></div></div>
+  <div class="panel-body" data-b="mark" hidden><button class="subBack" data-back-more>‹ 返回更多</button><div class="qx-pop" id="markContent"></div></div>
+  <div class="panel-body" data-b="more" hidden><div class="moreQuick"><button data-open-tab="wp">集合點</button><button data-open-tab="events">事件</button><button data-open-tab="mark">標註</button></div><div class="moreNav" id="moreNav"><button class="on" data-more-tab="invite">邀請隊友</button><button data-more-tab="report">回報裝置</button><button data-more-tab="cam">測速照相</button><button data-more-tab="lag">落隊警示</button><button data-more-tab="war">戰情室</button></div>
+    <section class="moreSection" data-more="invite">
 
     <div class="card" style="display:flex;flex-direction:column;gap:10px;text-align:center">
       <div class="eyebrow">邀請碼</div>
@@ -148,7 +101,7 @@
       <button class="btn" id="copyLink">複製邀請連結</button>
     </div>
     </section>
-    <section class="moreSection" data-more="report" hidden><p class="tab-desc">設定這支裝置如何回報位置與接收通知。</p>
+    <section class="moreSection" data-more="report" hidden>
     <div class="card" style="display:flex;flex-direction:column;gap:10px">
       <div class="eyebrow">用這支手機的網頁定位</div>
       <div class="small muted">網頁要一直開在畫面上，螢幕會保持常亮。適合用騎跡看地圖的人；要用 Google Maps 導航請改用下面的 Traccar。手機上要用 HTTPS 網址才能定位。</div>
@@ -163,13 +116,13 @@
     <div class="card" id="pushCard" style="display:flex;flex-direction:column;gap:10px"></div>
     <button class="btn danger block" id="endBtn" hidden>結束我的紀錄</button>
     </section>
-    <section class="moreSection" data-more="cam" hidden><p class="tab-desc">查詢附近測速照相，騎近時會自動提醒。</p><div class="qx-pop" id="camContent"></div></section>
-    <section class="moreSection" data-more="lag" hidden><p class="tab-desc">設定與全隊距離多遠時提醒落隊。</p><div class="small muted" id="lagSet"></div></section>
-    <section class="moreSection" data-more="war" hidden><p class="tab-desc">在電腦大螢幕觀看全隊位置與行程事件。</p><a class="btn block" id="warLink" target="_blank" rel="noopener">開啟戰情室</a></section>
+    <section class="moreSection" data-more="cam" hidden><div class="qx-pop" id="camContent"></div></section>
+    <section class="moreSection" data-more="lag" hidden><div class="small muted" id="lagSet"></div></section>
+    <section class="moreSection" data-more="war" hidden><a class="btn block" id="warLink" target="_blank" rel="noopener">開啟戰情室</a></section>
   </div>
-  <div class="panelFoot"><a class="warOpen" id="warFoot" target="_blank" rel="noopener">戰情室</a><button class="sosOpen" id="sosOpen" aria-label="開啟緊急求救選單">SOS</button></div>
+  <div class="panel-foot keep"><a class="panel-act" id="warFoot" target="_blank" rel="noopener" data-icon="screen">戰情室</a><button class="sosOpen" id="sosOpen" aria-label="開啟緊急求救選單">SOS</button></div>
 </aside>
-<div class="sosDialog" id="sosDialog" hidden><div class="sosBox" role="dialog" aria-modal="true" aria-labelledby="sosTitle"><button class="sosClose" id="sosClose" aria-label="關閉緊急求救選單">✕</button><h2 id="sosTitle">緊急求救</h2><p id="sosHelp">長按下方按鈕 1.5 秒，通知全隊並標出你的位置。</p><button class="qx-sos" id="qxSos" title="長按 1.5 秒發出 SOS"><i></i><span>SOS</span></button></div></div>
+<div class="sosDialog" id="sosDialog" hidden><div class="sosBox" role="dialog" aria-modal="true" aria-labelledby="sosTitle"><button class="sosClose" id="sosClose" aria-label="關閉緊急求救選單">✕</button><h2 id="sosTitle">緊急求救</h2><button class="qx-sos" id="qxSos" title="長按 1.5 秒發出 SOS"><i></i><span>SOS</span></button></div></div>
 <div class="qx-prog glass" id="qxProg" hidden></div>
 <div class="qx-turn glass" id="qxTurn" hidden></div>
 

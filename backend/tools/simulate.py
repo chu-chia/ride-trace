@@ -14,6 +14,12 @@
 
     # Demo 模式：同一個行程（用編號指定，已結束也可以）無限重播；每一圈開始前把這趟的即時資料清掉、重新開始
     uv run python -m tools.simulate --group zhongheng --trip 57 --speed 1 --interval 2 --loop
+
+    # 中橫真實版（tools.make_real_demo 產生）：真人帳號重播自己 3/14 的紀錄＋3 個機器人
+    uv run python -m tools.simulate --group zh314 --trip 57 --speed 1 --interval 2 --loop
+
+軌跡檔有 "self": "帳號" 的是「真人重播自己」：不用密碼登入（直接在 Redis 開一個臨時 session），
+回報標成 src=sim-self，只進 demo 行程、不寫個人足跡；暱稱、顏色、足跡都不動。
 """
 import argparse
 import asyncio
@@ -58,8 +64,10 @@ class Rider:
         self.pts = track["points"]
         self.times = [p[0] for p in self.pts]
         self.dur = self.times[-1]
-        self.username = "sim_" + track["id"].replace("-", "")[:16]
+        self.self_user = track.get("self")  # 真人帳號重播自己的舊紀錄
+        self.username = self.self_user or "sim_" + track["id"].replace("-", "")[:16]
         self.nickname = track["label"]
+        self.src = "sim-self" if self.self_user else "sim"
         self.client: httpx.AsyncClient | None = None
         self.done = False
         self.batt = 92 - idx * 7
@@ -90,8 +98,33 @@ class Rider:
         return a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f
 
 
+SELF_SESSION_S = 8 * 86400
+
+
+def self_session(username: str) -> str:
+    """真人帳號：不碰密碼，直接開一個 8 天的臨時 session（每圈重開，Demo 一直跑也不會過期）。"""
+    import secrets
+    import redis
+    rd = redis.Redis.from_url(default_redis_url(), decode_responses=True)
+    uid = rd.get(f"username:{username}")
+    if not uid:
+        sys.exit(f"找不到帳號 {username}")
+    tok = "simself_" + secrets.token_urlsafe(18)
+    rd.set(f"session:{tok}", uid, ex=SELF_SESSION_S)
+    return tok
+
+
+def drop_session(tok: str):
+    import redis
+    redis.Redis.from_url(default_redis_url(), decode_responses=True).delete(f"session:{tok}")
+
+
 async def ensure_login(base: str, rd: Rider):
     c = httpx.AsyncClient(base_url=base, timeout=15)
+    if rd.self_user:
+        c.headers["authorization"] = "Bearer " + self_session(rd.self_user)
+        rd.client = c
+        return
     res = await c.post("/api/login", json={"username": rd.username, "password": BOT_PASSWORD})
     if res.status_code == 401:
         res = await c.post("/api/register", json={"username": rd.username, "password": BOT_PASSWORD,
@@ -102,9 +135,10 @@ async def ensure_login(base: str, rd: Rider):
     rd.client = c
 
 
-def reset_trip(tid: str, lap: int, bot_names: list[str]):
+def reset_trip(tid: str, lap: int, bot_names: list[str], self_names: list[str] = ()):
     """Demo 循環：把行程的即時資料清掉、重新變成進行中，機器人重新出發。
-    機器人的個人足跡也一起清（不然每一圈 4 個人各十幾萬點，Redis 會一直長大）；只清 sim_ 開頭的帳號。"""
+    機器人的個人足跡也一起清（不然每一圈 4 個人各十幾萬點，Redis 會一直長大）；只清 sim_ 開頭的帳號。
+    真人帳號（self_names）只放回這趟的 active，個人資料完全不動；他正在別的進行中行程時不搶過來。"""
     import redis
     rd = redis.Redis.from_url(default_redis_url(), decode_responses=True)
     if not rd.exists(f"trip:{tid}"):
@@ -114,6 +148,14 @@ def reset_trip(tid: str, lap: int, bot_names: list[str]):
         uid = rd.get(f"username:{name}")
         if uid and name.startswith("sim_"):
             uids.append(uid)
+    selves = []
+    for name in self_names:
+        uid = rd.get(f"username:{name}")
+        cur = uid and rd.get(f"user:{uid}:active_trip")
+        if uid and (not cur or cur == tid or rd.hget(f"trip:{cur}", "status") != "live"):
+            selves.append(uid)
+        elif uid:
+            print(f"\n{name} 正在行程 {cur}，這一圈不加入 Demo")
     keys = set()
     for pat in (f"track:{tid}:*", f"ts:{tid}:*", f"hb:{tid}:*", f"trip:{tid}:state:*", f"trip:{tid}:stats:*",
                 f"trip:{tid}:arrived:*", f"trip:{tid}:allin:*", f"roadevt:{tid}:*", f"wxevt:{tid}:*",
@@ -133,12 +175,13 @@ def reset_trip(tid: str, lap: int, bot_names: list[str]):
     now = int(time.time() * 1000)
     p.hset(f"trip:{tid}", mapping={"status": "live", "started": now, "demo": 1, "demo_lap": lap})
     p.hdel(f"trip:{tid}", "ended_at")
-    if uids:
-        p.sadd(f"trip:{tid}:members", *uids)
-        p.sadd(f"trip:{tid}:active", *uids)
-        for uid in uids:
+    riders = uids + selves
+    if riders:
+        p.sadd(f"trip:{tid}:members", *riders)
+        p.sadd(f"trip:{tid}:active", *riders)
+        for uid in riders:
             p.zadd(f"user:{uid}:trips", {tid: now})
-    for uid in uids:
+    for uid in riders:
         p.set(f"user:{uid}:active_trip", tid)
     p.xadd(f"trip:{tid}:events", {"type": "start", "uid": "", "text": f"Demo 第 {lap} 圈開始", "ts": now})
     p.execute()
@@ -157,7 +200,7 @@ def parse_drops(items):
 
 async def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--group", default="taipei", help="taipei（10/26 台北→武嶺，預設）、wuling（4 段清境→武嶺）或 beiyi")
+    ap.add_argument("--group", default="taipei", help="taipei（10/26 台北→武嶺，預設）、wuling（4 段清境→武嶺）、beiyi、zh314（中橫 3/14 真實版）")
     ap.add_argument("--tracks", default=os.path.join(os.path.dirname(__file__), "..", "..", "data", "tracks"))
     ap.add_argument("--base", default="http://localhost:8750")
     g = ap.add_mutually_exclusive_group(required=True)
@@ -179,7 +222,7 @@ async def main():
     drops = parse_drops(a.drop)
     await asyncio.gather(*(ensure_login(a.base, rd) for rd in riders))
 
-    lead = riders[0].client
+    lead = next((rd.client for rd in riders if not rd.self_user), riders[0].client)  # 開團／查狀態用機器人
     if a.create:
         res = await lead.post("/api/trips", json={"name": a.create})
         res.raise_for_status()
@@ -213,8 +256,13 @@ async def main():
     while True:
         lap += 1
         if a.loop:
-            reset_trip(tid, lap, [rd.username for rd in riders])
+            reset_trip(tid, lap, [rd.username for rd in riders if not rd.self_user],
+                       [rd.username for rd in riders if rd.self_user])
             for rd in riders:
+                if rd.self_user:  # 每圈換新的臨時 session（舊的刪掉），Demo 跑幾週也不會過期
+                    old = rd.client.headers["authorization"].removeprefix("Bearer ")
+                    rd.client.headers["authorization"] = "Bearer " + self_session(rd.self_user)
+                    drop_session(old)
                 rd.done = False
                 rd.batt = 92 - rd.idx * 7
         await run_lap(a, tid, riders, drops)
@@ -247,7 +295,7 @@ async def run_lap(a, tid, riders, drops):
             lat, lon, ele, spd, hd = rd.at(s)
             rd.batt = max(5, rd.batt - 0.002 * a.speed)
             body = {"lat": lat, "lon": lon, "alt": ele, "speed": spd, "heading": hd, "acc": 6,
-                    "batt": round(rd.batt), "ts": now_ms, "src": "sim"}
+                    "batt": round(rd.batt), "ts": now_ms, "src": rd.src}
             posts.append(rd.client.post("/api/track", json=body))
         if posts:
             res = await asyncio.gather(*posts, return_exceptions=True)

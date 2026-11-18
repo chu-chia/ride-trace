@@ -4,14 +4,17 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="騎跡">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>設定 · 騎跡</title>
 <meta name="theme-color" content="#d9500f">
 <link rel="stylesheet" href="/assets/app.css">
 <style>
-  .top{display:flex;align-items:center;gap:10px;padding-top:4px}
-  .top a{font-size:26px;line-height:1;text-decoration:none;color:var(--fg);padding:4px 8px 4px 0}
-  .top h1{margin:0;font-size:24px}
   .card h2{margin:0 0 12px;font-size:15px}
   .card form{display:flex;flex-direction:column;gap:10px}
   .card label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
@@ -30,7 +33,7 @@
 </head>
 <body>
 <main class="page">
-  <header class="top"><a href="/" aria-label="回首頁">‹</a><h1>設定</h1></header>
+  <header class="page-top"><a class="icon-btn" href="/" aria-label="回首頁"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a><h1>設定</h1></header>
 
   <section class="card">
     <h2>個人資料</h2>
@@ -55,6 +58,19 @@
   </section>
 
   <section class="card">
+    <h2>地圖跟隨</h2>
+    <label class="row" style="cursor:pointer"><span>拖曳地圖後自動回到跟隨</span>
+      <select id="resume" style="width:auto"><option value="0">不自動</option><option value="10">10 秒</option><option value="15">15 秒</option><option value="30">30 秒</option></select></label>
+    <p class="small muted" style="margin:10px 0 0">行程頁、戰情室適用；回放不會自動回去。縮放、旋轉不會離開跟隨。</p>
+  </section>
+
+  <section class="card">
+    <h2>省電模式</h2>
+    <label class="row" style="cursor:pointer"><span>地圖用較低的更新頻率與畫質</span><input type="checkbox" id="lowPower" style="width:20px;height:20px;accent-color:var(--accent-fill)"></label>
+    <p class="small muted" style="margin:10px 0 0">手機預設開啟：地圖 30 fps、解析度最多 2 倍、面板不做背景模糊、戰情室不自動旋轉。騎車時只要用 Traccar Client 回報位置，網頁不必一直開著。</p>
+  </section>
+
+  <section class="card">
     <h2>Traccar Client</h2>
     <div class="row"><span>伺服器網址</span><code id="trUrl"></code></div>
     <div class="row" style="margin-top:8px"><span>裝置 ID</span><code id="trId">…</code></div>
@@ -62,7 +78,12 @@
   </section>
 </main>
 <script type="module">
-import { api, $, esc, avatar } from '/assets/common.js';
+import { api, $, esc, avatar, LOW_POWER } from '/assets/common.js';
+import { resumeMs } from '/assets/gestures.js';
+$('#lowPower').checked = LOW_POWER;
+$('#resume').value = String(resumeMs() / 1000);
+$('#resume').onchange = (e) => { try { localStorage.setItem('qiji:resume', e.target.value); } catch { /* 私密模式 */ } };
+$('#lowPower').onchange = (e) => { try { localStorage.setItem('qiji:lowpower', e.target.checked ? '1' : '0'); } catch { /* 私密模式 */ } document.documentElement.classList.toggle('low-power', e.target.checked); };
 const me = await api('/api/me');
 const { colors } = await api('/api/me/palette');
 let color = me.color;

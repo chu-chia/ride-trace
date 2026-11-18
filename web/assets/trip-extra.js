@@ -88,7 +88,7 @@ function renderWpPanel() {
       <button class="qx-x" data-del="${w.id}" title="刪除">刪除</button></div>`;
   }).join('');
   pop.innerHTML = `
-    <div class="qx-head"><b>集合點與休息點</b><span class="small muted">大家都能改；進入半徑就通知全隊</span></div>
+    <div class="qx-head"><b>集合點與休息點</b></div>
     <div class="qx-list">${rows || '<div class="small muted" style="padding:6px 2px">還沒有集合點</div>'}</div>
     ${X.pick?.mode === 'wp' && X.pick.lngLat ? `
       <form class="qx-form" id="wpForm">
@@ -132,7 +132,7 @@ pop.addEventListener('click', async (e) => {
   const row = e.target.closest('[data-wp]');
   if (row) {
     const w = X.wps.find((x) => x.id === row.dataset.wp);
-    if (w) { S.lastInteract = Date.now(); M.unfollow(); map.easeTo({ center: [w.lon, w.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }); }
+    if (w) { S.goAway(); map.easeTo({ center: [w.lon, w.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }); }
   }
 });
 
@@ -140,7 +140,7 @@ map.on('click', (e) => {
   if (!X.pick) return;
   X.pick.lngLat = e.lngLat;
   X.open = X.pick.mode;
-  S.lastInteract = Date.now(); M.unfollow();
+  S.goAway();
   X.pickMarker?.remove();
   const el = document.createElement('div'); el.className = 'qx-pin pick'; el.innerHTML = '<b>＋</b>';
   X.pickMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(e.lngLat).addTo(map);
@@ -228,7 +228,7 @@ function renderCamPanel() {
 pop.addEventListener('click', (e) => {
   const row = e.target.closest('[data-cam]');
   if (!row) return;
-  S.lastInteract = Date.now(); M.unfollow();
+  S.goAway();
   map.easeTo({ center: [+row.dataset.lon, +row.dataset.lat], zoom: 15.5, duration: 900 });
 });
 
@@ -273,9 +273,9 @@ function renderChatList(stick = true) {
 }
 function renderMsgPanel() {
   pop.innerHTML = `
-    <div class="qx-head"><b>快速訊息</b><span class="small muted">一鍵送出，隊友會跳出提醒</span></div>
+    <div class="qx-head"><b>快速訊息</b></div>
     <div class="qx-presets">${PRESETS.map((t) => `<button class="btn" data-say="${esc(t)}">${esc(t)}</button>`).join('')}</div>
-    <div class="qx-head qc-head"><b>聊天</b><span class="small muted">全隊都看得到，也會記在回放裡</span></div>
+    <div class="qx-head qc-head"><b>聊天</b></div>
     <div class="qc-list" id="qcList"><div class="small muted qc-empty">載入中…</div></div>
     <form class="qx-inline" id="chatForm"><input class="input" id="chatInput" name="t" maxlength="200" placeholder="說點什麼…" autocomplete="off" enterkeyhint="send"><button class="btn primary" style="flex:none">送出</button></form>`;
   const input = $('#chatInput');
@@ -340,7 +340,7 @@ async function loadMarks() { try { X.marks = await api(`/api/trips/${tid}/marks`
 function renderMarkPanel() {
   const canDel = (m) => m.by === S.me || S.trip?.is_owner;
   pop.innerHTML = `
-    <div class="qx-head"><b>地圖標註</b><span class="small muted">坑洞、落石會在隊友騎到前方 300 m 時提醒</span></div>
+    <div class="qx-head"><b>地圖標註</b></div>
     <div class="qx-list">${X.marks.map((m) => `<div class="qx-row" data-lon="${m.lon}" data-lat="${m.lat}" data-goto="1">
       <span class="qx-mark static" data-kind="${m.kind}"><b>${MARK[m.kind]?.[1] || '註'}</b></span>
       <div class="grow"><div class="t1">${esc(m.label)}${m.note ? '：' + esc(m.note) : ''}</div><div class="t2">${esc(nameOf(m.by))}</div></div>
@@ -378,7 +378,7 @@ pop.addEventListener('click', async (e) => {
     return;
   }
   const g = e.target.closest('[data-goto]');
-  if (g) { S.lastInteract = Date.now(); M.unfollow(); map.easeTo({ center: [+g.dataset.lon, +g.dataset.lat], zoom: Math.max(map.getZoom(), 15.5), duration: 900 }); }
+  if (g) { S.goAway(); map.easeTo({ center: [+g.dataset.lon, +g.dataset.lat], zoom: Math.max(map.getZoom(), 15.5), duration: 900 }); }
 });
 
 /* ---------- SOS：長按 1.5 秒發出，橫幅一直顯示到本人解除 ---------- */
@@ -386,7 +386,7 @@ const sosBtn = $('#qxSos');
 const sosOpen = $('#sosOpen');
 const sosDialog = $('#sosDialog');
 const closeSosDialog = () => { sosDialog.hidden = true; sosOpen.focus(); };
-sosOpen.addEventListener('click', () => { sosDialog.hidden = false; $('#sosHelp').textContent = mineSos() ? '按下方按鈕兩次，解除你的求救狀態。' : '長按下方按鈕 1.5 秒，通知全隊並標出你的位置。'; sosBtn.focus(); });
+sosOpen.addEventListener('click', () => { sosDialog.hidden = false; sosBtn.focus(); });
 $('#sosClose').addEventListener('click', closeSosDialog);
 sosDialog.addEventListener('click', (e) => { if (e.target === sosDialog) closeSosDialog(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sosDialog.hidden) closeSosDialog(); });
@@ -397,7 +397,7 @@ document.body.append(banner);
 X.sos = [];
 let hold = null;
 function mineSos() { return X.sos.find((e) => e.uid === S.me); }
-function syncSosBtn() { sosBtn.classList.toggle('active', !!mineSos()); sosBtn.querySelector('span').textContent = mineSos() ? '解除求救' : '長按發出 SOS'; sosOpen.textContent = mineSos() ? '解除' : 'SOS'; sosOpen.setAttribute('aria-label', mineSos() ? '開啟解除求救選單' : '開啟緊急求救選單'); }
+function syncSosBtn() { sosBtn.classList.toggle('active', !!mineSos()); sosBtn.querySelector('span').textContent = mineSos() ? '解除求救' : '按住 1.5 秒發出 SOS'; sosOpen.textContent = mineSos() ? '解除' : 'SOS'; sosOpen.setAttribute('aria-label', mineSos() ? '開啟解除求救選單' : '開啟緊急求救選單'); }
 function beginSosHold() {
   if (mineSos()) return;
   if (hold) return;
@@ -440,7 +440,7 @@ banner.addEventListener('click', (e) => {
   const b = e.target.closest('[data-sosgo]');
   if (!b) return;
   const [lon, lat] = b.dataset.sosgo.split(',').map(Number);
-  S.lastInteract = Date.now(); M.unfollow();
+  S.goAway();
   map.easeTo({ center: [lon, lat], zoom: 16, duration: 900 });
 });
 async function loadSos() { try { X.sos = await api(`/api/trips/${tid}/sos`); renderSos(); } catch { /* 略過 */ } }
@@ -473,7 +473,7 @@ async function loadRoute() {
 // 還沒有人有位置時，鏡頭先對準路線（沒有路線就對準全台），不要停在預設位置
 let idleFitted = false;
 function idleFit() {
-  if (idleFitted || [...S.members.values()].some((m) => m.pos) || Date.now() - (S.lastInteract || 0) < 12000) return;
+  if (idleFitted || [...S.members.values()].some((m) => m.pos) || Date.now() - (S.lastInteract || 0) < 10000) return;
   idleFitted = true;
   S.pad = S.refreshPad ? (S.refreshPad(), S.pad) : S.pad;
   const c = X.route?.coords;
@@ -541,7 +541,7 @@ function renderTurn() {
 function renderRoutePanel() {
   const owner = S.trip?.is_owner;
   if (!X.route) {
-    pop.innerHTML = `<div class="qx-head"><b>路線</b><span class="small muted">這個行程還沒有路線（臨時開團）：落隊用直線距離判斷</span></div>
+    pop.innerHTML = `<div class="qx-head"><b>路線</b><span class="small muted">臨時開團，沒有規劃路線</span></div>
       ${owner ? `<a class="btn primary block" href="/plan?trip=${tid}">規劃路線</a>` : '<div class="small muted">建立者可以在「規劃路線」設定</div>'}`;
     return;
   }
