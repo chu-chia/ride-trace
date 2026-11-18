@@ -2,7 +2,7 @@
 // 「迷霧模式」是選配：地圖蓋一層霧，去過的格子把霧擦掉。
 import { api, $, $$ } from '/assets/common.js';
 import { swr } from '/assets/swr.js';
-import { createMap, addCompass } from '/assets/mapbase.js';
+import { createMap, addCompass, labelLayerId } from '/assets/mapbase.js';
 import { initRecords } from '/assets/fp-records.js';
 
 const TAIWAN = [[119.3, 21.85], [122.1, 25.35]];
@@ -120,11 +120,7 @@ M.onStyle((style) => {
   const layout = { 'line-join': 'round', 'line-cap': 'round' };
   // 軌跡畫在地名、路名底下，字才不會被黃線蓋住
   // 找「所有道路、橋、建築之後」的第一個文字層（Liberty 的單行道箭頭在橋之前，不能用它）
-  const ls = map.getStyle().layers;
-  // 自己加的圖層（鄉鎮、熱力圖、建築）不算底圖，不然找到的位置會落在最上面，軌跡就蓋住地標了
-  const ours = (id) => /^(fp-|towns-|heat|qiji-)/.test(id) || id === 'hillshade';
-  const lastShape = ls.findLastIndex((l) => l.type !== 'symbol' && !ours(l.id));
-  const below = ls.slice(lastShape + 1).find((l) => l.type === 'symbol')?.id;
+  const below = labelLayerId(map);
   if (!map.getLayer('fp-all')) map.addLayer({ id: 'fp-all', type: 'line', source: 'fp-all', layout, paint: { 'line-color': style === 'light' ? '#6e6e73' : '#c9d1f5', 'line-opacity': 0.28, 'line-width': width(0.7) } }, below);
   if (!map.getLayer('fp-glow')) map.addLayer({ id: 'fp-glow', type: 'line', source: 'fp-lines', layout, paint: { 'line-color': c, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.22, 13, 0.1], 'line-width': width(2.6), 'line-blur': ['interpolate', ['linear'], ['zoom'], 6, 2, 14, 4] } }, below);
   if (!map.getLayer('fp-lines')) map.addLayer({ id: 'fp-lines', type: 'line', source: 'fp-lines', layout, paint: { 'line-color': c, 'line-opacity': 0.92, 'line-width': width(1) } }, below);

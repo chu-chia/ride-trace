@@ -119,3 +119,18 @@ a.li{color:inherit}
 .maplibregl-popup-anchor-top .maplibregl-popup-tip{border-bottom-color:var(--surface)}
 .maplibregl-popup-anchor-left .maplibregl-popup-tip{border-right-color:var(--surface)}
 .maplibregl-popup-anchor-right .maplibregl-popup-tip{border-left-color:var(--surface)}
+
+/* 隊員狀態表（common.js teamTable；回放、行程頁、戰情室共用） */
+.team-rows{display:flex;flex-direction:column}
+.team-row{width:100%;border:0;background:none;color:inherit;font:inherit;cursor:pointer;display:grid;grid-template-columns:minmax(0,2.1fr) repeat(4,minmax(0,1fr));gap:4px;align-items:center;padding:9px 6px;border-top:1px solid var(--line);font-size:12px;text-align:right;border-radius:10px}
+.team-row:first-child{border-top:0}
+.team-row:hover{background:var(--surface-2)}
+.team-row.on{background:color-mix(in srgb,var(--accent) 16%,transparent);box-shadow:inset 3px 0 0 var(--accent)}
+.team-row .team-name{display:flex;align-items:center;gap:6px;min-width:0;text-align:left}
+.team-name i{width:9px;height:9px;border-radius:50%;flex:none}
+.team-nm{display:flex;flex-direction:column;min-width:0}
+.team-name b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.team-row .num{font-size:14px;font-weight:600}
+.team-row small{display:block;font-size:9.5px;color:var(--muted);white-space:nowrap;font-weight:400}
+.team-row .team-sub{font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.team-sub.ok{color:var(--ok-ink,var(--ok))}.team-sub.warn{color:var(--warn-ink,var(--warn))}.team-sub.crit{color:var(--crit-ink,var(--crit));font-weight:700}.team-sub.info{color:var(--muted)}

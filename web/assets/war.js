@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago } from '/assets/common.js';
+import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
 
@@ -12,7 +12,7 @@ window.qijiMap = map;
 map.setPitch(60);
 const S = { trip: null, members: new Map(), events: [], route: null, prog: {}, gaps: {}, flags: {}, sos: new Map(), waypoints: [], weather: [], traffic: [], profile: null, styleReady: false };
 window.qijiWar = S;
-const LAYOUT_KEY = `qiji:war:layout:v4:${tid}`;
+const LAYOUT_KEY = `qiji:war:layout:v5:${tid}`;  // 改了預設版面就升版號，舊的自訂版面不會蓋掉新預設
 const FEED_FILTER_KEY = 'qiji:war:feed-filter';
 const panels = [...document.querySelectorAll('.war-panel')];
 const stage = $('#stage');
@@ -172,7 +172,7 @@ function pauseFollow(e) {
   M.unfollow();
 }
 for (const type of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart']) map.on(type, pauseFollow);
-$('#centerTeam').addEventListener('click', () => { autoFollow = true; M.unfollow(); if (S.route && !S.profile) buildProfile(); });
+$('#centerTeam').addEventListener('click', () => { autoFollow = true; S.focus = null; renderCards(); M.unfollow(); if (S.route && !S.profile) buildProfile(); });
 function frame(now) {
   const dt = Math.min(0.2, (now - lastT) / 1000);
   lastT = now;
@@ -197,7 +197,9 @@ function frame(now) {
   const pts = [...S.members.values()].filter((m) => m.pos && m.u.active !== false && m.state.status !== 'lost').map((m) => m.pos);
   if (S.styleReady && pts.length && !S.profiling && autoFollow) {
     map.setBearing((map.getBearing() + dt * 2) % 360);
-    if (pts.length === 1) M.follow(pts[0], { padding: pad() });
+    const fm = S.focus && S.members.get(S.focus);
+    if (fm?.pos) M.follow(fm.pos, { padding: pad() });  // 點了隊員表：鏡頭跟著他
+    else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
     else M.followGroup(pts, { padding: pad(), maxZoom: 14 });
   }
   if (now - lastTrail > 500) { lastTrail = now; map.getSource('trails')?.setData(trailsGeo()); }
@@ -239,30 +241,27 @@ function recentSpeed(m) {
   return +m.u.stats?.avg_kmh || null;
 }
 function renderCards() {
-  const expanded = new Set([...$('#cards').querySelectorAll('.cd[open]')].map((el) => el.dataset.uid));
-  const focusedUid = document.activeElement?.closest?.('.cd')?.dataset.uid;
   const list = [...S.members.values()].sort((a, b) => (+S.prog[b.u.uid]?.km || 0) - (+S.prog[a.u.uid]?.km || 0));
   const online = list.filter((m) => !['已結束', '失聯', '尚未回報'].includes(status(m)[0])).length;
   $('#teamCount').textContent = `${list.length} 位`;
   $('#teamOnline').textContent = `${online}/${list.length} 在線`;
   $('#sheetBrief').textContent = `${online}/${list.length} 在線 · ${S.route ? '路線 ' + fmtKm(S.route.cum_km.at(-1)) : '尚無路線'}`;
-  $('#cards').innerHTML = list.map((m) => {
+  // 和回放頁同一種隊員表：點一下鏡頭跟著那個人，再點一次回到全隊
+  teamTable($('#cards'), list.map((m) => {
     const s = m.state, [st, stClass] = status(m), p = S.prog[m.u.uid], flag = S.flags[m.u.uid];
-    const alert = S.sos.has(m.u.uid) ? ['SOS', 'crit'] : flag === 'behind' && st !== '已結束' ? ['落隊', 'warn'] : flag === 'ahead' && st !== '已結束' ? ['超前', 'warn'] : [st, stClass];
-    const speed = ['失聯', '已結束', '尚未回報'].includes(st) ? '–' : Math.round((+s.speed || 0) * 3.6);
+    const alert = S.sos.has(m.u.uid) ? ['SOS 求救', 'crit'] : flag === 'behind' && st !== '已結束' ? ['落隊', 'warn'] : flag === 'ahead' && st !== '已結束' ? ['超前', 'warn'] : [st, stClass];
+    const off = ['失聯', '已結束', '尚未回報'].includes(st);
     const stop = nextStop(p?.km), remaining = stop ? Math.max(0, stop.km - +p.km) : null;
     const avg = recentSpeed(m), eta = avg && remaining != null && Number.isFinite(remaining) ? clock(Date.now() + remaining / avg * 3600000) : null;
-    const nextBrief = eta ? `距 ${esc(stop.name)} ${fmtKm(remaining)} · 預計 ${eta}` : '距終點 –';
-    const seen = +(s.seen || s.ts);
-    return `<details class="cd${S.sos.has(m.u.uid) ? ' sos' : ''}" data-uid="${esc(m.u.uid)}"${expanded.has(String(m.u.uid)) ? ' open' : ''}>
-      <summary>${avatar(m.u)}<span class="rider-summary"><b class="rider-name">${esc(m.u.nickname)}</b><small class="rider-next">${nextBrief}</small></span><span class="speed num">${speed} <small>km/h</small></span><span class="chip ${alert[1]}">${alert[0]}</span></summary>
-      <div class="kv"><span>海拔 <em class="num">${numeric(s.alt) ? Math.round(+s.alt) + ' m' : '–'}</em></span><span>已騎距離 <em class="num">${fmtKm(+m.u.stats?.km || 0)}</em></span>
-        <span>最後回報 <em class="num">${seen ? ago(seen) : '–'}</em></span><span>全隊位置 <em>${flag === 'behind' ? '落隊' : flag === 'ahead' ? '超前' : '隊伍內'}</em></span>
-        ${numeric(s.batt) ? `<span>電量 <em class="num">${Math.round(+s.batt)}%</em></span>` : ''}
-        ${stop ? `<div class="next-stop"><b>下一站 ${esc(stop.name)}</b><small>${fmtKm(remaining)} · ${eta ? `預計 ${eta} 抵達` : '速度不足，暫無 ETA'}</small></div>` : ''}</div>
-    </details>`;
-  }).join('') || '<p class="empty">還沒有隊友</p>';
-  if (focusedUid) [...$('#cards').querySelectorAll('.cd')].find((el) => el.dataset.uid === focusedUid)?.querySelector('summary')?.focus();
+    const left = S.route && numeric(p?.km) ? Math.max(0, S.route.cum_km.at(-1) - +p.km) : null;
+    return {
+      uid: m.u.uid, name: m.u.nickname, color: m.u.color, on: S.focus === m.u.uid,
+      sub: [alert[0], eta && stop ? `${stop.name === '終點' ? '' : stop.name + ' '}預計 ${eta}` : ''].filter(Boolean).join(' · '), subCls: alert[1],
+      cols: [[off ? '–' : Math.round((+s.speed || 0) * 3.6), 'km/h'], [numeric(s.alt) ? Math.round(+s.alt) : '–', 'm 海拔'],
+             [(+m.u.stats?.km || 0).toFixed(1), 'km 已騎'], [left == null ? '–' : left.toFixed(1), 'km 距終點']],
+    };
+  }), (uid) => { S.focus = S.focus === uid ? null : uid; autoFollow = true; M.unfollow(); renderCards(); });
+  if (!list.length) $('#cards').innerHTML = '<p class="empty">還沒有隊友</p>';
 }
 
 /* ---------- 事件流 ---------- */

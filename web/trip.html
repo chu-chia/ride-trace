@@ -62,7 +62,10 @@
   .teamMain{display:flex;align-items:center;gap:10px;min-height:56px}.teamMain .grow{min-width:0}.teamMain .t2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .li .right{text-align:right;font-size:12px;white-space:nowrap}
   #lagSet select{font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:5px 6px}
-  .li .kick{border:0;background:none;color:var(--crit-ink);font-size:13px;cursor:pointer;padding:6px 10px;min-height:32px;margin-right:-10px;border-radius:8px}
+  #teamAdmin{margin-top:10px}
+  #teamAdmin summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:6px 4px}
+  #teamAdmin .row{display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-top:1px solid var(--line);font-size:13px}
+  .li .kick,#teamAdmin .kick{border:0;background:none;color:var(--crit-ink);font-size:13px;cursor:pointer;padding:6px 10px;min-height:32px;margin-right:-10px;border-radius:8px}
   .ev{display:grid;grid-template-columns:42px 9px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)}
   .ev time{font-size:11.5px;color:var(--muted)} .ev i{width:8px;height:8px;border-radius:50%;background:var(--c);display:block}
   .code{font-size:34px;font-weight:700;letter-spacing:.14em;text-align:center}
@@ -128,7 +131,7 @@
   <div class="rideSummary"><div><small>車隊</small><b id="quickTeam">載入中</b></div><div><small>路線</small><b id="quickRoute">載入中</b></div></div>
   <div class="banner" id="banner" hidden></div>
   <nav class="seg" id="tabs" aria-label="行程功能"><button class="on" data-t="team">隊友</button><button data-t="route">路線</button><button data-t="msg">訊息</button><button data-t="more">更多</button></nav>
-  <div class="body" data-b="team"><p class="tab-desc">查看隊友位置、速度與騎乘狀態。</p><div class="list" id="team"></div></div>
+  <div class="body" data-b="team"><p class="tab-desc">點一下隊友，鏡頭就跟著他；再點一次回到全隊。</p><div id="team"></div><div id="teamAdmin"></div></div>
   <div class="body" data-b="route" hidden><p class="tab-desc">依順序查看起點、途經點與終點；點「查看」可在地圖定位。</p><div class="qx-pop" id="routeContent"></div></div>
   <div class="body" data-b="wp" hidden><button class="subBack" data-back-more>‹ 返回更多</button><p class="tab-desc">設定大家要會合的地點，抵達時會通知全隊。</p><div class="qx-pop" id="wpContent"></div></div>
   <div class="body" data-b="msg" hidden><p class="tab-desc">傳快速訊息或聊天，讓全隊即時收到。</p><div class="qx-pop" id="msgContent"></div></div>

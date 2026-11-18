@@ -154,7 +154,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     if (window.qijiMapDown) throw new Error(window.qijiMapDown);
     map = new maplibregl.Map({
       container, style: STYLES[cur].url, center, zoom, interactive,
-      maxPitch: 80, attributionControl: { compact: true },
+      maxPitch: 80, attributionControl: false,  // 來源標示統一放在「關於網頁」（頭像選單），地圖右下角不放 ⓘ
       dragRotate: interactive3d, pitchWithRotate: interactive3d, touchPitch: interactive3d,
     });
   } catch (e) {
@@ -385,4 +385,13 @@ export function addCompass(M, tools) {
   b.onclick = () => M.resetNorth();
   tools.append(b);
   return b;
+}
+
+// 自己的圖層要插在哪裡：所有底圖形狀（道路、橋、高架、建築）之後的第一個文字層之前。
+// 不能直接用「第一個文字層」：Liberty 有些文字層（河流名、單行道箭頭）排在道路之前，插在那裡會被道路和高架蓋住。
+export function labelLayerId(map) {
+  const ls = map.getStyle().layers;
+  const ours = (id) => /^(fp-|towns-|heat|qiji-|rp-|route|trails)/.test(id) || id === 'hillshade';
+  const lastShape = ls.findLastIndex((l) => l.type !== 'symbol' && !ours(l.id));
+  return ls.slice(lastShape + 1).find((l) => l.type === 'symbol')?.id;
 }

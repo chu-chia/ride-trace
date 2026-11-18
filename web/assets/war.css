@@ -6,7 +6,8 @@ html,body{width:100%;height:100%;overflow:hidden}
 .war-panel h2{font-size:15px;line-height:1.2;margin:3px 0 0;font-weight:700}
 .war-panel .eyebrow{font-size:10px;color:var(--accent);letter-spacing:.12em}
 .war-panel .panel-body{min-height:0;overflow:auto}
-.head{left:18px;top:18px;width:410px;height:130px}
+/* 預設版面（使用者 11-18 在戰情室自己排的，依視窗比例）：左上標題、左側騎士、右上天氣路況、右側事件、左下全隊進度 */
+.head{left:.8%;top:1.6%;width:23%;height:17.9%;min-height:120px}
 .head .panel-top{padding-right:48px;align-items:flex-start;flex:1}
 .head-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
 .head-copy b{font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -16,7 +17,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .war-btn{min-height:32px;padding:5px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--fg);font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 .war-btn:hover{background:color-mix(in srgb,var(--accent) 18%,var(--surface-2))}
 .war-btn[aria-pressed="true"]{background:var(--accent-fill);color:#fff}
-.cards{left:18px;top:160px;width:350px;height:calc(100% - 303px)}
+.cards{left:.8%;top:21.1%;width:23%;height:55.2%}
 .card-list{padding:3px 11px 12px;display:flex;flex-direction:column;gap:7px;overflow-y:auto!important}
 .panel-note{font-size:12px;color:var(--muted);white-space:nowrap}
 .cd{border:1px solid var(--line);border-radius:13px;background:var(--surface);overflow:hidden;flex:none}
@@ -35,7 +36,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .cd .next-stop{grid-column:1/-1;padding:10px;background:var(--surface-2);border-radius:10px}
 .cd .next-stop b{display:block;font-size:12px;color:var(--fg)}
 .cd .next-stop small{display:block;font-size:11px;color:var(--muted)}
-.conditions{right:18px;top:18px;width:325px;height:260px}
+.conditions{left:77%;top:1.6%;width:21.5%;height:35.2%}
 .conditions-body{padding:0 14px 14px;overflow:auto!important}
 .condition-group{margin-top:9px;border-top:1px solid var(--line);padding-top:9px}
 .condition-group:first-child{margin-top:0;border:0;padding-top:0}
@@ -43,14 +44,14 @@ html,body{width:100%;height:100%;overflow:hidden}
 .condition-row{display:flex;align-items:flex-start;gap:9px;padding:5px 0;font-size:12px;line-height:1.35}
 .condition-row b{font-weight:650}.condition-row small{display:block;color:var(--muted)}
 .condition-mark{font-weight:750;min-width:39px;color:var(--accent)}
-.feed{right:18px;top:290px;width:325px;height:calc(100% - 433px)}
+.feed{left:77.3%;top:39.2%;width:21.5%;height:41.4%}
 .feed-filters{display:flex;gap:3px;margin:0 14px 8px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);flex:none;overflow:visible!important}
 .feed-filters button{flex:1;min-width:0;padding:6px 2px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:11px;font-weight:650;cursor:pointer}
 .feed-filters button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 4px #0002}
 .feed-list{padding:0 14px 14px;overflow:auto!important}
 .ev{display:grid;grid-template-columns:40px 7px 1fr;gap:8px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.4}
 .ev time{font-size:11px;color:var(--muted)}.ev i{width:7px;height:7px;border-radius:50%;background:var(--c)}.ev.sos span{color:var(--crit-ink);font-weight:700}
-.prog{left:18px;bottom:18px;width:calc(100% - 36px);height:150px}
+.prog{left:.8%;top:77.9%;width:55.6%;height:16.2%;min-height:120px}
 /* 寬螢幕：剖面標題放左邊、圖表佔右側全高，面板矮也看得到起伏 */
 @media(min-width:1101px){.prog:not(.small){flex-direction:row}.prog:not(.small) .panel-top{width:270px;align-items:flex-start}.prog:not(.small) .progress-body{padding:10px 52px 10px 0}.prog:not(.small) .profile-wrap{margin:14px 0 0}}
 .progress-body{position:relative;flex:1;display:flex;flex-direction:column;padding:2px 16px 12px;overflow:hidden!important}
@@ -97,3 +98,6 @@ html,body{width:100%;height:100%;overflow:hidden}
   body:has(.mobile-sheet:not(.small)) .maplibregl-ctrl-bottom-left,body:has(.mobile-sheet:not(.small)) .maplibregl-ctrl-bottom-right{bottom:76dvh}
 }
 @media(prefers-reduced-motion:reduce){.pdot,.mobile-sheet{transition:none}}
+.card-list.team-rows{gap:0;padding:2px 8px 10px}
+/* 3D 旋轉提示：放在全隊進度面板右邊的空位（預設版面下方中間被進度面板佔住） */
+@media(min-width:1101px){.map-hint{left:calc(56.4% + 14px);transform:none;bottom:12px}}

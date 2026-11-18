@@ -1,5 +1,5 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, $, $$, dock, esc, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
+import { api, $, $$, dock, esc, teamTable, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 
 // 寬螢幕：標題列（返回、行程名）併進右側面板頂端；手機維持浮在左上（先做，避免資料載完才跳版面）
@@ -167,7 +167,6 @@ press($('#bFollow'), true);
 /* ---------- 面板 ---------- */
 // 全隊狀態的每一列就是選人：點了鏡頭跟拍那個人，摘要／曲線也換成他
 function renderRiders() { renderTeam(); }
-$('#teamRows').onclick = (e) => { const b = e.target.closest('[data-uid]'); if (b) setFollow(b.dataset.uid); };
 
 function renderSummary() {
   const m = riders.find((x) => x.uid === R.sel) || riders[0], s = m.summary;
@@ -189,22 +188,17 @@ function renderTeam() {
   const active = states.filter(({ st }) => !st.before);
   const lead = active.length ? Math.max(...active.map(({ st }) => st.km)) : null;
   $('#teamBrief').textContent = `${riders.length} 人 · ${active.length} 人已出發`;
-  // 列只建一次，之後只改數字：播放中每 0.25 秒整個重畫的話，點下去的按鈕會被換掉而點不到
-  if (!$('#teamRows').children.length) {
-    $('#teamRows').innerHTML = riders.map((m) => `<button type="button" class="team-row" data-uid="${m.uid}" aria-label="跟拍 ${esc(m.nickname)}"><span class="team-name"><i style="background:${esc(m.color)}"></i><b>${esc(m.nickname)}</b></span><span class="num" data-k="spd"></span><span class="num" data-k="alt"></span><span class="num" data-k="km"></span><span class="num" data-k="gap"></span></button>`).join('');
-  }
   const focus = R.follow !== 'all' && R.follow !== 'off' ? R.follow : R.sel;
-  for (const { m, st } of states) {
-    const row = $(`#teamRows [data-uid="${m.uid}"]`);
+  teamTable($('#teamRows'), states.map(({ m, st }) => {
     const started = !st.before;
-    const set = (k, v, unit) => { row.querySelector(`[data-k="${k}"]`).innerHTML = `${v}<small>${unit}</small>`; };
-    set('spd', started && st.kmh != null ? Math.round(st.kmh) : '–', 'km/h');
-    set('alt', started && st.alt != null ? Math.round(st.alt) : '–', 'm 海拔');
-    set('km', started ? st.km.toFixed(1) : '–', 'km 已騎');
-    set('gap', started && lead != null ? Math.max(0, lead - st.km).toFixed(1) : '–', 'km 距領先');
-    row.classList.toggle('on', m.uid === focus);
-    row.setAttribute('aria-pressed', m.uid === focus);
-  }
+    return {
+      uid: m.uid, name: m.nickname, color: m.color, on: m.uid === focus,
+      sub: st.before ? '還沒出發' : st.after ? '已抵達' : (st.kmh ?? 0) < 5 ? '停車' : '騎乘中',
+      subCls: st.before || st.after ? 'info' : (st.kmh ?? 0) < 5 ? 'info' : 'ok',
+      cols: [[started && st.kmh != null ? Math.round(st.kmh) : '–', 'km/h'], [started && st.alt != null ? Math.round(st.alt) : '–', 'm 海拔'],
+             [started ? st.km.toFixed(1) : '–', 'km 已騎'], [started && lead != null ? Math.max(0, lead - st.km).toFixed(1) : '–', 'km 距領先']],
+    };
+  }), (uid) => setFollow(uid));
 }
 
 const nameOf = (uid) => data.members.find((m) => m.uid === uid)?.nickname || '';

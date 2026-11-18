@@ -68,3 +68,28 @@ export function toast(text, { icon = '騎', color = '#d9500f', sub = '' } = {}) 
   while (z.children.length > 3) z.lastChild.remove();
   setTimeout(() => el.remove(), 5000);
 }
+
+// 隊員狀態表（回放、行程頁、戰情室共用的樣式）：每列＝顏色點＋名字（下面一行狀態）＋四欄數字，點一下選那個人。
+// 列只在人員或順序改變時重建，平常只更新文字：每秒重畫整個 innerHTML 的話，點下去的按鈕會被換掉而點不到。
+// rows：[{ uid, name, color, sub, subCls, cols: [[值, 單位] ×4], on }]
+export function teamTable(el, rows, onPick) {
+  const key = rows.map((r) => r.uid).join(',');
+  if (el.dataset.key !== key) {
+    el.dataset.key = key;
+    el.classList.add('team-rows');
+    el.innerHTML = rows.map((r) => `<button type="button" class="team-row" data-uid="${esc(r.uid)}"><span class="team-name"><i style="background:${esc(r.color)}"></i><span class="team-nm"><b>${esc(r.name)}</b><small class="team-sub"></small></span></span>${'<span class="num"></span>'.repeat(4)}</button>`).join('');
+  }
+  if (!el.dataset.bound) { el.dataset.bound = '1'; el.addEventListener('click', (e) => { const b = e.target.closest('.team-row'); if (b) el.__pick?.(b.dataset.uid); }); }
+  el.__pick = onPick;
+  for (const r of rows) {
+    const row = [...el.children].find((x) => x.dataset.uid === String(r.uid));
+    if (!row) continue;
+    const sub = row.querySelector('.team-sub');
+    sub.textContent = r.sub || '';
+    sub.className = `team-sub ${r.subCls || ''}`;
+    row.querySelectorAll('.num').forEach((n, i) => { const [v, u] = r.cols[i] || ['–', '']; n.innerHTML = `${esc(v)}<small>${esc(u)}</small>`; });
+    row.classList.toggle('on', !!r.on);
+    row.setAttribute('aria-pressed', String(!!r.on));
+    row.setAttribute('aria-label', `${r.name}，${r.sub || ''}，點一下${r.on ? '取消跟隨' : '鏡頭跟著他'}`);
+  }
+}

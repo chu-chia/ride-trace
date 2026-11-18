@@ -1,4 +1,4 @@
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
 import { gpsQueue } from '/assets/gpsqueue.js';
@@ -168,6 +168,7 @@ function setFollow(who) {
   S.followZoomed = false;
   syncTools();
   camera(true);
+  if (S.trip) renderTeam();  // 隊員表的選取狀態跟著換
 }
 function camera(force) {
   if (!force && Date.now() - S.lastInteract < 12000) return;
@@ -284,7 +285,6 @@ function renderHeader() {
   $('#endBtn').hidden = !(t.status === 'live' && meActive);
 }
 
-let expandedTeamUid = null;
 let pendingKickUid = null;
 let kickTimer = null;
 function renderTeam() {
@@ -298,50 +298,35 @@ function renderTeam() {
   $('#cSpeed').textContent = $('#sSpeed').textContent;
   const lagging = list.filter((m) => S.trip.flags?.[m.u.uid] === 'behind' && statusOf(m) !== 'done').length;
   $('#quickTeam').textContent = lagging ? `${online}/${list.length} 在線 · ${lagging} 人落隊` : online < list.length ? `${online}/${list.length} 在線 · ${list.length - online} 人未連線` : `${online}/${list.length} 全員在線`;
-  const focusedTeam = document.activeElement?.dataset.teamMore;
-  const focusedKick = document.activeElement?.dataset.kick;
-  const focusedMap = document.activeElement?.dataset.teamFocus;
-  $('#team').innerHTML = list.map((m) => {
+  // 和回放頁同一種隊員表：名字＋狀態、速度、海拔、已騎、距離我；點一下鏡頭跟著他
+  teamTable($('#team'), list.map((m) => {
     const st = statusOf(m), [label, cls] = STATUS[st], s = m.state;
-    const isMe = m.u.uid === S.me;
-    const km = S.nearby[m.u.uid];
-    const bits = [];
-    if (isMe) bits.push('我的位置');
-    else if (km != null) bits.push(`距離我 ${km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'}`);
+    const isMe = m.u.uid === S.me, km = S.nearby[m.u.uid];
     const gap = S.trip.gaps?.[m.u.uid], flag = S.trip.flags?.[m.u.uid];
-    const gapText = gap != null && Math.abs(gap) >= 0.3 && st !== 'done' ? `${gap < 0 ? '落後' : '超前'}中心 ${fmtKm(gap)}` : '';
-    const k = m.u.stats;
-    if (k?.km > 0) bits.push(`騎了 ${k.km < 10 ? k.km.toFixed(1) : Math.round(k.km)} km`);
-    if (k?.max_kmh > 0) bits.push(`極速 ${Math.round(k.max_kmh)}`);
-    if (s.batt) bits.push(`電量 ${Math.round(+s.batt)}%`);
-    if (s.seen || s.ts) bits.push(ago(+s.seen || +s.ts));
-    const kick = S.trip.is_owner && !isMe ? `<button class="kick" data-kick="${m.u.uid}">${pendingKickUid === String(m.u.uid) ? '確定移出？' : '移出'}</button>` : '';
-    const speed = st === 'ride' || st === 'rest' || st === 'weak' ? `${Math.round((+s.speed || 0) * 3.6)} km/h` : '—';
-    const primaryInfo = gapText || bits[0] || (m.u.active ? '尚無位置' : '沒有在記錄');
-    const detail = [`速度 ${speed}`, ...bits, gapText].filter(Boolean).join(' · ');
-    const expanded = expandedTeamUid === String(m.u.uid);
-    return `<div class="li" data-uid="${m.u.uid}"><div class="teamMain">${avatar(m.u)}<div class="grow"><div class="t1">${esc(m.u.nickname)} <span class="chip ${cls}">${label}</span>${flag && st !== 'done' ? ` <span class="chip warn">${flag === 'behind' ? '落隊' : '超前'}</span>` : ''}</div><div class="t2">${esc(primaryInfo)}</div></div><button class="teamMore" data-team-more="${m.u.uid}" aria-label="${esc(m.u.nickname)}的詳細狀態" aria-expanded="${expanded}">${expanded ? '收起' : '查看'}</button></div>${expanded ? `<div class="teamDetails">${esc(detail)}${m.onMap ? `<button class="teamFocus" data-team-focus="${m.u.uid}">在地圖定位</button>` : ''}${kick}</div>` : ''}</div>`;
-  }).join('');
-  if (focusedTeam) $('#team [data-team-more="' + focusedTeam + '"]')?.focus();
-  if (focusedKick) $('#team [data-kick="' + focusedKick + '"]')?.focus();
-  if (focusedMap) $('#team [data-team-focus="' + focusedMap + '"]')?.focus();
+    const moving = st === 'ride' || st === 'rest' || st === 'weak';
+    const sub = [label, flag && st !== 'done' ? `${flag === 'behind' ? '落隊' : '超前'}${gap != null ? ' ' + fmtKm(gap) : ''}` : '',
+                 !moving && (s.seen || s.ts) ? ago(+s.seen || +s.ts) : ''].filter(Boolean).join(' · ');
+    return {
+      uid: m.u.uid, name: isMe ? `${m.u.nickname}（我）` : m.u.nickname, color: m.u.color, on: S.follow === m.u.uid,
+      sub, subCls: flag && st !== 'done' ? 'warn' : cls,
+      cols: [[moving ? Math.round((+s.speed || 0) * 3.6) : '–', 'km/h'], [s.alt != null && s.alt !== '' ? Math.round(+s.alt) : '–', 'm 海拔'],
+             [m.u.stats?.km > 0 ? (+m.u.stats.km).toFixed(1) : '0.0', 'km 已騎'],
+             [isMe ? '–' : km == null ? '–' : km < 1 ? Math.round(km * 1000) : km.toFixed(1), km != null && km < 1 && !isMe ? 'm 距離我' : 'km 距離我']],
+    };
+  }), (uid) => setFollow(S.follow === uid ? 'all' : uid));
+  // 建立者：隊員管理（移出）收在表格下面，不和點選跟拍混在一起
+  const admin = S.trip.is_owner ? list.filter((m) => m.u.uid !== S.me) : [];
+  const open = $('#teamAdmin details')?.open;
+  $('#teamAdmin').innerHTML = admin.length ? `<details${open ? ' open' : ''}><summary>管理隊員</summary>${admin.map((m) => `<div class="row"><span>${esc(m.u.nickname)}</span><button class="kick" data-kick="${m.u.uid}">${pendingKickUid === String(m.u.uid) ? '確定移出？' : '移出'}</button></div>`).join('')}</details>` : '';
 }
-$('#team').onclick = async (e) => {
+$('#teamAdmin').onclick = async (e) => {
   const k = e.target.closest('[data-kick]');
-  if (k) {
-    const uid = k.dataset.kick;
-    if (pendingKickUid !== uid) { pendingKickUid = uid; clearTimeout(kickTimer); renderTeam(); kickTimer = setTimeout(() => { pendingKickUid = null; renderTeam(); }, 3000); return; }
-    pendingKickUid = null; clearTimeout(kickTimer);
-    try { await api(`/api/trips/${tid}/kick`, { method: 'POST', body: { uid } }); }
-    catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
-    return;
-  }
-  const more = e.target.closest('[data-team-more]');
-  if (more) { const uid = more.dataset.teamMore; expandedTeamUid = expandedTeamUid === uid ? null : uid; renderTeam(); return; }
-  const focus = e.target.closest('[data-team-focus]');
-  if (focus) { const m = S.members.get(focus.dataset.teamFocus); if (m?.onMap) { S.follow = m.u.uid; syncTools(); camera(true); } return; }
-  const li = e.target.closest('.li');
-  if (li) { const m = S.members.get(li.dataset.uid); if (m?.onMap) { S.follow = m.u.uid; syncTools(); camera(true); } }
+  if (!k) return;
+  const uid = k.dataset.kick;
+  if (pendingKickUid !== uid) { pendingKickUid = uid; clearTimeout(kickTimer); renderTeam(); kickTimer = setTimeout(() => { pendingKickUid = null; renderTeam(); }, 3000); return; }
+  pendingKickUid = null; clearTimeout(kickTimer);
+  try { await api(`/api/trips/${tid}/kick`, { method: 'POST', body: { uid } }); }
+  catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
 };
 
 function renderEvents() {

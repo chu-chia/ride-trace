@@ -1,5 +1,6 @@
 // 我的紀錄分頁：共用足跡頁的地圖，切換圖層時不重建地圖。
 import { api, $, esc } from '/assets/common.js';
+import { labelLayerId } from '/assets/mapbase.js';
 
 export function initRecords(map, M, getTab, pad) {
   const D = { geo: null, towns: null, heat: null, stats: null, statsLoaded: false, heatLoaded: false };
@@ -35,7 +36,7 @@ export function initRecords(map, M, getTab, pad) {
   }
   function report(e) { $('#recordError').textContent = '讀取失敗：' + e.message; }
   M.onStyle(() => {
-    const first = map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
+    const first = labelLayerId(map);  // 道路、高架、建築之上，地名之下
     if (!map.getSource('towns')) map.addSource('towns', { type: 'geojson', data: townsData() });
     if (!map.getLayer('towns-fill')) map.addLayer({ id: 'towns-fill', type: 'fill', source: 'towns', paint: {
       'fill-color': ['case', ['get', 'lit'], '#ff8a3d', '#1b2433'], 'fill-opacity': ['case', ['get', 'lit'], 0.55, 0.35] } }, first);

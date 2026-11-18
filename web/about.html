@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>關於騎跡</title>
+<meta name="theme-color" content="#d9500f">
+<link rel="stylesheet" href="/assets/app.css">
+<style>
+  .top{display:flex;align-items:center;gap:10px;padding-top:4px}
+  .top a{font-size:26px;line-height:1;text-decoration:none;color:var(--fg);padding:4px 8px 4px 0}
+  .top h1{margin:0;font-size:24px}
+  .card h2{margin:0 0 8px;font-size:15px}
+  .card p{margin:0 0 8px;line-height:1.6;font-size:14px}
+  .card p:last-child{margin-bottom:0}
+  .src{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+  .src li{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:13.5px;line-height:1.45}
+  .src li:first-child{border-top:0}
+  .src li span{color:var(--muted);text-align:right;flex:none;max-width:55%}
+  .src a{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="top"><a href="/" aria-label="回首頁">‹</a><h1>關於騎跡</h1></header>
+
+  <section class="card">
+    <h2>騎跡 RideTrace</h2>
+    <p>機車車隊即時定位與回放：騎車時隊友互相看得到位置、落隊、失聯與 SOS 會即時提醒，結束後可以整隊回放；平常的足跡會累積成全年足跡、點亮鄉鎮與熱力圖。</p>
+    <p class="small muted">DBMS 課程 Redis 專題。位置資料只存在這台伺服器的 Redis，不會送到外部服務；地圖比對用本機的 Valhalla。</p>
+  </section>
+
+  <section class="card">
+    <h2>地圖與資料來源</h2>
+    <ul class="src">
+      <li><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap 貢獻者</a><span>道路、地名、鄉鎮界線（ODbL）</span></li>
+      <li><div><a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · <a href="https://openmaptiles.org" target="_blank" rel="noopener">© OpenMapTiles</a></div><span>深色、淺色、深藍底圖</span></li>
+      <li><a href="https://maps.nlsc.gov.tw" target="_blank" rel="noopener">© 內政部國土測繪中心</a><span>衛星影像</span></li>
+      <li><a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Terrain Tiles（Mapzen／AWS）</a><span>3D 地形、山影</span></li>
+      <li><a href="https://opendata.cwa.gov.tw" target="_blank" rel="noopener">中央氣象署開放資料</a><span>鄉鎮降雨機率</span></li>
+      <li><a href="https://tdx.transportdata.tw" target="_blank" rel="noopener">交通部 TDX</a><span>省道即時路況</span></li>
+      <li><a href="https://opdadm.moi.gov.tw" target="_blank" rel="noopener">內政部警政開放資料</a><span>測速照相位置</span></li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>使用的開源軟體</h2>
+    <ul class="src">
+      <li><a href="https://maplibre.org" target="_blank" rel="noopener">MapLibre GL JS</a><span>地圖繪製（BSD-3）</span></li>
+      <li><a href="https://github.com/valhalla/valhalla" target="_blank" rel="noopener">Valhalla</a><span>路線規劃、地圖比對（MIT）</span></li>
+      <li><a href="https://redis.io" target="_blank" rel="noopener">Redis</a><span>所有資料與即時訊息</span></li>
+      <li><a href="https://fastapi.tiangolo.com" target="_blank" rel="noopener">FastAPI</a><span>後端 API</span></li>
+      <li><a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a><span>邀請 QR 碼（MIT）</span></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
