@@ -128,7 +128,7 @@ M.onStyle(() => {
 });
 
 /* ---------- 鏡頭 ---------- */
-['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => { if (e.originalEvent) { S.lastInteract = Date.now(); M.unfollow(); } }));
+['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => { if (e.originalEvent) { S.lastInteract = Date.now(); S.fly = null; S.followZoomed = false; M.unfollow(); } }));
 // 面板收合狀態與螢幕尺寸分開記錄；瀏覽器限制儲存時仍可操作。
 const PANEL_KEY = 'qiji.trip.panel.collapsed';
 let collapsed = innerWidth <= 760;
@@ -166,10 +166,14 @@ function setFollow(who) {
   S.follow = who;
   S.lastInteract = 0;
   S.followZoomed = false;
+  S.fly = null;
   syncTools();
-  camera(true);
+  // 不用 easeTo：動畫迴圈每一格從目前畫面平滑接過去（跟人用 S.fly 內插、全隊用 followGroup），中間沒有交接的跳動
+  if (who === 'all') M.regroup();
+  if (!S.styleReady) camera(true);
   if (S.trip) renderTeam();  // 隊員表的選取狀態跟著換
 }
+const hav = (a, b, c, d) => { const R6 = 6371000, p1 = (a * Math.PI) / 180, p2 = (c * Math.PI) / 180, dl = ((d - b) * Math.PI) / 180; return 2 * R6 * Math.asin(Math.sqrt(Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2)); };
 function camera(force) {
   if (!force && Date.now() - S.lastInteract < 12000) return;
   if (followTarget()) return; // 跟隨模式由動畫迴圈每一格把人放在正中間
@@ -193,13 +197,24 @@ function tick(now) {
   }
   const t = followTarget();
   if (t && Date.now() - S.lastInteract > 12000) {
-    // 拉近的動畫可能被地圖載入打斷；還太遠就再拉一次
-    if ((!S.followZoomed || map.getZoom() < 12) && now > (S.easeUntil || 0) && S.styleReady) {
+    // 切換跟隨對象：每一格朝他「現在」的位置內插過去（人一直在動，easeTo 到按下時的位置，結束會再跳一次），
+    // 飛完直接接上跟隨。還太遠（例如被地圖載入打斷）就再飛一次。
+    if ((!S.followZoomed || (!S.fly && map.getZoom() < 12)) && S.styleReady) {
       S.followZoomed = true;
-      S.easeUntil = now + 900;
-      map.easeTo({ center: t.pos, zoom: Math.max(map.getZoom(), 14.5), padding: S.pad, duration: 850 });
-    } else if (now > (S.easeUntil || 0)) {
-      M.follow(t.pos, { padding: S.pad });
+      const c = map.getCenter(), km = hav(c.lat, c.lng, t.pos[1], t.pos[0]) / 1000;
+      S.fly = { at: now, from: [c.lng, c.lat], z0: map.getZoom(), z1: Math.max(map.getZoom(), 14.5),
+                dur: Math.min(1800, 700 + km * 40), dip: Math.max(0, Math.min(5, Math.log2(Math.max(1, km / 2)))) };
+    }
+    if (now > (S.easeUntil || 0)) {
+      let center = t.pos, extra = {};
+      if (S.fly) {
+        const f = S.fly, k = Math.min(1, (now - f.at) / f.dur), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+        center = [f.from[0] + (t.pos[0] - f.from[0]) * e, f.from[1] + (t.pos[1] - f.from[1]) * e];
+        // 距離遠時中途先拉遠一點再拉近，不會一路掃過一大堆圖磚
+        extra = { zoom: f.z0 + (f.z1 - f.z0) * e - f.dip * Math.sin(Math.PI * e) };
+        if (k >= 1) S.fly = null;
+      }
+      M.follow(center, { padding: S.pad, ...extra });
     }
   } else if (!t && S.follow === 'all' && S.styleReady && Date.now() - S.lastInteract > 12000 && now > (S.easeUntil || 0)) {
     const pts = [...S.members.values()].filter((m) => m.pos).map((m) => m.pos);

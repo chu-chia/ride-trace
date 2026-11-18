@@ -323,6 +323,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       grp.zoom += (tz - grp.zoom) * kz;
       this.follow([grp.lon, grp.lat], { zoom: grp.zoom, padding });
     },
+    // 換回全隊時呼叫：全隊鏡頭從「目前畫面」重新開始追，不會跳回上次全隊時的舊位置
+    regroup() { grp = null; grpT = 0; },
     unfollow() {
       grp = null; grpT = 0;
       if (!following) return;
