@@ -89,6 +89,7 @@ async def join_trip(body: JoinIn, uid: str = Depends(current_uid)):
     new = await r.sadd(K.members(tid), uid)
     await r.zadd(K.user_trips(uid), {tid: now_ms()})
     if t["status"] == "live":
+        await leave_old_active(uid, await r.get(K.active_trip(uid)), tid)
         await r.sadd(K.active(tid), uid)
         await r.set(K.active_trip(uid), tid)
     if new:
@@ -142,6 +143,7 @@ async def start_trip(tid: str, uid: str = Depends(current_uid)):
                 if status != "planned":
                     raise HTTPException(409, "行程已經開始或結束了")
                 members = await p.smembers(K.members(tid))
+                olds = {m: await r.get(K.active_trip(m)) for m in members}
                 p.multi()
                 p.hset(key, mapping={"status": "live", "started": now_ms()})
                 p.sadd(K.active(tid), *members)
@@ -151,6 +153,8 @@ async def start_trip(tid: str, uid: str = Depends(current_uid)):
                 break
             except WatchError:
                 continue
+    for m, old in olds.items():
+        await leave_old_active(m, old, tid)
     await events.emit(tid, "start", uid, "行程開始")
     await events.publish(tid, {"kind": "trip", "status": "live"})
     return await trip_detail(tid, uid)
@@ -159,6 +163,17 @@ async def start_trip(tid: str, uid: str = Depends(current_uid)):
 @router.post("/{tid}/end")
 async def end_my_record(tid: str, uid: str = Depends(current_uid)):
     await require_member(tid, uid)
+    return await finish_record(tid, uid)
+
+
+async def leave_old_active(uid: str, old: str | None, new_tid: str):
+    """一個人同時只會在一個行程裡回報。加入／開始新行程前，把他從舊行程的 active 移出（等同在舊行程按「結束紀錄」），
+    不然舊行程會因為他永遠是 live、他的心跳不再續期而被當成失聯，全員到齊也永遠等不到他。"""
+    if old and old != new_tid:
+        await finish_record(old, uid, "加入其他行程，自動結束這趟的紀錄")
+
+
+async def finish_record(tid: str, uid: str, text: str = "結束自己的紀錄") -> dict:
     last_ts = await events.last_fix_ts(tid, uid)
     removed, left, ended = await end_record(
         keys=[K.active(tid), K.trip(tid), K.hb(tid, uid), K.active_trip(uid)],
@@ -166,7 +181,7 @@ async def end_my_record(tid: str, uid: str = Depends(current_uid)):
     )
     if removed:
         await r.hset(K.state(tid, uid), "status", "done")
-        await events.emit(tid, "stop", uid, "結束自己的紀錄", ts=last_ts)
+        await events.emit(tid, "stop", uid, text, ts=last_ts)
         await events.publish(tid, {"kind": "status", "uid": uid, "status": "done"})
     if ended:
         fixes = [await events.last_fix_ts(tid, m) for m in await r.smembers(K.members(tid))]
