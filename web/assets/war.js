@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass } from '/assets/common.js';
+import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
 
@@ -123,9 +123,7 @@ function setSheet(open) {
   map.resize();
 }
 $('#sheetHandle').onclick = () => setSheet(sheet.classList.contains('small'));
-let touchStart = null;
-$('#sheetHandle').addEventListener('touchstart', (e) => { touchStart = e.touches[0].clientY; }, { passive: true });
-$('#sheetHandle').addEventListener('touchend', (e) => { if (touchStart == null) return; const dy = e.changedTouches[0].clientY - touchStart; if (Math.abs(dy) > 35) setSheet(dy < 0); touchStart = null; });
+sheetDrag(sheet, { isOpen: () => !sheet.classList.contains('small'), setOpen: setSheet, scroll: '.sheet-content' });
 document.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => {
   currentTab = b.dataset.tab;
   document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));

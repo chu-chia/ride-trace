@@ -174,6 +174,73 @@ export function liquidGlass(el, { radius = 24, bezel = 20, scale = 90 } = {}) {
   ro.observe(el);
 }
 
+// 手機底部抽屜拖曳（參考美食地圖 useSheetDrag）：
+// 抽屜整塊都能拖（頂列、摘要、把手，按鈕上也行），抽屜跟著手指走；放開時看速度（快速一甩）或位置決定開合。
+// 展開時在清單裡往下拉：清單已在最頂端就改成拖抽屜收合，否則照常捲動。
+// 用 touch 事件是因為原生捲動會搶走 pointer 事件；接手拖曳後才 preventDefault。
+const SHEET_MQ = matchMedia('(max-width: 760px)');
+const NO_DRAG = 'input, select, textarea, [contenteditable], .no-drag';
+const TAP_SLOP = 6, FLICK = 0.45; // px、px/ms
+export function sheetDrag(sheet, { isOpen, setOpen, scroll }) {
+  let st = 'idle', scroller = null, x0 = 0, y0 = 0, h0 = 0, minH = 0, maxH = 0, h = 0, trail = [], endAt = 0, timer = 0;
+  const measure = () => {
+    sheet.style.transition = 'none'; sheet.style.height = '';
+    sheet.classList.add('small'); minH = sheet.offsetHeight;
+    sheet.classList.remove('small'); maxH = sheet.offsetHeight;
+  };
+  sheet.addEventListener('touchstart', (e) => {
+    st = 'idle';
+    if (!SHEET_MQ.matches || e.touches.length !== 1 || e.target.closest(NO_DRAG)) return;
+    scroller = isOpen() && scroll ? e.target.closest(scroll) : null;
+    st = 'pending';
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; trail = [];
+  }, { passive: true });
+  sheet.addEventListener('touchmove', (e) => {
+    if (st === 'idle') return;
+    const t = e.touches[0], dy = t.clientY - y0;
+    if (st === 'pending') {
+      // 清單裡：只有往下拉而且已在頂端才接手，其他交給原生捲動
+      if (scroller && (dy < 0 || scroller.scrollTop > 0)) { st = 'idle'; return; }
+      if (scroller) e.preventDefault();
+      if (Math.abs(dy) < TAP_SLOP && Math.abs(t.clientX - x0) < TAP_SLOP) return;
+      if (Math.abs(t.clientX - x0) > Math.abs(dy)) { st = 'idle'; return; } // 橫向滑動不搶
+      clearTimeout(timer);
+      const open = isOpen();
+      measure();
+      h0 = open ? maxH : minH;
+      y0 = t.clientY; // 從接手的位置開始算，抽屜不會突然跳一段
+      st = 'dragging';
+    }
+    e.preventDefault();
+    const now = performance.now();
+    trail.push([now, t.clientY]);
+    while (trail.length > 2 && now - trail[0][0] > 100) trail.shift(); // 速度看最後 0.1 秒，避免單格抖動
+    h = Math.min(maxH, Math.max(minH, h0 - (t.clientY - y0)));
+    sheet.style.height = `${h}px`;
+  }, { passive: false });
+  const end = (e) => {
+    if (st === 'pending' && e?.type === 'touchend' && !isOpen() && !e.target.closest('a, button, input, select, textarea, label')) {
+      st = 'idle'; endAt = performance.now(); setOpen(true); return; // 收合時點摘要空白處也能展開
+    }
+    if (st !== 'dragging') { st = 'idle'; return; }
+    st = 'idle'; endAt = performance.now();
+    const [ta, ya] = trail[0] || [0, 0], [tb, yb] = trail.at(-1) || [1, 0];
+    const speed = (yb - ya) / Math.max(1, tb - ta), moved = h - h0, need = Math.min(90, (maxH - minH) / 4);
+    // 快速一甩看方向；慢慢拉則要拉超過一段距離（90px 或全程四分之一）才換狀態，否則彈回
+    const open = speed < -FLICK ? true : speed > FLICK ? false : Math.abs(moved) > need ? moved > 0 : h0 === maxH;
+    sheet.style.transition = '';
+    sheet.style.height = `${open ? maxH : minH}px`;
+    if (!open) sheet.classList.add('small'); // 收合時內容先藏，只動高度
+    timer = setTimeout(() => { sheet.style.height = ''; setOpen(open); }, 280);
+  };
+  sheet.addEventListener('touchend', end);
+  sheet.addEventListener('touchcancel', end);
+  // 拖曳或點摘要展開後，瀏覽器補送的 click 不要再觸發按鈕（例如把手又切回去）
+  sheet.addEventListener('click', (e) => {
+    if (performance.now() - endAt < 400) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+}
+
 // 左側欄：收合鈕（電腦）與拉把手（手機）行為一致，每頁各自記住開合狀態
 export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 760 } = {}) {
   const storeKey = `qiji:panel:${key}`;
@@ -188,16 +255,8 @@ export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 7
     onChange?.(small);
   };
   if (btn) btn.onclick = () => set(!small);
-  if (handle) {
-    let y0 = null, dragged = false;
-    handle.addEventListener('pointerdown', (e) => { y0 = e.clientY; dragged = false; handle.setPointerCapture(e.pointerId); });
-    handle.addEventListener('pointerup', (e) => {
-      if (y0 == null) return;
-      const d = e.clientY - y0; y0 = null;
-      if (Math.abs(d) > 36) { dragged = true; set(d > 0); }
-    });
-    handle.onclick = () => { if (dragged) { dragged = false; return; } set(!small); };
-  }
+  if (handle) handle.onclick = () => set(!small);
+  sheetDrag(panel, { isOpen: () => !small, setOpen: (open) => set(!open), scroll: '.panel-body' });
   set(small, false);
   // 手機收合時抽屜高度不固定（摘要一行或兩行），持續量實際高度，讓時間軸、進度條、比例尺貼在它上方
   if ('ResizeObserver' in window) new ResizeObserver(() => {
