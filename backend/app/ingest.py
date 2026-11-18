@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from . import events, interact
 from .auth import current_uid
 from .db import K, r
-from .geo import bucket_of, day_key, segment_cells
+from .geo import bucket_of, day_key, is_rough, segment_cells, step
 
 router = APIRouter()
 HEARTBEAT_S = 90
@@ -58,7 +58,7 @@ async def ingest(uid: str, fix: Fix) -> dict:
     # 先讀：目前所在行程、上一個點、目前狀態（一次 round trip）
     async with r.pipeline(transaction=False) as p:
         p.get(K.active_trip(uid))
-        p.hmget(K.last(uid), "ts", "lat", "lon")
+        p.hmget(K.last(uid), "ts", "lat", "lon", "ats", "alat", "alon")
         tid_res, last = await p.execute()
     tid = tid_res
     live = False
@@ -72,8 +72,14 @@ async def ingest(uid: str, fix: Fix) -> dict:
         live = status == "live" and bool(is_active)
 
     prev = (int(last[0]), float(last[1]), float(last[2])) if last[0] else None
+    # 里程從「錨點」算（geo.step）：位移不到 3 m 錨點不動。舊資料沒有錨點就用上一點
+    anchor = (int(last[3]), float(last[4]), float(last[5])) if last[3] else prev
+    # 精度太差的點（geo.MAX_ACC_M）：只更新目前位置與心跳，不進足跡、軌跡、里程
+    rough = is_rough(fix.acc)
     fresh = prev is None or ts > prev[0]
-    cells, dist_m = segment_cells(prev, (ts, fix.lat, fix.lon)) if fresh else (set(), 0.0)
+    keep = fresh and not rough
+    cells = segment_cells(prev, (ts, fix.lat, fix.lon)) if keep else set()
+    dist_m, _, new_anchor = step(anchor, (ts, fix.lat, fix.lon), fix.acc) if keep else (0.0, 0.0, anchor)
     day, bucket = day_key(ts), bucket_of(ts)
 
     fields = {"lat": fix.lat, "lon": fix.lon, "alt": fix.alt, "speed": fix.speed, "heading": fix.heading,
@@ -82,11 +88,12 @@ async def ingest(uid: str, fix: Fix) -> dict:
 
     # 一個 Pipeline 寫完所有東西：一次網路來回
     async with r.pipeline(transaction=False) as p:
-        if fresh:
+        if keep:
             # 全年足跡：Stream ID 直接用時間戳，之後可以用 XRANGE 依時間範圍查
             p.xadd(K.footprint(uid), {"lat": fields["lat"], "lon": fields["lon"], "ele": fields.get("alt", "0")}, id=f"{ts}-*")
             p.incr(K.fp_ver(uid))
-            p.hset(K.last(uid), mapping={"ts": ts, "lat": fix.lat, "lon": fix.lon})
+            p.hset(K.last(uid), mapping={"ts": ts, "lat": fix.lat, "lon": fix.lon,
+                                         "ats": new_anchor[0], "alat": new_anchor[1], "alon": new_anchor[2]})
             if cells:
                 p.sadd(K.fog(uid, day, bucket), *cells)
                 p.sadd(K.fog_all(uid), *cells)
@@ -95,7 +102,8 @@ async def ingest(uid: str, fix: Fix) -> dict:
             else:
                 p.hincrbyfloat(K.daykm(uid), day, 0)
         if live and fresh:
-            p.xadd(K.track(tid, uid), fields)
+            if not rough:
+                p.xadd(K.track(tid, uid), fields)
             p.geoadd(K.geo(tid), [fix.lon, fix.lat, uid])
             if fix.speed is not None:
                 p.execute_command("TS.ADD", K.ts_speed(tid, uid), ts, round(fix.speed * 3.6, 2),
@@ -105,7 +113,10 @@ async def ingest(uid: str, fix: Fix) -> dict:
                 p.execute_command("TS.ADD", K.ts_alt(tid, uid), ts, round(fix.alt, 1),
                                   "RETENTION", TS_RETENTION_MS, "ON_DUPLICATE", "LAST",
                                   "LABELS", "trip", tid, "uid", uid, "kind", "alt")
-            p.publish(K.live(tid), json.dumps({"kind": "pos", "uid": uid, **{k: _num(v) if k != "src" else v for k, v in fields.items()}}))
+            pos = {"kind": "pos", "uid": uid, **{k: _num(v) if k != "src" else v for k, v in fields.items()}}
+            if rough:
+                pos["rough"] = 1  # 前端只移動圖釘、不接軌跡線
+            p.publish(K.live(tid), json.dumps(pos))
             p.execute_command("TS.INCRBY", "ts:sys:pubsub", 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000,
                               "LABELS", "metric", "sys", "kind", "pubsub")
         if live:
@@ -114,7 +125,8 @@ async def ingest(uid: str, fix: Fix) -> dict:
         p.zadd("online:report", {uid: now})  # 後台「線上人數」：最近 2 分鐘有回報位置的人（ZCOUNT）
         # 交給 worker：行程中的回報（警示、統計），以及所有新的足跡點（熱力圖、點亮鄉鎮）
         if fresh:
-            p.xadd(K.ingest, {"trip": tid if live else "", "uid": uid, "fp": 1, **fields},
+            # 粗略點也交給 worker（落隊、抵達判斷用得到），但 fp=0 不點亮鄉鎮／熱力圖，統計 Lua 也會略過
+            p.xadd(K.ingest, {"trip": tid if live else "", "uid": uid, "fp": 0 if rough else 1, **fields},
                    maxlen=100_000, approximate=True)
         p.execute_command("TS.INCRBY", K.ts_writes, 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000)
         results = await p.execute(raise_on_error=False)
@@ -123,7 +135,7 @@ async def ingest(uid: str, fix: Fix) -> dict:
     if live and prev_status == "lost":
         await events.emit(tid, "back", uid, "恢復連線", ts=ts)
         await events.publish(tid, {"kind": "status", "uid": uid, "status": "ok"})
-    return {"ok": True, "trip": tid if live else None, "footprint": fresh, "errors": errors[:3], "stale": not fresh}
+    return {"ok": True, "trip": tid if live else None, "footprint": keep, "rough": rough, "errors": errors[:3], "stale": not fresh}
 
 
 @router.post("/api/track")

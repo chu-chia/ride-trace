@@ -23,7 +23,7 @@ import redis
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.redis_url import default_redis_url  # noqa: E402
 from app.db import K  # noqa: E402
-from app.geo import bucket_of, day_key, haversine_m, segment_cells  # noqa: E402
+from app.geo import bucket_of, day_key, haversine_m, segment_cells, step  # noqa: E402
 
 PT = re.compile(
     r'<trkpt\s+lat="([-\d.]+)"\s+lon="([-\d.]+)"\s*>(.*?)</trkpt>', re.S)
@@ -75,7 +75,7 @@ def main():
 
     fog = defaultdict(set)
     daykm = defaultdict(float)
-    prev = None
+    prev = anchor = None
     kept = skipped = 0
     pipe = r.pipeline(transaction=False)
     last_ts = None
@@ -88,7 +88,8 @@ def main():
                 # 速度不合理（飛機、資料跳點）：不寫入，也不當作下一點的起點
                 skipped += 1
                 continue
-        cells, dist = segment_cells(prev, (ts, lat, lon))
+        cells = segment_cells(prev, (ts, lat, lon))
+        dist, _, anchor = step(anchor, (ts, lat, lon))
         day, b = day_key(ts), bucket_of(ts)
         fog[(day, b)] |= cells
         daykm[day] += dist / 1000
@@ -113,7 +114,8 @@ def main():
     for day, km in daykm.items():
         pipe.hincrbyfloat(K.daykm(uid), day, round(km, 4))
     if prev:
-        pipe.hset(K.last(uid), mapping={"ts": prev[0], "lat": prev[1], "lon": prev[2]})
+        pipe.hset(K.last(uid), mapping={"ts": prev[0], "lat": prev[1], "lon": prev[2],
+                                        "ats": anchor[0], "alat": anchor[1], "alon": anchor[2]})
     pipe.incr(K.fp_ver(uid))
     pipe.execute()
 

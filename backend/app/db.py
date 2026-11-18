@@ -3,6 +3,7 @@ import os
 
 import redis.asyncio as aioredis
 
+from app import geo
 from app.redis_url import default_redis_url
 
 REDIS_URL = default_redis_url()
@@ -80,11 +81,21 @@ end_record = r.register_script(END_RECORD_LUA)
 
 # Worker（stats group）：更新一個人的里程／極速／移動時間。
 # 依 ts 去重：比上次處理過的還舊（重送或亂序）就直接略過，所以 at-least-once 重送不會重算里程。
-# ARGV: ts(ms) lat lon kmh（沒有速度傳 -1）
+# ARGV: ts(ms) lat lon kmh（沒有速度傳 -1） acc（沒有傳 -1） 然後是 STATS_RULE_ARGS 六個門檻
 UPDATE_STATS_LUA = """
-local ts, lat, lon, kmh = tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3]), tonumber(ARGV[4])
-local prev = redis.call('HMGET', KEYS[1], 'ts', 'lat', 'lon')
-if prev[1] and tonumber(prev[1]) >= ts then return 0 end
+-- 與 geo.step() 同一套規則，門檻由 Python 傳入（ARGV[6..10]）。
+-- ts/lat/lon 是「錨點」（上一個算進里程的點），lts 是最後處理過的時間戳（去重用）。
+local ts, lat, lon, kmh, acc = tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3]), tonumber(ARGV[4]), tonumber(ARGV[5])
+local MIN_MOVE, MAX_ACC, MAX_KMH, MAX_GAP, MOVING_KMH, MOVING_DT =
+  tonumber(ARGV[6]), tonumber(ARGV[7]), tonumber(ARGV[8]), tonumber(ARGV[9]), tonumber(ARGV[10]), tonumber(ARGV[11])
+local prev = redis.call('HMGET', KEYS[1], 'ts', 'lat', 'lon', 'lts')
+local seen = tonumber(prev[4] or prev[1] or '0')
+if prev[1] and seen >= ts then return 0 end
+redis.call('HSET', KEYS[1], 'lts', ARGV[1])
+redis.call('HINCRBY', KEYS[1], 'points', 1)
+-- 精度太差：不算里程、不當錨點、不更新極速
+if acc >= 0 and acc > MAX_ACC then return 1 end
+local move_anchor = true
 if prev[1] then
   local dt = (ts - tonumber(prev[1])) / 1000
   local rad = math.pi / 180
@@ -92,20 +103,23 @@ if prev[1] then
   local dp, dl = p2 - p1, (lon - tonumber(prev[3])) * rad
   local a = math.sin(dp / 2) ^ 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ^ 2
   local d = 2 * 6371000 * math.asin(math.sqrt(math.min(1, a)))
-  -- 超過 250 km/h 視為跳點；間隔超過 1 小時不算（斷訊很久後換地方）
-  if dt <= 3600 and d / dt * 3.6 <= 250 then
-    redis.call('HINCRBYFLOAT', KEYS[1], 'km', d / 1000)
-    if dt <= 60 and d / dt * 3.6 >= 5 then redis.call('HINCRBYFLOAT', KEYS[1], 'moving_s', dt) end
+  if dt > 0 and dt <= MAX_GAP and d / dt * 3.6 <= MAX_KMH then
+    if d < math.max(MIN_MOVE, math.min(acc, MAX_ACC)) then
+      move_anchor = false   -- 停車漂移：錨點不動，等真的移動再一起算
+    else
+      redis.call('HINCRBYFLOAT', KEYS[1], 'km', d / 1000)
+      if dt <= MOVING_DT and d / dt * 3.6 >= MOVING_KMH then redis.call('HINCRBYFLOAT', KEYS[1], 'moving_s', dt) end
+    end
   end
 end
-if kmh >= 0 and kmh <= 250 and kmh > tonumber(redis.call('HGET', KEYS[1], 'max_kmh') or '0') then
+if kmh >= 0 and kmh <= MAX_KMH and kmh > tonumber(redis.call('HGET', KEYS[1], 'max_kmh') or '0') then
   redis.call('HSET', KEYS[1], 'max_kmh', kmh)
 end
-redis.call('HSET', KEYS[1], 'ts', ARGV[1], 'lat', ARGV[2], 'lon', ARGV[3])
-redis.call('HINCRBY', KEYS[1], 'points', 1)
+if move_anchor then redis.call('HSET', KEYS[1], 'ts', ARGV[1], 'lat', ARGV[2], 'lon', ARGV[3]) end
 return 1
 """
 update_stats = r.register_script(UPDATE_STATS_LUA)
+STATS_RULE_ARGS = [geo.MIN_MOVE_M, geo.MAX_ACC_M, geo.MAX_SPEED_KMH, geo.MAX_GAP_S, geo.MOVING_KMH, geo.MOVING_MAX_DT_S]
 
 
 # Worker（alerts group）：落隊判斷（規格 7.4）。

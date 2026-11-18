@@ -444,7 +444,8 @@ function handle(msg) {
       m.state = { ...m.state, ...msg, status: 'ok', seen: Date.now() };
       if (numeric(msg.speed)) { m.recent.push({ at: Date.now(), kmh: +msg.speed * 3.6 }); m.recent = m.recent.filter((x) => Date.now() - x.at < 10 * 60_000).slice(-180); }
       m.from = m.pos || [msg.lon, msg.lat]; m.to = [msg.lon, msg.lat]; m.t0 = performance.now();
-      if (m.pos) m.trail.push(m.pos);
+      if (m.pos && !m.lastRough) m.trail.push(m.pos);
+      m.lastRough = !!msg.rough;  // 精度太差的點只移動圖釘，不接進軌跡線
       if (m.trail.length > 3000) m.trail.splice(0, 500);
       break;
     }

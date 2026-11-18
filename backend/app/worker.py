@@ -22,7 +22,7 @@ import time
 from redis.exceptions import ResponseError
 
 from . import events, footprint, traffic, weather
-from .db import K, arrive, check_lag, r, update_stats
+from .db import STATS_RULE_ARGS, K, arrive, check_lag, r, update_stats
 from .longterm import record_point
 from .push import NOTIFY, handle_push
 from .geo import bearing_deg
@@ -83,7 +83,8 @@ async def handle_stats(msgs: list[tuple[str, dict]]) -> list[str]:
         if not tid or not uid or "lat" not in f:
             continue
         kmh = float(f["speed"]) * 3.6 if f.get("speed") else -1
-        applied = await update_stats(keys=[K.stats(tid, uid)], args=[f["ts"], f["lat"], f["lon"], kmh])
+        acc = f.get("acc") or -1
+        applied = await update_stats(keys=[K.stats(tid, uid)], args=[f["ts"], f["lat"], f["lon"], kmh, acc, *STATS_RULE_ARGS])
         if applied:
             changed[(tid, uid)] = None
     # 同一批裡同一個人只推一次，避免 Pub/Sub 訊息量翻倍

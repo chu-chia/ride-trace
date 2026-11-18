@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from .auth import current_uid
 from .db import K, r
 from .events import event_from_stream
-from .geo import haversine_m
+from .geo import MAX_SPEED_KMH, MOVING_KMH, haversine_m, is_rough, step
 from .trips import require_member, trip_detail
 
 router = APIRouter(prefix="/api/trips")
@@ -21,7 +21,7 @@ def _f(v, default=None):
 
 
 def summarize(pts: list[list]) -> dict:
-    """pts: [ts, lat, lon, alt, km/h]。"""
+    """pts: [ts, lat, lon, alt, km/h, heading, acc]（acc 可省略）。"""
     if len(pts) < 2:
         return {"km": 0, "duration_ms": 0, "moving_ms": 0, "avg_kmh": 0, "max_kmh": 0, "climb_m": 0, "max_alt": None, "stops": 0}
     dist = moving = climb = 0.0
@@ -29,17 +29,22 @@ def summarize(pts: list[list]) -> dict:
     stops = 0
     still_since = None
     last_alt = None
+    anchor = None
     for a, b in zip(pts, pts[1:]):
         dt = (b[0] - a[0]) / 1000
         if dt <= 0:
             continue
+        if anchor is None:
+            anchor = (a[0], a[1], a[2])
+        # 里程與移動時間：跟即時統計同一套規則（geo.step：最小位移、跳點、斷訊）
+        d_count, mv, anchor = step(anchor, (b[0], b[1], b[2]), b[6] if len(b) > 6 else None)
+        dist += d_count
+        moving += mv
         d = haversine_m(a[1], a[2], b[1], b[2])
         v = d / dt * 3.6
-        if v > 250:          # 跳點不算
+        if v > MAX_SPEED_KMH:  # 跳點不算
             continue
-        dist += d
-        if v > 5:
-            moving += dt
+        if v > MOVING_KMH:
             if still_since is not None and a[0] - still_since >= 120_000:
                 stops += 1    # 停超過 2 分鐘算一次休息
             still_since = None
@@ -47,7 +52,7 @@ def summarize(pts: list[list]) -> dict:
             still_since = a[0]
         if dt >= 2:
             speeds.append(v)
-        if b[4] is not None and b[4] < 250:
+        if b[4] is not None and b[4] < MAX_SPEED_KMH:
             speeds.append(b[4])
         if b[3] is not None:
             if last_alt is None:
@@ -81,16 +86,16 @@ async def replay(tid: str, uid: str = Depends(current_uid)):
         pts = []
         for _, f in rows:
             lat, lon = _f(f.get("lat")), _f(f.get("lon"))
-            if lat is None or lon is None:
+            if lat is None or lon is None or is_rough(f.get("acc")):  # 精度太差的舊點不畫、不算
                 continue
             spd = _f(f.get("speed"))
             pts.append([int(f["ts"]), round(lat, 6), round(lon, 6),
                         None if _f(f.get("alt")) is None else round(_f(f.get("alt")), 1),
                         None if spd is None else round(spd * 3.6, 1),
-                        None if _f(f.get("heading")) is None else round(_f(f.get("heading")))])
+                        None if _f(f.get("heading")) is None else round(_f(f.get("heading"))), _f(f.get("acc"))])
         pts.sort(key=lambda p: p[0])  # Stream 是到達順序，斷訊補傳的點要依 GPS 時間重排
-        m["track"] = pts
         m["summary"] = summarize(pts)
+        m["track"] = [p[:6] for p in pts]  # acc 只拿來算摘要，不送前端
         m.pop("state", None)
         if pts:
             t0 = pts[0][0] if t0 is None else min(t0, pts[0][0])

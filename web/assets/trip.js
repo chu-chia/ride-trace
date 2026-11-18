@@ -71,16 +71,18 @@ function upsertMember(u, state) {
 }
 
 // 收到新位置時不直接跳過去，而是在「距離上一筆的時間」內慢慢滑到新位置
-function moveTo(m, lon, lat) {
+// rough：精度太差的點（後端標記），只移動圖釘，不接進軌跡線
+function moveTo(m, lon, lat, rough = false) {
   const now = performance.now();
   const to = [lon, lat];
   const gap = m.lastAt ? now - m.lastAt : 1000;
   m.lastAt = now;
-  if (m.lastTarget) {
+  if (m.lastTarget && !m.lastRough) {
     const last = m.trail[m.trail.length - 1];
     if (!last || last[0] !== m.lastTarget[0] || last[1] !== m.lastTarget[1]) m.trail.push(m.lastTarget);
   }
   m.lastTarget = to;
+  m.lastRough = rough;
   const far = !m.pos || Math.abs(to[0] - m.pos[0]) + Math.abs(to[1] - m.pos[1]) > 0.05; // 超過約 5 km 就直接跳
   if (far) { m.pos = to; m.anim = null; }
   else m.anim = { from: m.pos.slice(), to, t0: now, dur: Math.min(3000, Math.max(250, gap * 1.1)) };
@@ -408,7 +410,7 @@ function handle(msg) {
       const m = S.members.get(msg.uid);
       if (!m) break;
       m.state = { ...m.state, ...msg, status: 'ok', seen: Date.now() };
-      moveTo(m, msg.lon, msg.lat);
+      moveTo(m, msg.lon, msg.lat, !!msg.rough);
       placeMarker(m);
       break;
     }

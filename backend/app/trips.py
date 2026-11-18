@@ -9,6 +9,7 @@ from redis.exceptions import WatchError
 from . import events
 from .auth import current_uid, public_user
 from .db import K, end_record, r
+from .geo import is_rough
 from .worker import LAG_DEFAULT_KM, stats_dict
 
 router = APIRouter(prefix="/api/trips")
@@ -242,6 +243,6 @@ async def build_snapshot(tid: str, uid: str) -> dict:
     trails = {}
     for m in detail["members"]:
         rows = await r.xrevrange(K.track(tid, m["uid"]), count=600)
-        trails[m["uid"]] = [[float(f["lon"]), float(f["lat"])] for _, f in reversed(rows)]
+        trails[m["uid"]] = [[float(f["lon"]), float(f["lat"])] for _, f in reversed(rows) if not is_rough(f.get("acc"))]
     detail["trails"] = trails
     return detail
