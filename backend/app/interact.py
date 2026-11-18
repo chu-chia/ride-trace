@@ -174,6 +174,8 @@ async def send_sos(tid: str, uid: str = Depends(current_uid)):
 @router.delete("/{tid}/sos")
 async def cancel_sos(tid: str, uid: str = Depends(current_uid)):
     await require_member(tid, uid)
+    sos_eid = await r.hget(K.sos(tid), uid)
     if not await r.hdel(K.sos(tid), uid):
         raise HTTPException(404, "你沒有發出中的 SOS")
-    return await events.emit(tid, "sos_off", uid, "解除 SOS：沒事了", ts=await event_ts(tid, uid))
+    # sos＝原本那則 SOS 的事件 ID：推播用同一個 tag，隊友手機上掛著的 SOS 通知會被「已解除」蓋掉
+    return await events.emit(tid, "sos_off", uid, "解除 SOS：沒事了", ts=await event_ts(tid, uid), sos=sos_eid)

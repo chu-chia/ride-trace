@@ -13,20 +13,24 @@ async def emit(tid: str, etype: str, uid: str | None, text: str, ts: int | None 
     eid = await r.xadd(K.events(tid), {k: str(v) for k, v in fields.items()})
     msg = {"kind": "event", "id": eid, **fields}
     await publish(tid, msg)
-    await notify(tid, eid, etype, uid, text)
+    await notify(tid, eid, etype, uid, text, sos=fields.get("sos"))
     return msg
 
 
 # 要推播的事件類型（推給誰、多久推一次在 push.RULES）
-NOTIFY_TYPES = {"sos", "lost", "behind", "stuck", "allin", "speedcam", "offroute", "start", "kick", "msg", "chat", "roadevent", "weather"}
+NOTIFY_TYPES = {"sos", "sos_off", "lost", "behind", "ahead", "stuck", "allin", "speedcam", "offroute", "start", "kick",
+                "msg", "chat", "roadevent", "weather"}
 
 
-async def notify(tid: str, eid: str, etype: str, uid: str | None, text: str):
-    """交給 worker 的 consumer group「push」去推播（API 不等推播服務回應）。"""
+async def notify(tid: str, eid: str, etype: str, uid: str | None, text: str, sos: str | None = None):
+    """交給 worker 的 consumer group「push」去推播（API 不等推播服務回應）。
+    sos：解除 SOS 時帶原本那則 SOS 的事件 ID，推播用同一個 tag 把它蓋掉。"""
     # Demo 行程（tools.simulate --loop）無限重播：事件照常顯示，但不推播，不然手機會被一直推
     if etype in NOTIFY_TYPES and not await r.hget(K.trip(tid), "demo"):
-        await r.xadd("stream:notify", {"trip": tid, "eid": eid, "type": etype, "uid": uid or "", "text": text},
-                     maxlen=5000, approximate=True)
+        f = {"trip": tid, "eid": eid, "type": etype, "uid": uid or "", "text": text}
+        if sos:
+            f["sos"] = sos
+        await r.xadd("stream:notify", f, maxlen=5000, approximate=True)
 
 
 PUBSUB_TS = "ts:sys:pubsub"

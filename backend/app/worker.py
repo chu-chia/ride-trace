@@ -24,7 +24,7 @@ from redis.exceptions import ResponseError
 from . import events, footprint, traffic, weather
 from .db import STATS_RULE_ARGS, K, advance_alert_ts, arrive, check_lag, r, update_stats
 from .longterm import record_point
-from .push import NOTIFY, handle_push
+from .push import NOTIFY, flush_loop, handle_push
 from .geo import bearing_deg
 
 log = logging.getLogger("qiji.worker")
@@ -200,8 +200,12 @@ async def check_speedcam(tid: str, uid: str, f: dict):
         info = {"cam": cid, "addr": cam[0], "limit": limit, "dist_m": round(float(dist)), "kmh": kmh,
                 "lon": clon, "lat": clat, "direct": cam[3]}
         await events.publish(tid, {"kind": "speedcam", "uid": uid, **info})
+        text = f"前方測速：{cam[0]}（速限 {limit}）"
+        # 事件列表一支測速整趟只記一次（camevt），但推播是個人提醒：每個經過的人都要推（camhit 已經去重過）
         if await r.set(f"camevt:{tid}:{cid}", 1, nx=True, ex=CAM_EVENT_TTL):
-            await events.emit(tid, "speedcam", uid, f"前方測速：{cam[0]}（速限 {limit}）", ts=int(f["ts"]), cam=cid)
+            await events.emit(tid, "speedcam", uid, text, ts=int(f["ts"]), cam=cid)
+        else:
+            await events.notify(tid, f"cam-{cid}-{uid}-{f['ts']}", "speedcam", uid, text)
         return
 
 
@@ -515,7 +519,7 @@ async def ack(stream: str, group: str, ids: list[str]):
 async def main():
     await r.ping()
     log.info("worker 啟動：consumer=%s groups=%s", CONSUMER, [g for _, g in HANDLERS])
-    await asyncio.gather(*(run_group(s, g, h) for (s, g), h in HANDLERS.items()))
+    await asyncio.gather(*(run_group(s, g, h) for (s, g), h in HANDLERS.items()), flush_loop())
 
 
 if __name__ == "__main__":

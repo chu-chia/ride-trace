@@ -24,7 +24,14 @@ self.addEventListener('notificationclick', (e) => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const same = wins.find((c) => c.url === url);
     if (same) return same.focus();
-    if (wins[0] && 'navigate' in wins[0]) { await wins[0].navigate(url); return wins[0].focus(); }
+    // 已經開著同一個行程（不同分頁、帶不同參數）就切過去；其他頁面不要直接導走（UX-51：可能在看回放、填表單），另開一個
+    const target = new URL(url);
+    const tid = target.searchParams.get('id');
+    const sameTrip = tid && wins.find((c) => {
+      const u = new URL(c.url);
+      return u.pathname === target.pathname && u.searchParams.get('id') === tid;
+    });
+    if (sameTrip) return sameTrip.focus();
     return self.clients.openWindow(url);
   })());
 });
