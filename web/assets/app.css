@@ -124,8 +124,11 @@ a.li{color:inherit}
 .team-rows{display:flex;flex-direction:column}
 .team-row{width:100%;border:0;background:none;color:inherit;font:inherit;cursor:pointer;display:grid;grid-template-columns:minmax(0,2.1fr) repeat(4,minmax(0,1fr));gap:4px;align-items:center;padding:9px 6px;border-top:1px solid var(--line);font-size:12px;text-align:right;border-radius:10px}
 .team-row:first-child{border-top:0}
-.team-row:hover{background:var(--surface-2)}
-.team-row.on{background:color-mix(in srgb,var(--accent) 16%,transparent);box-shadow:inset 3px 0 0 var(--accent)}
+/* 選中（鏡頭跟隨中）：使用者選的「淡灰底」，不加邊框；滑鼠點擊不顯示焦點框，只在鍵盤操作時顯示細框 */
+.team-row.on{background:var(--surface-2)}
+.team-row:hover:not(.on){background:color-mix(in srgb,var(--surface-2) 55%,transparent)}
+.team-row:focus{outline:none}
+.team-row:focus-visible{outline:1.5px solid var(--muted);outline-offset:-1.5px}
 .team-row .team-name{display:flex;align-items:center;gap:6px;min-width:0;text-align:left}
 .team-name i{width:9px;height:9px;border-radius:50%;flex:none}
 .team-nm{display:flex;flex-direction:column;min-width:0}
