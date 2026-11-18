@@ -5,7 +5,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from redis.exceptions import WatchError
+from redis.exceptions import ResponseError, WatchError
 
 from . import events
 from .auth import current_uid, public_user
@@ -32,7 +32,17 @@ async def trip_or_404(tid: str) -> dict:
 
 async def require_member(tid: str, uid: str):
     if not await r.sismember(K.members(tid), uid):
+        if await r.sismember(K.kicked(tid), uid) or await kicked_by_events(tid, uid):
+            raise HTTPException(403, "你已被建立者移出這個行程")
         raise HTTPException(403, "你不是這個行程的成員")
+
+
+async def kicked_by_events(tid: str, uid: str) -> bool:
+    """舊行程（還沒有 trip:{id}:kicked）：從事件 Stream 倒著找這個人最後一筆是「移出」還是「加入」。只在被拒絕時才查。"""
+    for _, f in await r.xrevrange(K.events(tid), count=2000):
+        if f.get("uid") == uid and f.get("type") in ("kick", "join"):
+            return f["type"] == "kick"
+    return False
 
 
 class CreateIn(BaseModel):
@@ -88,6 +98,7 @@ async def join_trip(body: JoinIn, uid: str = Depends(current_uid)):
     if t["status"] == "ended":
         raise HTTPException(409, "這個行程已經結束")
     new = await r.sadd(K.members(tid), uid)
+    await r.srem(K.kicked(tid), uid)  # 被移出後又用邀請碼加回來
     await r.zadd(K.user_trips(uid), {tid: now_ms()})
     if t["status"] == "live":
         await leave_old_active(uid, await r.get(K.active_trip(uid)), tid)
@@ -102,6 +113,7 @@ async def join_trip(body: JoinIn, uid: str = Depends(current_uid)):
 
 @router.get("/{tid}")
 async def get_trip(tid: str, uid: str = Depends(current_uid)):
+    await trip_or_404(tid)  # 先分出「行程不存在」（404）和「不是成員」（403），前端顯示不同的錯誤畫面
     await require_member(tid, uid)
     return await trip_detail(tid, uid)
 
@@ -191,7 +203,9 @@ async def finish_record(tid: str, uid: str, text: str = "結束自己的紀錄")
     if ended:
         fixes = [await events.last_fix_ts(tid, m) for m in await r.smembers(K.members(tid))]
         fixes = [x for x in fixes if x]
-        await events.emit(tid, "end", None, "全員結束紀錄，行程自動結束", ts=max(fixes) if fixes else None)
+        reason = "全員結束紀錄，行程自動結束" if text == "結束自己的紀錄" else "最後一位騎士加入其他行程，行程自動結束"
+        await r.hset(K.trip(tid), "ended_reason", reason)  # 回放、首頁顯示行程為什麼結束
+        await events.emit(tid, "end", None, reason, ts=max(fixes) if fixes else None)
         await events.publish(tid, {"kind": "trip", "status": "ended"})
         asyncio.create_task(replay.warm(tid))
     return {"left": left, "ended": bool(ended)}
@@ -233,6 +247,7 @@ async def kick(tid: str, body: KickIn, uid: str = Depends(current_uid)):
         p.hdel(K.gap(tid), body.uid)
         p.delete(K.hb(tid, body.uid))
         p.zrem(K.user_trips(body.uid), tid)
+        p.sadd(K.kicked(tid), body.uid)   # 被移出的人重開行程頁時，錯誤畫面寫「你已被移出」而不是「不是成員」
         await p.execute()
     if await r.get(K.active_trip(body.uid)) == tid:
         await r.delete(K.active_trip(body.uid))
@@ -247,7 +262,11 @@ async def nearby(tid: str, uid: str = Depends(current_uid)):
     await require_member(tid, uid)
     if await r.geopos(K.geo(tid), uid) == [None]:
         return {"me": uid, "items": []}
-    res = await r.geosearch(K.geo(tid), member=uid, radius=1000, unit="km", withdist=True, sort="ASC")
+    try:
+        res = await r.geosearch(K.geo(tid), member=uid, radius=1000, unit="km", withdist=True, sort="ASC")
+    except ResponseError:
+        # geopos 和 geosearch 之間這個人剛好被移出 GEO（結束紀錄、被踢）：Redis 回「找不到成員」，當成還沒有位置
+        return {"me": uid, "items": []}
     return {"me": uid, "items": [{"uid": m, "km": float(d)} for m, d in res if m != uid]}
 
 
@@ -257,10 +276,24 @@ async def snapshot(tid: str, uid: str = Depends(current_uid)):
     return await build_snapshot(tid, uid)
 
 
+async def former_people(members: list[dict], evs: list[dict]) -> dict:
+    """事件裡出現、但已經不是成員的人（被移出）：補上暱稱和顏色，回放、事件列表才不會沒有名字。"""
+    have = {m["uid"] for m in members}
+    out = {}
+    for e in evs:
+        u = e.get("uid")
+        if u and u not in have and u not in out:
+            pu = await public_user(u)
+            if pu.get("nickname"):
+                out[u] = {"nickname": pu["nickname"], "color": pu["color"]}
+    return out
+
+
 async def build_snapshot(tid: str, uid: str) -> dict:
     detail = await trip_detail(tid, uid)
     raw = await r.xrevrange(K.events(tid), count=40)
     detail["events"] = [events.event_from_stream(i, f) for i, f in reversed(raw)]
+    detail["people"] = await former_people(detail["members"], detail["events"])
     trails = {}
     for m in detail["members"]:
         rows = await r.xrevrange(K.track(tid, m["uid"]), count=600)

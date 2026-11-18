@@ -1,11 +1,12 @@
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
+import { api, tripGate, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
 import { gpsQueue } from '/assets/gpsqueue.js';
 
 const tid = new URLSearchParams(location.search).get('id');
-if (!tid) location.href = '/';
+// 打錯 id、不是成員、被移出、沒登入：先擋下來顯示錯誤畫面（或導去登入），不會卡在「載入中」一直重連（UX-02）
+await tripGate(tid);
 
 const STATUS = {
   ride: ['騎乘中', 'ok'], rest: ['停車中', 'info'], weak: ['訊號弱', 'warn'],
@@ -39,7 +40,7 @@ const map = M.map;
 map.setPitch(55);
 window.qijiMap = map; // 方便在主控台除錯
 window.qijiM = M; // trip-extra.js（M3 互動功能）用
-const S = { trip: null, me: null, members: new Map(), events: [], follow: 'all', away: false, awayAt: 0, lastInteract: 0, nearby: {}, gps: null, wake: null, trailDirty: true };
+const S = { trip: null, me: null, members: new Map(), events: [], follow: 'all', away: false, awayAt: 0, lastInteract: 0, nearby: {}, nearbyFail: 0, gps: null, wake: null, trailDirty: true };
 window.qijiState = S; // 除錯用
 
 /* ---------- 成員與標記 ---------- */
@@ -359,7 +360,7 @@ $('#teamAdmin').onclick = async (e) => {
 };
 
 function renderEvents() {
-  const name = (uid) => S.members.get(uid)?.u.nickname || '';
+  const name = (uid) => S.members.get(uid)?.u.nickname || S.trip?.people?.[uid]?.nickname || '';  // people：已被移出的人（UX-54）
   $('#events').innerHTML = S.events.slice().reverse().map((e) => {
     const [, color] = EV[e.type] || ['', 'var(--muted)'];
     return `<div class="ev"><time class="num">${clock(+e.ts)}</time><i style="--c:${color}"></i><span>${e.uid ? `<b>${esc(name(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`;
@@ -402,7 +403,8 @@ setInterval(() => { if (S.trip) { renderHeader(); renderTeam(); S.members.forEac
 function connect() {
   liveSocket(`/ws/trips/${tid}`, {
     onMessage: handle,
-    onForbidden: () => { toast('你不是這個行程的成員', { icon: '!', color: '#ff3b30' }); setTimeout(() => (location.href = '/'), 1500); },
+    // 連線途中失去權限（例如斷線期間被移出）：重新檢查一次，顯示對應的錯誤畫面或導去登入
+    onForbidden: () => { tripGate(tid, { fresh: true }); },
   });
 }
 
@@ -449,7 +451,8 @@ function handle(msg) {
       renderHeader();
       break;
     case 'kicked':
-      if (msg.uid === S.me) { toast('你已被移出這個行程', { icon: '!', color: '#ff3b30' }); setTimeout(() => (location.href = '/'), 1500); }
+      // 回首頁並顯示「你已被移出○○」（和被移出推播點進去的畫面一樣）
+      if (msg.uid === S.me) location.replace(`/?kicked=${tid}&name=${encodeURIComponent(S.trip?.name || '')}`);
       else { const m = S.members.get(msg.uid); m?.marker.remove(); S.members.delete(msg.uid); S.trailDirty = true; renderTeam(); }
       break;
     case 'event': {
@@ -458,7 +461,7 @@ function handle(msg) {
       renderEvents();
       const meta = EV[msg.type];
       if (meta && msg.type !== 'create') {
-        const who = S.members.get(msg.uid)?.u.nickname;
+        const who = S.members.get(msg.uid)?.u.nickname || S.trip?.people?.[msg.uid]?.nickname;
         toast(`${who ? who + ' ' : ''}${msg.text}`, { icon: meta[2], color: meta[3], sub: clock(+msg.ts) });
       }
       break;
@@ -470,7 +473,11 @@ function handle(msg) {
 setInterval(async () => {
   const me = S.members.get(S.me);
   if (!me?.onMap || S.trip?.status !== 'live') return;
-  try { const r = await api(`/api/trips/${tid}/nearby`); S.nearby = Object.fromEntries(r.items.map((x) => [x.uid, x.km])); } catch { /* 下次再試 */ }
+  try { const r = await api(`/api/trips/${tid}/nearby`); S.nearby = Object.fromEntries(r.items.map((x) => [x.uid, x.km])); S.nearbyFail = 0; }
+  catch {
+    // 5 秒後會再試；連續失敗 3 次（約 15 秒）才提示一次，不要每 5 秒跳一則（UX-38）
+    if (++S.nearbyFail === 3) toast('隊友距離暫時算不出來，會自動重試', { icon: '!', color: '#ff9f0a' });
+  }
 }, 5000);
 
 /* ---------- 回報：網頁定位 ---------- */

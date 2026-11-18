@@ -20,10 +20,19 @@ PING_S = 15
 async def trip_ws(ws: WebSocket, tid: str):
     tok = ws.cookies.get(COOKIE) or ws.query_params.get("token")
     uid = await uid_from_token(tok)
-    if not uid or not await r.sismember(K.members(tid), uid):
-        await ws.close(code=4403)
-        return
+    # 先 accept 再 close：握手階段就 close 的話，瀏覽器只會收到 1006（看不到原因），前端會一直重連。
+    # 4401＝沒登入、4404＝行程不存在、4403＝不是成員（含被移出），前端收到就停止重連並顯示錯誤畫面。
     await ws.accept()
+    code = None
+    if not uid:
+        code = 4401
+    elif not await r.exists(K.trip(tid)):
+        code = 4404
+    elif not await r.sismember(K.members(tid), uid):
+        code = 4403
+    if code:
+        await ws.close(code=code)
+        return
     await r.incr("stat:ws")                       # 後台：目前的 WebSocket 連線數
     await r.zadd("online:viewer", {uid: int(time.time() * 1000)})
     ps = r.pubsub()

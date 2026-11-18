@@ -1,10 +1,13 @@
 // 行程頁的 M3／M4 功能：集合點、前方測速、快速訊息、地圖標註、SOS、路線（進度條、轉彎提示）。
 // 和 trip.js 分開放，避免和畫面設計的改動互相衝突。trip.js 只提供三個掛鉤：
 //   window.qijiM（地圖包裝）、window.qijiState（頁面狀態）、window 的 'qiji:msg' 事件（每則 WebSocket 訊息）
-import { api, $, esc, toast, clock } from '/assets/common.js';
+import { api, tripGate, $, esc, toast, clock } from '/assets/common.js';
 import { mountPushCard } from '/assets/push.js';
 
 const tid = new URLSearchParams(location.search).get('id');
+// 和 trip.js 共用同一次檢查：不是成員就不發集合點／SOS／聊天這些請求（不會留下一串 403，UX-02）。
+// trip.js 也在等同一個 Promise、而且先註冊，所以這裡接著跑時 window.qijiM 已經設好了
+await tripGate(tid);
 const M = window.qijiM, map = window.qijiMap, S = window.qijiState;
 const X = { wps: [], pins: new Map(), open: null, pick: null };
 const KIND = { meet: '集合點', rest: '休息點' };

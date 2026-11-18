@@ -197,6 +197,10 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     map.triggerRepaint = () => { if (touching) { last = performance.now(); repaint(); } else if (!pending) tryPaint(); };
   }
   if (!terrain) map.setMaxPitch(0);
+  // OpenFreeMap 的樣式引用了 sprite 裡沒有的圖示（circle-11、wood-pattern），每次載入都會警告：補一張透明圖（UX-53）
+  map.on('styleimagemissing', (e) => {
+    if (!map.hasImage(e.id)) map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+  });
 
   // 底圖、地形圖磚還沒出來前畫面是一片黑：先放「地圖載入中」，圖磚到齊就收掉
   const loadingEl = document.createElement('div');

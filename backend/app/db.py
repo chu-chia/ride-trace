@@ -25,6 +25,7 @@ class K:
     trip = staticmethod(lambda tid: f"trip:{tid}")
     invite = staticmethod(lambda code: f"invite:{code}")
     members = staticmethod(lambda tid: f"trip:{tid}:members")
+    kicked = staticmethod(lambda tid: f"trip:{tid}:kicked")      # Set：被建立者移出的人（錯誤畫面分辨「被移出」和「不是成員」）
     active = staticmethod(lambda tid: f"trip:{tid}:active")
     geo = staticmethod(lambda tid: f"trip:{tid}:geo")
     state = staticmethod(lambda tid, uid: f"trip:{tid}:state:{uid}")

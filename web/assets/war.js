@@ -1,12 +1,12 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
+import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
 
 const tid = new URLSearchParams(location.search).get('id');
-if (!tid) location.href = '/';
+await tripGate(tid);  // 錯誤 id／非成員／被移出／沒登入：錯誤畫面或登入頁（UX-02）
 const M = createMap($('#map'), { style: 'dark', zoom: 7, terrain: true });
 const map = M.map;
 window.qijiMap = map;
@@ -526,7 +526,7 @@ function renderProgress() {
 /* ---------- WebSocket ---------- */
 // 自動重連＋斷線橫幅在 livesock.js（和行程頁共用）
 function connect() {
-  liveSocket(`/ws/trips/${tid}`, { onMessage: handle, onForbidden: () => { $('#sub').textContent = '你不是這個行程的成員'; } });
+  liveSocket(`/ws/trips/${tid}`, { onMessage: handle, onForbidden: () => { tripGate(tid, { fresh: true }); } });
 }
 function handle(msg) {
   switch (msg.kind) {
@@ -568,6 +568,7 @@ function handle(msg) {
     case 'waypoints': S.waypoints = msg.items || []; renderCards(); break;
     case 'member': upsert(msg.user, {}); break;
     case 'trip': if (S.trip) S.trip.status = msg.status; break;
+    case 'kicked': if (msg.uid === S.trip?.me) tripGate(tid, { fresh: true }); else { S.members.get(msg.uid)?.marker?.remove(); S.members.delete(msg.uid); } break;
     case 'event':
       S.events.push(msg);
       if (S.events.length > 200) S.events.shift();
