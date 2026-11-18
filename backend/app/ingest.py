@@ -17,6 +17,7 @@ HEARTBEAT_S = 90         # 移動中：90 秒沒有回報就算失聯（騎車�
 HEARTBEAT_REST_S = 600   # 停著（< 5 km/h）：10 分鐘。iPhone 停著時定位 App 會休眠、要離開原地一段距離才醒，
                          # 停紅燈、休息、出發前在室內等都不會有新點；停太久的安全問題交給「久停」警示
 REST_KMH = 5
+DUP_MS = 20_000          # 同一個人 20 秒內有 Traccar 的點，網頁的點只當心跳（兩邊交錯會讓軌跡鋸齒，見 11-18 #62）
 
 
 def heartbeat_s(speed_ms: float | None) -> int:
@@ -74,7 +75,7 @@ async def ingest(uid: str, fix: Fix) -> dict:
     # 先讀：目前所在行程、上一個點、目前狀態（一次 round trip）
     async with r.pipeline(transaction=False) as p:
         p.get(K.active_trip(uid))
-        p.hmget(K.last(uid), "ts", "lat", "lon", "ats", "alat", "alon")
+        p.hmget(K.last(uid), "ts", "lat", "lon", "ats", "alat", "alon", "tts")
         tid_res, last = await p.execute()
     tid = tid_res
     live = False
@@ -104,6 +105,18 @@ async def ingest(uid: str, fix: Fix) -> dict:
     # 精度太差的點（geo.MAX_ACC_M）：只更新目前位置與心跳，不進足跡、軌跡、里程
     rough = is_rough(fix.acc)
     fresh = prev is None or ts > prev[0]
+
+    # 網頁＋Traccar 同時開：以 Traccar 為準（背景、鎖螢幕都能跑）。時間用手機的 GPS 時間（兩邊是同一個時鐘）。
+    # Traccar 超過 20 秒沒送（例如 iPhone 停著時休眠）網頁就自動接手；被略過的網頁點仍然續心跳，不會被判失聯。
+    if fix.src == "web" and last[6] and fresh and ts - int(last[6]) < DUP_MS:
+        hb = heartbeat_s(fix.speed)
+        async with r.pipeline(transaction=False) as p:
+            if live:
+                p.hset(K.state(tid, uid), mapping={"seen": now, "status": "ok", "hbs": hb})
+                p.set(K.hb(tid, uid), now, ex=hb)
+            p.zadd("online:report", {uid: now})
+            await p.execute()
+        return {"ok": True, "trip": tid if live else None, "footprint": False, "rough": rough, "errors": [], "stale": False, "dup": True}
     keep = fresh and not rough and personal
     cells = segment_cells(prev, (ts, fix.lat, fix.lon)) if keep else set()
     dist_m, _, new_anchor = step(anchor, (ts, fix.lat, fix.lon), fix.acc) if keep else (0.0, 0.0, anchor)
@@ -151,6 +164,8 @@ async def ingest(uid: str, fix: Fix) -> dict:
             hb = heartbeat_s(fix.speed)
             p.hset(K.state(tid, uid), mapping={**(fields if fresh or not personal else {}), "status": "ok", "seen": now, "hbs": hb})
             p.set(K.hb(tid, uid), now, ex=hb)
+        if fix.src == "traccar" and fresh:
+            p.hset(K.last(uid), "tts", ts)  # 最後一個 Traccar 點的 GPS 時間（網頁點要不要略過看這個）
         p.zadd("online:report", {uid: now})  # 後台「線上人數」：最近 2 分鐘有回報位置的人（ZCOUNT）
         # 交給 worker：行程中的回報（警示、統計），以及所有新的足跡點（熱力圖、點亮鄉鎮）
         if fresh or not personal:
@@ -182,7 +197,7 @@ async def track_batch(body: Batch, uid: str = Depends(current_uid)):
     所以軌跡、里程、足跡都跟即時送的一樣；單點座標不合法就略過，不影響其他點。"""
     if len(body.points) > 500:
         raise HTTPException(413, "一次最多 500 點")
-    ok = stale = bad = 0
+    ok = stale = bad = dup = 0
     trip = None
     for fix in sorted(body.points, key=lambda f: f.ts or 0):
         try:
@@ -192,8 +207,9 @@ async def track_batch(body: Batch, uid: str = Depends(current_uid)):
             continue
         ok += 1
         stale += res["stale"]
+        dup += res.get("dup", False)
         trip = res["trip"] or trip
-    return {"ok": True, "accepted": ok, "stale": stale, "rejected": bad, "trip": trip}
+    return {"ok": True, "accepted": ok, "stale": stale, "rejected": bad, "dup": dup, "trip": trip}
 
 
 @router.api_route("/osmand", methods=["GET", "POST"])

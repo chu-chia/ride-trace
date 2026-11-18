@@ -506,7 +506,7 @@ function ensureQueue() {
   gpsQ = gpsQueue(S.me, { onChange: renderGpsInfo });
   return gpsQ;
 }
-function renderGpsInfo({ pending, sent, error }) {
+function renderGpsInfo({ pending, sent, error, dup }) {
   const el = $('#gpsInfo');
   if (pending > 1 || (pending && error)) {
     el.textContent = `${error || '補傳中'} · 手機暫存 ${pending} 筆，恢復連線後自動補傳`;
@@ -515,6 +515,8 @@ function renderGpsInfo({ pending, sent, error }) {
   }
   el.classList.remove('warn');
   if (!S.gps) { if (sent) el.textContent = `暫存的位置已全部補傳（${sent} 筆）`; return; }
+  // Traccar 也在送：後端以 Traccar 為準，網頁的點只當心跳；Traccar 停了（例如停車時休眠）網頁會自動接手
+  if (dup) { el.textContent = `Traccar 正在回報，網頁暫停記錄（Traccar 停了會自動接手）· ${clock(Date.now())}`; return; }
   el.textContent = `已送出 ${sent} 筆${gpsAcc != null ? ` · 精度 ${Math.round(gpsAcc)} m` : ''} · ${clock(Date.now())}`;
 }
 async function onFix(p) {

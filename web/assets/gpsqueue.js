@@ -15,9 +15,10 @@ export function gpsQueue(uid, { onChange } = {}) {
   let timer = null;
   let lastError = '';
   let sent = 0;
+  let dup = false;  // 最近一批全部被後端略過：Traccar 正在回報（以 Traccar 為準）
 
   const save = () => { try { localStorage.setItem(key, JSON.stringify(items)); } catch { /* 容量滿了就只留在記憶體 */ } };
-  const notify = () => onChange?.({ pending: items.length, sent, error: lastError });
+  const notify = () => onChange?.({ pending: items.length, sent, error: lastError, dup });
 
   async function pump() {
     if (pumping) return;
@@ -42,7 +43,11 @@ export function gpsQueue(uid, { onChange } = {}) {
         // 2xx：送出成功；其他 4xx：資料本身有問題，重送也沒用，丟掉免得卡住後面的點
         items.splice(0, batch.length);
         save();
-        if (res.ok) { sent += batch.length; lastError = ''; } else lastError = `有 ${batch.length} 筆被拒收（${res.status}）`;
+        if (res.ok) {
+          sent += batch.length; lastError = '';
+          const body = await res.json().catch(() => ({}));
+          dup = body.accepted > 0 && body.dup === body.accepted;
+        } else lastError = `有 ${batch.length} 筆被拒收（${res.status}）`;
         notify();
       }
     } finally {
