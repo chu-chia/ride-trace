@@ -76,19 +76,19 @@
   <div class="panel-body" data-b="towns">
     <div class="hero"><b class="num" id="tLit">–</b><span id="tOf">/ 368 個鄉鎮市區</span></div>
     <div class="bar"><i id="tBar" style="width:0"></i></div>
-    <div class="note">騎過的鄉鎮會亮起來。每個位置點都用 Redis 的 GEOSHAPE 空間索引查出所在鄉鎮（FT.SEARCH … CONTAINS），第一次點亮時 SADD 回傳 1。</div>
+    <div class="note">騎過的鄉鎮會亮起來，看看全台 368 個鄉鎮市區你去過幾個。<a href="/about#how">怎麼算的？</a></div>
     <div class="card2"><h4>最近點亮</h4><div id="tRecent"></div></div>
     <div class="card2"><h4>各縣市完成度</h4><div id="tCounties"></div></div>
   </div>
   <div class="panel-body" data-b="heat" hidden>
-    <div class="note">所有足跡疊在一起，越亮代表經過越多次。每個格子約 160 m，用 Sorted Set（ZINCRBY）累計，ZREVRANGE 取出前幾名就是最常走的路；放大到街道時改用 GEO 的 GEOSEARCH BYBOX 只取畫面內的每一個足跡點。</div>
+    <div class="note">所有足跡疊在一起，越亮代表經過越多次；放大到街道會顯示每一個足跡點。<a href="/about#how">怎麼算的？</a></div>
     <div class="legend">少<i style="background:linear-gradient(90deg,rgba(255,138,61,.15),#ff8a3d,#ffd60a,#fff)"></i>多</div>
     <div class="card2"><h4>最常去的地方</h4><div id="hPlaces"></div></div>
   </div>
   <div class="panel-body" data-b="stats" hidden>
     <div class="kpi"><div><b class="num" id="sKm">–</b><span>總里程 km</span></div><div><b class="num" id="sDays">–</b><span>有騎車的天數</span></div><div><b class="num" id="sTrips">–</b><span>車隊行程</span></div></div>
     <div class="card2"><h4>每月里程（km）</h4><div class="chart" id="sChart"></div></div>
-    <div class="card2"><h4>你在各種路的實際速度</h4><div id="sPace"></div><div class="note" style="margin-top:6px">規劃路線時的「依你的速度」就是用這些數字（TimeSeries：TS.MRANGE … GROUPBY cat REDUCE sum）。</div></div>
+    <div class="card2"><h4>你在各種路的實際速度</h4><div id="sPace"></div><div class="note" style="margin-top:6px">規劃路線時的「依你的速度」就是用這些數字。<a href="/about#how">怎麼算的？</a></div></div>
   </div>
 </aside>
 

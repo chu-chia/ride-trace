@@ -103,7 +103,7 @@
   <div class="row2">
     <form class="card glass" id="createF">
       <div class="eyebrow">臨時開團</div>
-      <input class="input" id="tripName" placeholder="行程名稱，例如 武嶺日出團" maxlength="30" aria-label="行程名稱">
+      <input class="input" id="tripName" placeholder="行程名稱，例如 武嶺日出團" maxlength="30" aria-label="行程名稱（留空會用今天日期命名）">
       <button class="btn primary">建立行程</button>
     </form>
     <form class="card glass" id="joinF">
@@ -138,7 +138,9 @@ $('#today').textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${'�
   }
 }
 const me = await api('/api/me');
-$('#hello').textContent = `${d.getHours() < 11 ? '早安' : d.getHours() < 18 ? '午安' : '晚安'}，${me.nickname}`;
+// 0～4 點是深夜，不說「早安」（UX-48）
+const hr = d.getHours();
+$('#hello').textContent = `${hr < 4 ? '夜深了' : hr < 11 ? '早安' : hr < 18 ? '午安' : '晚安'}，${me.nickname}`;
 $('#me').innerHTML = avatar(me);
 $('#meName').textContent = me.nickname;
 $('#meUser').textContent = '@' + me.username;
@@ -177,7 +179,8 @@ async function join(code) {
 }
 $('#createF').onsubmit = async (e) => {
   e.preventDefault();
-  try { const t = await api('/api/trips', { method: 'POST', body: { name: $('#tripName').value || '臨時開團' } }); location.href = '/trip?id=' + t.id; }
+  // 留空就交給後端用台灣日期命名（例如「11/19（四）臨時開團」），不會每一趟都同名（UX-44）
+  try { const t = await api('/api/trips', { method: 'POST', body: { name: $('#tripName').value.trim() } }); location.href = '/trip?id=' + t.id; }
   catch (err) { $('#err').textContent = err.message; }
 };
 $('#joinF').onsubmit = (e) => { e.preventDefault(); document.activeElement?.blur(); join($('#code').value.trim().toUpperCase()); };
@@ -204,12 +207,13 @@ let fpSummary = null, fpCells = null;
 function renderFpNums() {
   if (fpSummary && !fpSummary.points) {
     $('#fpTitle').textContent = '還沒有足跡';
-    $('#fpNums').innerHTML = '<div><span>開始一趟行程，或匯入 GPX，地圖就會一格一格亮起來</span></div>';
+    $('#fpNums').innerHTML = '<div><span>騎完第一趟，走過的路就會一格一格亮起來</span></div>';
     $('#fpPreview').hidden = true;
     $('#fpCanvas').getContext('2d').clearRect(0, 0, $('#fpCanvas').width, $('#fpCanvas').height);
     try { localStorage.removeItem(previewKey); } catch { /* 儲存空間不可用 */ }
     return;
   }
+  $('#fpTitle').textContent = '去過的每一條路';  // 空狀態改過標題，有資料時要改回來（UX-39）
   const n = fpSummary ? Object.keys(fpSummary.days).length : null;
   const km = fpSummary ? Object.values(fpSummary.days).reduce((a, b) => a + b, 0) : null;
   $('#fpNums').innerHTML = `${n == null ? '' : `<div><strong class="num">${n.toLocaleString()}</strong><span>天有紀錄</span></div><div><strong class="num">${Math.round(km).toLocaleString()} km</strong><span>總里程</span></div>`}${fpCells ? `<div><strong class="num">${fpCells.count.toLocaleString()}</strong><span>個點亮的格子</span></div>` : ''}`;
