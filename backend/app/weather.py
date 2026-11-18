@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import time
+import zlib
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -25,6 +26,8 @@ from .longterm import town_of_cell
 log = logging.getLogger("qiji.weather")
 
 API_KEY = os.environ.get("CWA_API_KEY", "")
+# FAKE_EXTERNAL=1：不呼叫氣象署（有次數限制），改用固定規則產生的模擬預報（Demo、開發用）
+FAKE = os.environ.get("FAKE_EXTERNAL", "") == "1"
 URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-{id}"
 # 各縣市「未來 3 天」鄉鎮預報的資料集代號（逐一實測確認過）
 DATASET = {
@@ -44,7 +47,34 @@ def tw(ms: int, fmt: str = "%H:%M") -> str:
 
 
 def enabled() -> bool:
-    return bool(API_KEY)
+    return FAKE or bool(API_KEY)
+
+
+_TOWNS: dict[str, list[str]] = {}
+
+
+async def _fake(county: str) -> dict:
+    """模擬預報：每個鄉鎮、每個 3 小時時段用名稱算一個固定的降雨機率（約兩成時段 ≥ 60%，會觸發前方降雨提醒）。"""
+    if not _TOWNS:
+        ids = list(await r.smembers("towns:all"))
+        async with r.pipeline(transaction=False) as p:
+            for i in ids:
+                p.hmget(f"town:{i}", "name", "county")
+            for name, c in await p.execute():
+                if name and c:
+                    _TOWNS.setdefault(c, []).append(name)
+    block = 3 * 3600_000
+    now = int(time.time() * 1000)
+    start = (now + 8 * 3600_000) // block * block - 8 * 3600_000  # 台灣時間 0、3、6…點對齊
+    out = {}
+    for town in _TOWNS.get(county, []):
+        rows = []
+        for k in range(24):
+            s0 = start + k * block
+            h = zlib.crc32(f"{county}{town}{s0 // block}".encode())
+            rows.append([s0, s0 + block, [0, 10, 10, 20, 20, 30, 30, 40, 70, 80][h % 10]])
+        out[town] = rows
+    return out
 
 
 def _ms(s: str) -> int:
@@ -75,6 +105,8 @@ async def county_forecast(county: str) -> dict | None:
     """cache-aside：快取有就用；沒有就搶鎖去抓，沒搶到的這次先不判斷（下次再來）。"""
     if not enabled() or county not in DATASET:
         return None
+    if FAKE:
+        return await _fake(county)
     key = f"cache:cwa:{county}"
     hit = await r.get(key)
     if hit:
@@ -112,5 +144,5 @@ async def rain_at(lat: float, lon: float, when_ms: int) -> dict | None:
         return None
     for s, e, pop in rows:
         if s <= when_ms < e:
-            return {"county": t[0], "town": t[1], "pop": pop, "start": s, "end": e}
+            return {"county": t[0], "town": t[1], "pop": pop, "start": s, "end": e, "fake": FAKE}
     return None

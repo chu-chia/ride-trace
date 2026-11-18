@@ -191,5 +191,6 @@ async def along_weather(body: AlongIn) -> list[dict]:
             continue
         out.append({"id": f"{t[0]}{t[1]}", "name": f"{t[0]}{t[1]}", "lon": lon, "lat": lat, "route_km": round(km, 1),
                     "off_m": 0, "pop": w["pop"], "type": f"降雨 {w['pop']}%",
-                    "area": f"約 {weather.tw(eta)} 經過 · {weather.tw(w['start'], '%H')}–{weather.tw(w['end'], '%H')} 時預報"})
+                    "area": f"約 {weather.tw(eta)} 經過 · {weather.tw(w['start'], '%H')}–{weather.tw(w['end'], '%H')} 時預報"
+                            + ("（模擬資料）" if w.get("fake") else "")})
     return out

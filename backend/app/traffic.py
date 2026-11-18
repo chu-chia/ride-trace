@@ -31,6 +31,17 @@ CLIENT_SECRET = os.environ.get("TDX_CLIENT_SECRET", "")
 TOKEN_URL = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
 LIVE_URL = "https://tdx.transportdata.tw/api/basic/v1/Traffic/RoadEvent/LiveEvent/Highway"  # TDX 的 Highway＝省道
 
+# FAKE_EXTERNAL=1：不呼叫 TDX（每月只有 3 點），改用幾筆固定的模擬事件（Demo、開發用）
+FAKE = os.environ.get("FAKE_EXTERNAL", "") == "1"
+FAKE_EVENTS = [  # (ID, 經度, 緯度, 道路, 類型, 標題, 說明)
+    ("FAKE-1", 121.4953, 24.1825, "台8線", 6, "落石", "天祥附近落石，單線通行"),
+    ("FAKE-2", 121.3095, 24.1745, "台8線", 2, "道路施工", "大禹嶺路段施工，交通管制"),
+    ("FAKE-3", 121.2763, 24.1372, "台14甲線", 5, "濃霧", "武嶺一帶濃霧，能見度低"),
+    ("FAKE-4", 121.1580, 24.0230, "台14線", 2, "道路施工", "霧社路段路面整修"),
+    ("FAKE-5", 121.7110, 24.9370, "台9線", 4, "交通管制", "北宜公路坪林段假日管制"),
+    ("FAKE-6", 120.9930, 23.2450, "台20線", 4, "交通管制", "南橫向陽路段夜間封閉"),
+]
+
 FRESH_S = 120          # 來源每 5 分鐘更新，2 分鐘快取已經夠即時
 FAIL_COOLDOWN_S = 60   # 抓失敗也冷卻一下，避免一直重打
 TOKEN, FRESH, LOCK = "cache:tdx:token", "cache:tdx:roadev", "lock:tdx:roadev"
@@ -42,7 +53,21 @@ POINT_RE = re.compile(r"POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)")
 
 
 def enabled() -> bool:
-    return bool(CLIENT_ID and CLIENT_SECRET)
+    return FAKE or bool(CLIENT_ID and CLIENT_SECRET)
+
+
+async def _load_fake():
+    async with r.pipeline(transaction=True) as p:
+        p.delete(GEO, INFO)
+        for eid, lon, lat, road, typ, title, desc in FAKE_EVENTS:
+            p.geoadd(GEO, (lon, lat, eid))
+            p.hset(INFO, eid, json.dumps({"id": eid, "lon": lon, "lat": lat, "type": typ, "type_name": TYPE_NAME[typ],
+                                          "title": title, "desc": f"{desc}（模擬資料）", "road": road, "dir": "",
+                                          "start": None, "updated": None, "source": "模擬資料"}, ensure_ascii=False))
+        p.hset(META, mapping={"source": "模擬資料（FAKE_EXTERNAL=1，不呼叫 TDX）", "count": len(FAKE_EVENTS),
+                              "updated": int(time.time() * 1000)})
+        p.set(FRESH, 1, ex=3600)
+        await p.execute()
 
 
 async def _count_call():
@@ -121,6 +146,9 @@ async def ensure_fresh() -> bool:
     if not enabled():
         return False
     if await r.exists(FRESH):
+        return True
+    if FAKE:
+        await _load_fake()
         return True
     if not await r.set(LOCK, 1, nx=True, ex=30):
         return bool(await r.exists(GEO))

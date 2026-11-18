@@ -93,6 +93,11 @@ Traccar Client 的 **SOS 按鈕**（送出 `alarm=sos`）會走跟網頁 SOS 一
 
 `.env` 填 `CWA_API_KEY`（opendata.cwa.gov.tw → 取得授權碼）。用「臺灣各縣市鄉鎮未來 3 天天氣預報」的 3 小時降雨機率（F-D0047-001～085，一個縣市一份）。位置先在本機用 GEOSHAPE 換成鄉鎮，只向氣象署要整個縣市的預報，座標不會送出去。
 
+## 模擬資料與 Demo 循環
+
+- `.env` 設 `FAKE_EXTERNAL=1`：天氣（氣象署）與路況（TDX）都不呼叫外部 API，改用固定規則產生的模擬資料（文字會標「模擬資料」），不消耗次數。真的出去騎之前改回空白並 `docker compose up -d api worker`。
+- Demo 循環：`cd backend && nohup uv run python -u -m tools.simulate --group zhongheng --trip 57 --speed 1 --interval 2 --loop > ../data/sim-demo.log 2>&1 &`。每一圈開始前清掉這趟的即時資料（與機器人的個人足跡）再重跑，跑完休息 30 秒再來；行程會標 `demo=1`，**demo 行程的事件不推播**。停止：`pkill -f tools.simulate`。
+
 ## 推播通知（Web Push）
 
 1. 產生金鑰貼進 `.env`：`cd backend && uv run --with cryptography python -m tools.gen_vapid`（`VAPID_PUBLIC_KEY`、`VAPID_PRIVATE_KEY`；`VAPID_SUBJECT` 填 `mailto:` 或 `https:`），再 `docker compose up -d api worker`。

@@ -23,7 +23,8 @@ NOTIFY_TYPES = {"sos", "lost", "behind", "stuck", "allin", "speedcam", "offroute
 
 async def notify(tid: str, eid: str, etype: str, uid: str | None, text: str):
     """交給 worker 的 consumer group「push」去推播（API 不等推播服務回應）。"""
-    if etype in NOTIFY_TYPES:
+    # Demo 行程（tools.simulate --loop）無限重播：事件照常顯示，但不推播，不然手機會被一直推
+    if etype in NOTIFY_TYPES and not await r.hget(K.trip(tid), "demo"):
         await r.xadd("stream:notify", {"trip": tid, "eid": eid, "type": etype, "uid": uid or "", "text": text},
                      maxlen=5000, approximate=True)
 

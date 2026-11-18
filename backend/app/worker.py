@@ -327,7 +327,8 @@ async def check_weather(tid: str, uid: str, f: dict):
             return
         where = "目前所在" if d == 0 else f"約 {round(d / kmh * 60)} 分鐘後經過"
         await events.emit(tid, "weather", None,
-                          f"前方降雨｜{w['county']}{w['town']}（{where}）{weather.tw(w['start'], '%H')}–{weather.tw(w['end'], '%H')} 時降雨機率 {w['pop']}%",
+                          f"前方降雨｜{w['county']}{w['town']}（{where}）{weather.tw(w['start'], '%H')}–{weather.tw(w['end'], '%H')} 時降雨機率 {w['pop']}%"
+                          + ("（模擬資料）" if w.get("fake") else ""),
                           ts=int(f["ts"]), town=w["town"], pop=w["pop"], by=uid)
         return
 

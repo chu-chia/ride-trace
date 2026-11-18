@@ -44,6 +44,7 @@ services:
       TDX_CLIENT_ID: ${TDX_CLIENT_ID:-}
       TDX_CLIENT_SECRET: ${TDX_CLIENT_SECRET:-}
       CWA_API_KEY: ${CWA_API_KEY:-}
+      FAKE_EXTERNAL: ${FAKE_EXTERNAL:-}
     volumes:
       - ./web:/web:ro
     ports:
@@ -67,6 +68,7 @@ services:
       TDX_CLIENT_ID: ${TDX_CLIENT_ID:-}
       TDX_CLIENT_SECRET: ${TDX_CLIENT_SECRET:-}
       CWA_API_KEY: ${CWA_API_KEY:-}
+      FAKE_EXTERNAL: ${FAKE_EXTERNAL:-}
     depends_on:
       redis:
         condition: service_healthy
