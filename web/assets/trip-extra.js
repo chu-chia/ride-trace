@@ -102,8 +102,9 @@ function renderWpPanel() {
         </div>
         <div class="qx-inline"><button type="button" class="btn" id="wpCancel">取消</button><button class="btn primary">新增</button></div>
       </form>`
-    : `<button class="btn block" id="wpAdd">${X.pick?.mode === 'wp' ? '點地圖選擇位置…（再按一次取消）' : '＋ 在地圖上點選新增'}</button>`}`;
+    : `<div class="qx-inline"><button class="btn" id="wpHere">用我的位置</button><button class="btn" id="wpAdd">${X.pick?.mode === 'wp' ? '點地圖…（取消）' : '在地圖上點選'}</button></div>`}`;
   $('#wpAdd')?.addEventListener('click', () => startPick('wp'));
+  $('#wpHere')?.addEventListener('click', () => pickMine('wp'));
   $('#wpCancel')?.addEventListener('click', () => { clearPick(); render(); });
   $('#wpForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -116,14 +117,42 @@ function renderWpPanel() {
   });
   $('#wpForm input')?.focus();
 }
+// 在地圖上點選位置：手機的抽屜會蓋住大半張地圖，進入點選時先收起來，上方浮一條提示（可取消）；選好再展開填表（UX-34）
+const PICK_TEXT = { wp: '點地圖選擇集合點的位置', mark: '點地圖選擇標註的位置' };
 function startPick(mode) {
   if (X.pick?.mode === mode) { clearPick(); render(); return; }
   clearPick();
   X.pick = { mode, lngLat: null };
   map.getCanvas().style.cursor = 'crosshair';
+  if (innerWidth <= 760 && S.panel && !S.panel.small) { S.panel.set(true, false); X.pick.reopen = true; }
+  showPickHint(PICK_TEXT[mode]);
   render();
 }
-function clearPick() { X.pick = null; X.pickMarker?.remove(); X.pickMarker = null; map.getCanvas().style.cursor = ''; }
+function showPickHint(text) {
+  hidePickHint();
+  const el = document.createElement('div');
+  el.id = 'qxPickHint';
+  el.className = 'qx-pickhint glass';
+  el.setAttribute('role', 'status');
+  el.innerHTML = `<span>${esc(text)}</span><button type="button" class="btn">取消</button>`;
+  el.querySelector('button').onclick = () => { const reopen = X.pick?.reopen; clearPick(); if (reopen) S.panel?.set(false, false); render(); };
+  document.body.append(el);
+}
+function hidePickHint() { document.getElementById('qxPickHint')?.remove(); }
+function clearPick() { X.pick = null; X.pickMarker?.remove(); X.pickMarker = null; map.getCanvas().style.cursor = ''; hidePickHint(); }
+// 「用我的位置」：集合點、標註共用
+function pickMine(mode) {
+  const me = S.members.get(S.me);
+  if (!me?.pos) { toast('還沒有你的位置，先到「更多 → 裝置與通知」開始定位', { icon: '!', color: '#ff9f0a' }); return; }
+  clearPick();
+  X.pick = { mode, lngLat: { lng: me.pos[0], lat: me.pos[1] } };
+  X.pickMarker = pickPin(X.pick.lngLat);
+  render();
+}
+function pickPin(lngLat) {
+  const el = document.createElement('div'); el.className = 'qx-pin pick'; el.innerHTML = '<b>＋</b>';
+  return new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(lngLat).addTo(map);
+}
 
 pop.addEventListener('click', async (e) => {
   const del = e.target.closest('[data-del]');
@@ -145,9 +174,10 @@ map.on('click', (e) => {
   X.open = X.pick.mode;
   S.goAway();
   X.pickMarker?.remove();
-  const el = document.createElement('div'); el.className = 'qx-pin pick'; el.innerHTML = '<b>＋</b>';
-  X.pickMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(e.lngLat).addTo(map);
+  X.pickMarker = pickPin(e.lngLat);
   map.getCanvas().style.cursor = '';
+  hidePickHint();
+  if (X.pick.reopen) { X.pick.reopen = false; S.panel?.set(false, false); }
   render();
 });
 
@@ -156,18 +186,41 @@ async function loadWps() {
 }
 
 /* ---------- 測速照相 ---------- */
-// 地圖：畫面附近的測速點（GEOSEARCH）；縮太小就不顯示
-X.cams = new Map();
-async function loadCams() {
-  if (map.getZoom() < 11) { X.cams.forEach((c) => c.marker.remove()); X.cams.clear(); return; }
-  const b = map.getBounds(), c = map.getCenter();
-  const km = Math.min(30, Math.max(1, b.getNorthEast().distanceTo(b.getSouthWest()) / 2000));
-  let list;
-  try { list = await api(`/api/speedcam/near?lon=${c.lng.toFixed(5)}&lat=${c.lat.toFixed(5)}&km=${km.toFixed(1)}`); } catch { return; }
-  const keep = new Set(list.map((x) => x.id));
-  for (const [id, m] of X.cams) if (!keep.has(id)) { m.marker.remove(); X.cams.delete(id); }
-  for (const cam of list) {
-    if (X.cams.has(cam.id)) continue;
+// 地圖：畫面附近的測速點（GEOSEARCH）；縮太小就不顯示。
+// 城市視角一次會有一百多個，逐一畫會整片都是數字（UX-19）：依縮放層級用固定網格聚合（網格釘在世界座標上，平移時不會跳），
+// 一格只有一個才畫速限，多個就畫深色的數字圓（和白底的速限分得開），點了放大兩級
+X.cams = new Map();        // 單獨顯示的測速點 id → { cam, el, marker }（camAlert 用它標「經過了」）
+X.camGroups = new Map();   // 聚合圓 key → { el, marker }
+X.camList = [];
+const CAM_CELL = (z) => (z < 12 ? 120 : z < 13 ? 100 : z < 14 ? 72 : 56);   // 一格多大（px）：越遠格子越大
+function drawCams() {
+  const z = Math.floor(map.getZoom());
+  const cell = CAM_CELL(z) / (512 * 2 ** z);   // 換成 Mercator 0～1 座標
+  const groups = new Map();
+  for (const cam of X.camList) {
+    const m = maplibregl.MercatorCoordinate.fromLngLat([cam.lon, cam.lat]);
+    const key = `${z}:${Math.floor(m.x / cell)}:${Math.floor(m.y / cell)}`;
+    (groups.get(key) || groups.set(key, []).get(key)).push(cam);
+  }
+  const singles = new Set(), multi = new Set();
+  for (const [key, list] of groups) {
+    if (list.length === 1) { singles.add(list[0].id); continue; }
+    multi.add(key);
+    if (X.camGroups.has(key)) { X.camGroups.get(key).el.querySelector('b').textContent = list.length; continue; }
+    const lon = list.reduce((a, c) => a + c.lon, 0) / list.length, lat = list.reduce((a, c) => a + c.lat, 0) / list.length;
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'qx-cam group';
+    el.title = `這附近有 ${list.length} 個測速照相，點一下放大`;
+    el.setAttribute('aria-label', el.title);
+    el.innerHTML = `<b>${list.length}</b>`;
+    el.addEventListener('click', (e) => { e.stopPropagation(); map.easeTo({ center: [lon, lat], zoom: Math.min(16, map.getZoom() + 2) }); });
+    X.camGroups.set(key, { el, marker: new maplibregl.Marker({ element: el }).setLngLat([lon, lat]).addTo(map) });
+  }
+  for (const [key, g] of X.camGroups) if (!multi.has(key)) { g.marker.remove(); X.camGroups.delete(key); }
+  for (const [id, m] of X.cams) if (!singles.has(id)) { m.marker.remove(); X.cams.delete(id); }
+  for (const cam of X.camList) {
+    if (!singles.has(cam.id) || X.cams.has(cam.id)) continue;
     const el = document.createElement('div');
     el.className = 'qx-cam';
     el.title = `${cam.addr}（${cam.direct}，速限 ${cam.limit}）`;
@@ -175,10 +228,19 @@ async function loadCams() {
     X.cams.set(cam.id, { cam, el, marker: new maplibregl.Marker({ element: el }).setLngLat([cam.lon, cam.lat]).addTo(map) });
   }
 }
+async function loadCams() {
+  if (map.getZoom() < 11) { X.camList = []; drawCams(); return; }
+  const b = map.getBounds(), c = map.getCenter();
+  const km = Math.min(30, Math.max(1, b.getNorthEast().distanceTo(b.getSouthWest()) / 2000));
+  let list;
+  try { list = await api(`/api/speedcam/near?lon=${c.lng.toFixed(5)}&lat=${c.lat.toFixed(5)}&km=${km.toFixed(1)}`); } catch { return; }
+  X.camList = list;
+  drawCams();
+}
 // 跟隨模式每一格都 jumpTo（每一格都有 moveend），不能用「停下來再載」；改成每 2 秒看一次，移動超過 300 m 或縮放改變才重載
 let camAt = null;
 setInterval(() => {
-  const c = map.getCenter(), z = Math.round(map.getZoom());
+  const c = map.getCenter(), z = Math.floor(map.getZoom());
   if (camAt && camAt.z === z && c.distanceTo(camAt.c) < 300) return;
   camAt = { c, z };
   loadCams();
@@ -405,12 +467,7 @@ function renderMarkPanel() {
       </form>`
     : `<div class="qx-inline"><button class="btn" id="markHere">標在我的位置</button><button class="btn" id="markAdd">${X.pick?.mode === 'mark' ? '點地圖…（取消）' : '在地圖上點選'}</button></div>`}`;
   $('#markAdd')?.addEventListener('click', () => startPick('mark'));
-  $('#markHere')?.addEventListener('click', () => {
-    const me = S.members.get(S.me);
-    if (!me?.pos) { toast('還沒有你的位置，先到「更多 → 裝置與通知」開始定位', { icon: '!', color: '#ff9f0a' }); return; }
-    X.pick = { mode: 'mark', lngLat: { lng: me.pos[0], lat: me.pos[1] } };
-    render();
-  });
+  $('#markHere')?.addEventListener('click', () => pickMine('mark'));
   $('#markCancel')?.addEventListener('click', () => { clearPick(); render(); });
   $('#markForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();

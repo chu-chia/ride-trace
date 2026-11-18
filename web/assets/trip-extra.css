@@ -36,6 +36,10 @@
 .qx-cam b{font-size:10.5px;font-weight:800;color:#1d1d1f;letter-spacing:-.03em}
 .qx-cam.hit{box-shadow:0 0 0 5px rgba(255,159,10,.55),0 1px 5px rgba(0,0,0,.4)}
 .qx-cam.static{flex:none}
+/* 聚合：同一格有好幾個測速點（UX-19），點了放大 */
+/* 和單點（白底紅框、寫速限）分得開：深色底、細紅框、數字是「這附近幾支」 */
+.qx-cam.group{width:24px;height:24px;padding:0;background:rgba(29,29,31,.88);border:2px solid #e5352b;cursor:pointer;font:inherit}
+.qx-cam.group b{color:#fff;font-size:12px}
 .qx-pop code{font-size:11px;word-break:break-all}
 /* 快速訊息 */
 .qx-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -140,3 +144,14 @@ body:has(#panel.small) .qx-turn{left:calc(var(--panel-mini-w) + var(--edge) * 2)
   #tabs{gap:0}
   #tabs button{padding:6px 2px;min-width:0;font-size:12px}
 }
+
+/* 在地圖上點選位置時的提示條（UX-34）：抽屜收起後浮在畫面上方 */
+.qx-pickhint{position:fixed;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 6px 6px 14px;border-radius:999px;font-size:14px;font-weight:600;color:var(--fg);box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:auto;white-space:nowrap;
+  left:50%;top:16px;transform:translateX(-50%)}
+/* 手機：放在轉彎卡下面、右側工具列左邊，不蓋到它們 */
+@media (max-width:760px){.qx-pickhint{left:16px;right:68px;top:calc(env(safe-area-inset-top,0px) + 92px);transform:none}.qx-pickhint span{overflow:hidden;text-overflow:ellipsis}}
+.qx-pickhint .btn{min-height:36px;padding:6px 14px;flex:none}
+/* 事件分頁的篩選（和戰情室同一個元件，UX-29） */
+#evFilter.feed-filters{display:flex;gap:3px;margin:0 0 10px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+#evFilter.feed-filters button{flex:1;min-width:0;min-height:36px;padding:6px 2px;border:0;border-radius:7px;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:650;cursor:pointer}
+#evFilter.feed-filters button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 4px #0002}
