@@ -14,12 +14,58 @@ export async function api(path, opts = {}) {
   // Tailscale serve／反向代理在後端重啟時回 502～504
   if (res.status >= 502 && res.status <= 504) throw new Error('伺服器暫時連不上（可能正在重新啟動），請稍後再試');
   if (res.status === 401 && !location.pathname.startsWith('/login')) {
-    location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
-    throw new Error('請先登入');
+    toLogin();
+    // 已經在換頁：回一個永遠不完成的 Promise，呼叫端不會再收到一堆「請先登入」的未處理錯誤（UX-53）
+    return new Promise(() => {});
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.detail || `錯誤 ${res.status}`);
   return data;
+}
+
+export function toLogin() {
+  location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
+}
+
+/* ---------- 行程頁／戰情室的進場檢查（UX-02） ----------
+   連 WebSocket 之前先問 GET /api/trips/{id}：401 → 登入頁；403（不是成員、被移出）／404（打錯 id）→ 整頁錯誤畫面。
+   同一頁的多個模組（trip.js、trip-extra.js）共用同一次請求。失敗時回傳永遠不完成的 Promise，
+   後面的程式（地圖、輪詢、WebSocket）都不會跑，也不會留下一串 403。 */
+let gateTask = null;
+export function tripGate(tid, { fresh = false } = {}) {
+  if (!gateTask || fresh) gateTask = checkTrip(tid);
+  return gateTask;
+}
+async function checkTrip(tid) {
+  if (!tid || !/^\d+$/.test(tid)) return fatal(404, '找不到這個行程', '網址裡的行程編號不對，可能是連結複製不完整。');
+  let res;
+  try { res = await fetch(`/api/trips/${tid}`, { credentials: 'same-origin' }); }
+  catch { return fatal(0, '連不到伺服器', navigator.onLine === false ? '沒有網路，請檢查手機訊號後再試一次。' : '請稍後再試一次。', true); }
+  if (res.ok) return res.json();
+  if (res.status === 401) { toLogin(); return new Promise(() => {}); }
+  const detail = (await res.json().catch(() => ({}))).detail || '';
+  if (res.status === 404) return fatal(404, '找不到這個行程', '行程可能已經被刪除，或網址打錯了。');
+  if (res.status === 403) {
+    const kicked = detail.includes('移出');
+    return fatal(403, kicked ? '你已被移出這個行程' : '你不是這個行程的成員',
+      kicked ? '建立者把你移出了這個行程。要再加入，請向建立者要新的邀請碼。' : '請向建立者要邀請碼，在首頁輸入後就能加入。');
+  }
+  return fatal(res.status, '暫時打不開這個行程', detail || '伺服器發生錯誤，請稍後再試一次。', true);
+}
+// 整頁錯誤畫面（樣式比照回放頁「你不是這個行程的成員」）：蓋住地圖與所有面板，只留回首頁／重新整理
+export function fatal(code, title, msg, retry = false) {
+  document.querySelector('.qx-fatal')?.remove();
+  document.querySelector('.qx-conn')?.setAttribute('hidden', '');
+  const el = document.createElement('div');
+  el.className = 'qx-fatal';
+  el.setAttribute('role', 'alert');
+  el.innerHTML = `<section class="card">${code ? `<div class="code">${code}</div>` : ''}<h1>${esc(title)}</h1><p>${esc(msg)}</p>
+    <div class="acts">${retry ? '<button type="button" class="btn" data-reload>重新整理</button>' : ''}<a class="btn primary" href="/">回首頁</a></div></section>`;
+  el.querySelector('[data-reload]')?.addEventListener('click', () => location.reload());
+  document.body.append(el);
+  document.title = `${title}｜騎跡`;
+  el.querySelector('.btn.primary').focus();
+  return new Promise(() => {});
 }
 
 export const $ = (s, el = document) => el.querySelector(s);

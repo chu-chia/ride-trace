@@ -61,8 +61,8 @@ export async function swr(url, { onData, key } = {}) {
     headers: old?.etag ? { 'If-None-Match': old.etag } : {},
   });
   if (res.status === 401 && !location.pathname.startsWith('/login')) {
-    location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
-    throw new Error('請先登入');
+    location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
+    return new Promise(() => {});  // 換頁中：不丟「請先登入」未處理錯誤（UX-53）
   }
   if (res.status === 304 && old) {
     onData(old.data, { stale: false, unchanged: true });

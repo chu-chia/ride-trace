@@ -1,5 +1,5 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate, markFocus } from '/assets/common.js';
+import { api, tripGate, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate, markFocus } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { cameraGestures } from '/assets/gestures.js';
 
@@ -8,7 +8,7 @@ let PADS = null;
 const PANEL = initPanel($('#panel'), 'replay', { onChange: () => setTimeout(() => PADS?.refresh(), innerWidth <= 760 ? 0 : 300) });
 
 const tid = new URLSearchParams(location.search).get('id');
-if (!tid) location.href = '/';
+await tripGate(tid);  // 錯誤 id／非成員／被移出：和行程頁、戰情室同一個錯誤畫面
 // 返回一律回首頁（行程結束後只剩回放，回行程頁沒有意義）
 $('#back').href = '/';
 
@@ -27,7 +27,7 @@ let data;
 try { data = await api(`/api/trips/${tid}/replay`); }
 catch (err) {
   $('#tSub').innerHTML = `${esc(err.message)}・<a href="" style="color:inherit;text-decoration:underline">重新整理</a>`;
-  throw err;
+  await new Promise(() => {});  // 停在這裡等使用者重新整理（不丟出未處理的錯誤，UX-53）
 }
 const riders = data.members.filter((m) => m.track.length > 1);
 const t0 = data.t0, t1 = data.t1;
@@ -37,9 +37,12 @@ $('#tName').textContent = data.name;
 document.title = `${data.name} · 回放`;
 if (!riders.length) {
   $('#tSub').textContent = '這趟沒有任何軌跡紀錄';
-  throw new Error('沒有軌跡');
+  await new Promise(() => {});
 }
-$('#tSub').textContent = `${new Date(t0).toLocaleDateString('zh-TW')} ${clock(t0)}–${clock(t1)} · ${riders.length} 人`;
+// 結束原因（UX-62）：「全員結束紀錄」「管理者強制結束」…，取逗號前的短句
+const endWhy = data.status === 'ended' && data.ended_reason ? ` · ${data.ended_reason.split('，')[0]}` : '';
+$('#tSub').textContent = `${new Date(t0).toLocaleDateString('zh-TW')} ${clock(t0)}–${clock(t1)} · ${riders.length} 人${endWhy}`;
+$('#tSub').title = data.ended_reason || '';
 
 /* ---------- 每個人的軌跡：累積里程、內插 ---------- */
 const hav = (a, b, c, d) => { const R6 = 6371000, p1 = (a * Math.PI) / 180, p2 = (c * Math.PI) / 180, dl = ((d - b) * Math.PI) / 180; return 2 * R6 * Math.asin(Math.sqrt(Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2)); };
@@ -233,8 +236,9 @@ function renderTeam() {
   $('#miniTeam').textContent = `${riders.length} 人 · ${active.length} 人已出發`;
 }
 
-const nameOf = (uid) => data.members.find((m) => m.uid === uid)?.nickname || '';
-const riderColor = (uid) => data.members.find((m) => String(m.uid) === String(uid))?.color || 'var(--muted)';
+// people：事件裡出現、但已經被移出的人（後端補的暱稱和顏色，UX-54）
+const nameOf = (uid) => data.members.find((m) => m.uid === uid)?.nickname || data.people?.[uid]?.nickname || '';
+const riderColor = (uid) => data.members.find((m) => String(m.uid) === String(uid))?.color || data.people?.[uid]?.color || 'var(--muted)';
 const tickEvents = data.events.filter((e) => e.ts >= t0 && e.ts <= t1 && !['create', 'town'].includes(e.type));
 $('#events').innerHTML = tickEvents.map((e) => `<div class="ev" data-t="${e.ts}"><time class="num">${clock(e.ts)}</time><i style="--c:${e.uid ? esc(riderColor(e.uid)) : 'var(--muted)'}"></i><span>${e.uid ? `<b>${esc(nameOf(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`).join('') || '<div class="small muted">這趟沒有事件</div>';
 $('#events').onclick = (e) => { const r = e.target.closest('[data-t]'); if (r) seek(+r.dataset.t - 5000); };

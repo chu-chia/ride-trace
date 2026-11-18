@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from . import events, interact
 from .auth import current_uid
 from .db import K, r
-from .geo import bucket_of, day_key, is_rough, segment_cells, step
+from .geo import ALT_MAX_M, ALT_MIN_M, MAX_SPEED_KMH, bucket_of, day_key, is_rough, segment_cells, step
 
 router = APIRouter()
 HEARTBEAT_S = 90         # 移動中：90 秒沒有回報就算失聯（騎車中斷訊要馬上知道）
@@ -71,6 +71,11 @@ async def ingest(uid: str, fix: Fix) -> dict:
         raise HTTPException(400, "這個點的時間超過一天前，不收")
     if not (-90 <= fix.lat <= 90 and -180 <= fix.lon <= 180):
         raise HTTPException(400, "座標不合法")
+    # 速度、海拔明顯不合理（GPS 亂跳、模擬資料瞬移）就當成沒回報：位置照收，只是不進極速／海拔統計與曲線
+    if fix.speed is not None and not (0 <= fix.speed * 3.6 <= MAX_SPEED_KMH):
+        fix.speed = None
+    if fix.alt is not None and not (ALT_MIN_M <= fix.alt <= ALT_MAX_M):
+        fix.alt = None
 
     # 先讀：目前所在行程、上一個點、目前狀態（一次 round trip）
     async with r.pipeline(transaction=False) as p:

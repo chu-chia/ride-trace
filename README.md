@@ -120,7 +120,7 @@ Traccar Client 的 **SOS 按鈕**（送出 `alarm=sos`）會走跟網頁 SOS 一
 | Streams Consumer Group | 每筆回報 `XADD stream:ingest`；獨立 worker 容器 `XREADGROUP`：group `stats`（里程、極速、熱力圖、點亮鄉鎮）、group `alerts`（落隊、抵達、測速、路況、沿路線進度、偏離路線、異常久停）；要推播的事件另外 `XADD stream:notify`，group `push` 送 Web Push。處理完才 `XACK`，worker 當掉時 `XAUTOCLAIM` 接手閒置 60 秒的訊息；`docker compose up -d --scale worker=2` 自動分攤 |
 | TTL＋Keyspace Notification | `hb:{trip}:{uid}` 心跳 90 秒過期 → 失聯警示；`session:` 登入、`invite:` 邀請碼 24 小時 |
 | Pipeline | 每筆 GPS 回報一次送出十幾個指令；匯入工具每 5,000 筆一批；沿路線找 POI 一次送出上百個 `GEOSEARCH` |
-| Transactions | 開始行程用 `WATCH`＋`MULTI/EXEC` 樂觀鎖 |
+| Transactions | 開始行程用 `WATCH`＋`MULTI/EXEC` 樂觀鎖；踢人用 `MULTI/EXEC` 一次移出成員、GEO、心跳，並 `SADD trip:{id}:kicked`（被移出的人重開行程頁時顯示「你已被移出」，用邀請碼加回來時 `SREM`） |
 
 ### 原子判斷（Lua、NX）
 

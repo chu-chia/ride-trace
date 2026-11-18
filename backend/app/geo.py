@@ -8,6 +8,7 @@ INTERP_STEP_M = 80       # 兩點之間每 80 公尺補一個格子，避免沿�
 MAX_INTERP_GAP_S = 180   # 兩點相隔超過 3 分鐘就不補（可能是斷訊或搭車）
 MAX_INTERP_DIST_M = 3000
 MAX_SPEED_KMH = 250      # 超過視為飛機或資料跳點
+ALT_MIN_M, ALT_MAX_M = -100, 4500   # 台灣最高 3952 m；超出這個範圍的海拔當成 GPS 雜訊
 
 # 里程／移動時間的共用規則（即時足跡 ingest、行程統計 Lua、回放摘要都用這一份）
 MIN_MOVE_M = 3           # 離上一個「錨點」不到 max(3 m, 這點的精度) 不算里程：停車時 GPS 漂移不灌里程

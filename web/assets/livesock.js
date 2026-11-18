@@ -47,7 +47,7 @@ const agoText = (ms) => {
 
 /**
  * @param {string} path  例如 `/ws/trips/12`
- * @param {{onMessage:(msg:any)=>void, onForbidden?:()=>void}} opts
+ * @param {{onMessage:(msg:any)=>void, onForbidden?:(code:number)=>void}} opts
  */
 export function liveSocket(path, { onMessage, onForbidden }) {
   const banner = ensureBanner();
@@ -116,7 +116,8 @@ export function liveSocket(path, { onMessage, onForbidden }) {
     };
     sock.onclose = (e) => {
       if (ws !== sock) return;
-      if (e.code === 4403) { stopped = true; banner.hidden = true; onForbidden?.(); return; }
+      // 4401 沒登入、4403 不是成員（被移出）、4404 行程不存在：重連也沒用，停下來交給頁面顯示錯誤畫面
+      if (e.code === 4401 || e.code === 4403 || e.code === 4404) { stopped = true; banner.hidden = true; onForbidden?.(e.code); return; }
       markDown();
       // 1、2、4、8 秒…最多 15 秒
       schedule(Math.min(15_000, 1000 * 2 ** retry++));
