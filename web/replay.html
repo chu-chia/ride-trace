@@ -9,105 +9,74 @@
 <link rel="stylesheet" href="/vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
 <style>
-  .topbar{position:fixed;z-index:10;top:max(12px,env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));display:flex;align-items:center;gap:12px;padding:8px 14px 8px 8px;border-radius:16px;max-width:calc(100% - 24px)}
-  .topbar a.back{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:20px;color:var(--fg)}
-  .topbar b{font-size:15px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
-  .topbar .sub{font-size:12px;color:var(--muted)}
-  .tools{right:404px;top:max(12px,env(safe-area-inset-top,0px))}
-  .panel{position:fixed;z-index:9;right:12px;top:12px;bottom:12px;width:380px;border-radius:22px;display:flex;flex-direction:column;overflow:hidden}
-  .panel .scroll{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
-  .panel .scroll>*{flex-shrink:0}
-  .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 8px}
+  body{overflow:hidden}
+  .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-3) var(--sp-2)}
   .sum div{display:flex;flex-direction:column;min-width:0}
   .sum b{font-size:19px;font-weight:700;line-height:1.15}
-  .sum span{font-size:11px;color:var(--muted)}
-  .team-status{padding:0;overflow:hidden}
-  .team-head{display:flex;align-items:center;gap:8px;padding:14px 16px 6px;min-width:0}
-  .team-head b{font-size:13px;white-space:nowrap}
-  .team-head span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .team-hint{font-size:11.5px;color:var(--muted);padding:0 16px 4px}
-  .label{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin-bottom:6px}
+  .sum span{font-size:var(--fs-xs);color:var(--muted)}
+  .team-brief{font-size:var(--fs-s);color:var(--muted);margin-left:var(--sp-2);font-weight:400}
+  .label{font-size:var(--fs-s);font-weight:600;color:var(--muted);margin-bottom:var(--sp-2);display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2)}
   canvas.chart{width:100%;height:130px;display:block;cursor:crosshair}
-  .ev{display:grid;grid-template-columns:44px 9px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer}
+  .ev{display:grid;grid-template-columns:44px 9px 1fr;gap:var(--sp-2);align-items:baseline;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer}
   .ev:last-child{border-bottom:0}
-  .ev time{font-size:11.5px;color:var(--muted)}
+  .ev time{font-size:var(--fs-xs);color:var(--muted)}
   .ev i{width:8px;height:8px;border-radius:50%;background:var(--c);display:block}
-  /* 3D 旋轉提示：放在時間軸上方、地圖區置中 */
-  .map-hint{left:calc((100% - 392px) / 2);bottom:136px}
-  .timeline{position:fixed;z-index:9;left:12px;right:404px;bottom:12px;border-radius:20px;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
-  .tl-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .play{width:42px;height:42px;border-radius:50%;border:0;background:var(--accent-fill);color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
-  .tl-time{min-width:118px;display:flex;flex-direction:column;line-height:1.2}
-  .tl-time b{font-size:17px}
-  .tl-time span{font-size:11.5px;color:var(--muted)}
-  .track{position:relative;flex:1;min-width:180px;height:34px}
+  /* 時間軸：側欄右邊的地圖下方 */
+  .timeline{position:fixed;z-index:9;left:calc(var(--panel-w) + var(--edge) * 2);right:var(--edge);bottom:var(--edge);border-radius:var(--r-panel);padding:var(--sp-3) var(--sp-4);display:flex;align-items:center;gap:var(--sp-3)}
+  body:has(.panel.small) .timeline{left:calc(var(--panel-mini-w) + var(--edge) * 2)}
+  .play{width:var(--ctl-h);height:var(--ctl-h);border-radius:50%;border:0;background:var(--accent-fill);color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
+  .tl-time{min-width:64px;display:flex;flex-direction:column;line-height:1.2}
+  .tl-time b{font-size:var(--fs-l)}
+  .tl-time span{font-size:var(--fs-xs);color:var(--muted)}
+  .track{position:relative;flex:1;min-width:120px;height:34px}
   .track input{position:absolute;left:0;right:0;top:12px;width:100%;margin:0;accent-color:var(--accent)}
   .ticks{position:absolute;left:8px;right:8px;top:0;height:10px}
   .tick{position:absolute;top:0;width:9px;height:9px;border-radius:50%;background:var(--c);border:0;padding:0;transform:translateX(-50%);cursor:pointer}
-  /* 看起來 9px，可點範圍 29×28px（HIG 最低 28pt）；往上延伸，不蓋到下方的時間軸滑桿 */
+  /* 看起來 9px，可點範圍 29×28px；往上延伸，不蓋到下方的時間軸滑桿 */
   .tick::after{content:"";position:absolute;inset:-16px -10px -3px}
-  .tl-row select{border:0;background:var(--surface-2);border-radius:10px;padding:7px 8px;font-size:13px}
-  .legend{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
-  .legend i{display:block;width:110px;height:8px;border-radius:4px}
-  /* 地圖來源標示放在時間軸上方、面板左邊 */
-  .maplibregl-ctrl-bottom-right{right:400px;bottom:124px}
-  @media (max-width:860px){
-    .panel{left:0;right:0;bottom:0;top:auto;width:auto;height:40dvh;border-radius:22px 22px 0 0}
-    .timeline{left:8px;right:8px;bottom:calc(40dvh + 8px)}
-    .tools{right:12px;top:76px}
-    .timeline{padding:10px 12px;gap:6px}
-    .timeline .seg{min-width:0!important;flex:1}
-    .timeline #cam{flex:1;min-width:0}
-    .timeline .tl-row{gap:8px;flex-wrap:nowrap}
-    .tl-time{min-width:64px}
-    .tl-time b{font-size:15px}
+  .timeline select{border:0;background:var(--surface-2);border-radius:var(--r-ctl);height:36px;padding:0 var(--sp-2);font-size:13px;flex:none}
+  .legend{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-xs);color:var(--muted)}
+  .legend i{display:block;flex:1;height:8px;border-radius:4px}
+  .maplibregl-ctrl-bottom-right{bottom:84px}
+  @media (max-width:760px){
+    .timeline,body:has(.panel.small) .timeline{left:var(--sp-2);right:var(--sp-2);bottom:calc(var(--panel-h) + var(--sp-2));padding:var(--sp-2) var(--sp-3);gap:var(--sp-2)}
+    body:has(.panel.small) .timeline{bottom:var(--panel-small-h,120px)}
     .track{min-width:0}
-    .legend{display:none}
-    .maplibregl-ctrl-bottom-right{right:0;bottom:calc(40dvh + 78px)}
-    /* 手機：鏡頭／上色方式搬進面板（replay.js），時間軸只剩一列，地圖多一點空間 */
-    .panel #camRow{flex-wrap:wrap;gap:8px}
-    .panel #camRow .seg{min-width:0!important;flex:1 0 100%}
-    .panel #camRow .seg button{min-width:0;padding:7px 4px}
-    .panel #camRow #cam{flex:1;min-width:0;padding:9px 8px}
-    .panel #camRow #bFollow{height:36px;padding:9px 7px;white-space:nowrap}
+    .tl-time b{font-size:15px}
+    .maplibregl-ctrl-bottom-right{bottom:calc(var(--panel-h) + 70px)}
   }
 </style>
 </head>
 <body>
 <div class="mapwrap"><div id="map"></div></div>
 
-<div class="topbar glass">
-  <a class="back" id="back" href="/" aria-label="返回">‹</a>
-  <div style="min-width:0"><b id="tName">回放</b><div class="sub" id="tSub">載入中…</div></div>
-</div>
-
 <div class="tools">
-  <button class="tool glass" id="bStyle">深色</button>
-  <button class="tool glass on" id="b3d" aria-pressed="true" disabled>3D</button>
+  <button class="tool glass on" id="bAll" data-icon="team" aria-pressed="true">全隊</button>
+  <button class="tool glass on" id="b3d" data-icon="cube" aria-pressed="true" disabled>3D</button>
+  <button class="tool glass" id="bStyle" data-icon="layers">深色</button>
 </div>
 
 <div class="timeline glass">
-  <div class="tl-row">
-    <button class="play" id="play" aria-label="播放"></button>
-    <div class="tl-time"><b class="num" id="clock">--:--</b><span class="num" id="elapsed">+0:00</span></div>
-    <div class="track"><div class="ticks" id="ticks"></div><input type="range" id="range" min="0" max="1" step="1" value="0" aria-label="時間軸"></div>
-    <select id="rate" aria-label="倍速"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="30">30×</option><option value="60" selected>60×</option><option value="120">120×</option><option value="300">300×</option></select>
-  </div>
-  <div class="tl-row" id="camRow">
-    <select id="cam" aria-label="鏡頭"></select>
-    <button class="tool glass on" id="bFollow" aria-pressed="true">跟隨中</button>
-    <div class="seg" id="colorBy" style="min-width:220px"><button class="on" data-c="rider">隊員色</button><button data-c="speed">速度</button><button data-c="alt">海拔</button></div>
-    <div class="legend" id="legend" hidden></div>
-  </div>
+  <button class="play" id="play" aria-label="播放"></button>
+  <div class="tl-time"><b class="num" id="clock">--:--</b><span class="num" id="elapsed">+0:00</span></div>
+  <div class="track"><div class="ticks" id="ticks"></div><input type="range" id="range" min="0" max="1" step="1" value="0" aria-label="時間軸"></div>
+  <select id="rate" aria-label="倍速"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="30">30×</option><option value="60" selected>60×</option><option value="120">120×</option><option value="300">300×</option></select>
 </div>
 
-<aside class="panel glass">
-  <div class="scroll">
-    <section class="card team-status" id="teamStatus">
-      <div class="team-head"><b>全隊狀態</b><span id="teamBrief"></span></div>
-      <div class="team-hint">點一下隊員，鏡頭就跟著他</div>
-      <div class="team-rows" id="teamRows" aria-label="全隊即時狀態，點一下跟拍"></div>
+<aside class="panel glass" id="panel">
+  <button class="handle" aria-expanded="true"></button>
+  <div class="panel-head"><a class="icon-btn" id="back" href="/" data-icon="back" aria-label="回首頁"></a><div class="panel-title"><b id="tName">回放</b><div class="sub" id="tSub">載入中…</div></div><button class="icon-btn panel-collapse" data-icon="collapse" aria-expanded="true"></button></div>
+  <div class="panel-mini"><span id="miniTeam"></span></div>
+  <div class="panel-body">
+    <section class="card" id="teamStatus">
+      <div class="label"><span>全隊狀態<span class="team-brief" id="teamBrief"></span></span></div>
+      <div class="team-rows" id="teamRows" aria-label="全隊即時狀態"></div>
     </section>
+    <div class="card">
+      <div class="label"><span>軌跡顏色</span></div>
+      <div class="seg" id="colorBy"><button class="on" data-c="rider">隊員</button><button data-c="speed">速度</button><button data-c="alt">海拔</button></div>
+      <div class="legend" id="legend" hidden style="margin-top:var(--sp-2)"></div>
+    </div>
     <div class="card">
       <div class="label" id="sumTitle">整趟摘要</div>
       <div class="sum" id="sum"></div>
@@ -117,8 +86,8 @@
       <div class="sum" id="now"></div>
     </div>
     <div class="card"><div class="label">海拔（m）</div><canvas class="chart" id="altChart"></canvas></div>
-    <div class="card"><div class="label">速度（km/h，TimeSeries 每段平均）</div><canvas class="chart" id="spdChart"></canvas></div>
-    <div class="card"><div class="label">事件（點一下跳到那個時間）</div><div id="events"></div></div>
+    <div class="card"><div class="label">速度（km/h）</div><canvas class="chart" id="spdChart"></canvas></div>
+    <div class="card"><div class="label">事件</div><div id="events"></div></div>
   </div>
 </aside>
 

@@ -185,8 +185,6 @@ export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 7
     panel.classList.toggle('small', small);
     for (const el of [btn, handle]) if (el) { el.setAttribute('aria-expanded', String(!small)); el.setAttribute('aria-label', small ? '展開面板' : '收合面板'); }
     if (save) try { localStorage.setItem(storeKey, small ? '1' : '0'); } catch { /* 私密模式 */ }
-    // 手機收合時抽屜高度不固定，量實際高度給地圖比例尺避開
-    requestAnimationFrame(() => document.documentElement.style.setProperty('--panel-small-h', `${panel.offsetHeight + 4}px`));
     onChange?.(small);
   };
   if (btn) btn.onclick = () => set(!small);
@@ -201,6 +199,10 @@ export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 7
     handle.onclick = () => { if (dragged) { dragged = false; return; } set(!small); };
   }
   set(small, false);
+  // 手機收合時抽屜高度不固定（摘要一行或兩行），持續量實際高度，讓時間軸、進度條、比例尺貼在它上方
+  if ('ResizeObserver' in window) new ResizeObserver(() => {
+    if (small) document.documentElement.style.setProperty('--panel-small-h', `${panel.offsetHeight + 8}px`);
+  }).observe(panel);
   liquidGlass(panel);
   return { set, get small() { return small; } };
 }
