@@ -11,8 +11,8 @@
 需要 Docker Desktop。
 
 ```bash
-cp .env.example .env              # 第一次：設定模擬器機器人密碼、管理者帳號
-docker compose up -d --build      # Redis 8（6390）＋ API／網頁（8750）＋ Worker ＋ Valhalla（8752）
+cp .env.example .env              # 第一次：設定 REDIS_PASSWORD（必填）、模擬器機器人密碼、管理者帳號
+docker compose up -d --build      # Redis 8（127.0.0.1:6390，要密碼）＋ API／網頁（8750）＋ Worker ＋ Valhalla（127.0.0.1:8752）
 open http://localhost:8750
 ```
 
@@ -26,6 +26,8 @@ uv run python -m app.worker        # 另開一個終端機跑 worker
 ```
 
 手機網頁定位必須是 HTTPS，見 `docs/部署.md`（Tailscale）。
+
+Redis 有密碼且只綁本機：`docker compose exec redis redis-cli …` 不用打密碼（容器內設了 `REDISCLI_AUTH`）；主機上的 `tools/` 會自動從 `.env` 讀 `REDIS_PASSWORD`。
 
 ## 頁面
 

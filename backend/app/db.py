@@ -3,7 +3,9 @@ import os
 
 import redis.asyncio as aioredis
 
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6390/0")
+from app.redis_url import default_redis_url
+
+REDIS_URL = default_redis_url()
 
 r: aioredis.Redis = aioredis.from_url(REDIS_URL, decode_responses=True)
 

@@ -20,6 +20,7 @@ import redis
 
 from app.geo import haversine_m
 from app.pace import category, curvy_flags
+from app.redis_url import default_redis_url
 
 VALHALLA = os.environ.get("VALHALLA_URL", "http://localhost:8752")
 GAP_S = 300
@@ -54,7 +55,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--user", required=True)
     ap.add_argument("--reset", action="store_true")
-    ap.add_argument("--redis", default=os.environ.get("REDIS_URL", "redis://localhost:6390/0"))
+    ap.add_argument("--redis", default=default_redis_url())
     a = ap.parse_args()
     r = redis.Redis.from_url(a.redis, decode_responses=True)
     uid = r.get(f"username:{a.user}")

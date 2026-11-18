@@ -19,6 +19,8 @@ import redis
 from shapely import wkb
 from shapely.geometry import MultiPolygon, Polygon, mapping
 
+from app.redis_url import default_redis_url
+
 PBF = os.path.join(os.path.dirname(__file__), "..", "..", "data", "valhalla", "taiwan-latest.osm.pbf")
 
 
@@ -67,7 +69,7 @@ def wkt(p: Polygon) -> str:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pbf", default=PBF)
-    ap.add_argument("--redis", default=os.environ.get("REDIS_URL", "redis://localhost:6390/0"))
+    ap.add_argument("--redis", default=default_redis_url())
     a = ap.parse_args()
     t0 = time.time()
     h = Areas()

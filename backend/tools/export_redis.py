@@ -16,6 +16,8 @@ import time
 
 import redis
 
+from app.redis_url import default_redis_url
+
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 OUT = os.path.join(ROOT, "data", "export")
 SRC_CONTAINER = "qiji-redis-1"
@@ -48,7 +50,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["demo", "full"], default="demo")
     ap.add_argument("--private-user", action="append", default=[], help="這些帳號的個人足跡不匯出（可重複）")
-    ap.add_argument("--redis", default=os.environ.get("REDIS_URL", "redis://localhost:6390/0"))
+    ap.add_argument("--redis", default=default_redis_url())
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M")
@@ -78,7 +80,7 @@ def main():
         skip.update(src.scan_iter(pat, count=5000))
 
     sh("docker", "rm", "-f", TMP_CONTAINER, check=False)
-    sh("docker", "run", "-d", "--name", TMP_CONTAINER, "-p", f"{TMP_PORT}:6379", "redis:8.2", "redis-server", "--save", "")
+    sh("docker", "run", "-d", "--name", TMP_CONTAINER, "-p", f"127.0.0.1:{TMP_PORT}:6379", "redis:8.2", "redis-server", "--save", "")
     dst_r = redis.Redis(port=TMP_PORT)
     for _ in range(50):
         try:

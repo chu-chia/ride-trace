@@ -16,6 +16,8 @@ import time
 import osmium
 import redis
 
+from app.redis_url import default_redis_url
+
 PBF = os.path.join(os.path.dirname(__file__), "..", "..", "data", "valhalla", "taiwan-latest.osm.pbf")
 
 # (tag, 值) → (種類, 重要度, 要不要放進自動完成)
@@ -81,7 +83,7 @@ class Grab(osmium.SimpleHandler):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pbf", default=PBF)
-    ap.add_argument("--redis", default=os.environ.get("REDIS_URL", "redis://localhost:6390/0"))
+    ap.add_argument("--redis", default=default_redis_url())
     a = ap.parse_args()
     t0 = time.time()
     h = Grab()

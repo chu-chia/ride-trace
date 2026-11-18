@@ -19,6 +19,8 @@ import urllib.request
 
 import redis
 
+from app.redis_url import default_redis_url
+
 URL = ("https://opdadm.moi.gov.tw/api/v1/no-auth/resource/api/dataset/"
        "EA5E6FCD-B82D-43B7-A5CF-E9893253187E/resource/BF951322-3C88-45AB-A44A-5E6332C16B73/download")
 DIRS = {"北": 0, "東北": 45, "東": 90, "東南": 135, "南": 180, "西南": 225, "西": 270, "西北": 315}
@@ -52,7 +54,7 @@ def norm(s: str) -> str:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--file")
-    ap.add_argument("--redis", default=os.environ.get("REDIS_URL", "redis://localhost:6390/0"))
+    ap.add_argument("--redis", default=default_redis_url())
     a = ap.parse_args()
     if a.file:
         raw = open(a.file, encoding="utf-8-sig").read()

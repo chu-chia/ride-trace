@@ -21,6 +21,7 @@ from datetime import datetime
 import redis
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.redis_url import default_redis_url  # noqa: E402
 from app.db import K  # noqa: E402
 from app.geo import bucket_of, day_key, haversine_m, segment_cells  # noqa: E402
 
@@ -50,7 +51,7 @@ def main():
     ap.add_argument("gpx")
     ap.add_argument("--user", required=True, help="騎跡帳號（要先註冊）")
     ap.add_argument("--reset", action="store_true", help="先清掉這個帳號原本的足跡")
-    ap.add_argument("--redis", default=os.environ.get("REDIS_URL", "redis://localhost:6390/0"))
+    ap.add_argument("--redis", default=default_redis_url())
     a = ap.parse_args()
 
     r = redis.Redis.from_url(a.redis, decode_responses=True)

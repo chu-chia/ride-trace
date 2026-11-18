@@ -11,8 +11,22 @@ services:
       - "300 10"
       - --notify-keyspace-events
       - Ex
+      # 密碼放 .env 的 REDIS_PASSWORD；沒設就不啟動，避免裸奔
+      - --requirepass
+      - ${REDIS_PASSWORD:?請在 .env 設定 REDIS_PASSWORD}
+    environment:
+      # 讓 docker compose exec redis redis-cli 不用另外打 -a
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    # 只綁本機：手機與朋友走 Tailscale serve → 8750，不需要直接連 Redis
     ports:
-      - "6390:6379"
+      - "127.0.0.1:6390:6379"
+    # 載入 AOF 期間 PING 會回 LOADING，等真的 PONG 才讓 api／worker 啟動
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
     volumes:
       - redis-data:/data
     restart: unless-stopped
@@ -20,7 +34,7 @@ services:
   api:
     build: ./backend
     environment:
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       WEB_DIR: /web
       VALHALLA_URL: http://valhalla:8002
       ADMIN_USERS: ${ADMIN_USERS:-wei}
@@ -35,7 +49,8 @@ services:
     ports:
       - "8750:8750"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   # 背景 Worker：Streams consumer group 消費 stream:ingest（統計、之後的落隊／抵達／測速警示）。
@@ -44,7 +59,7 @@ services:
     build: ./backend
     command: ["python", "-m", "app.worker"]
     environment:
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       VALHALLA_URL: http://valhalla:8002
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
@@ -53,7 +68,8 @@ services:
       TDX_CLIENT_SECRET: ${TDX_CLIENT_SECRET:-}
       CWA_API_KEY: ${CWA_API_KEY:-}
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   # 路線引擎：地圖比對（把 GPS 點對到道路上）、之後的機車導航。
@@ -68,7 +84,7 @@ services:
       build_time_zones: "False"
       force_rebuild: "False"
     ports:
-      - "8752:8002"
+      - "127.0.0.1:8752:8002"
     volumes:
       - ./data/valhalla:/custom_files
     restart: unless-stopped
