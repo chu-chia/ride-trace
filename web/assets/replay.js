@@ -126,7 +126,7 @@ for (const m of riders) {
   el.innerHTML = `<div class="arrow" style="visibility:hidden"></div><div class="dot">${esc(initialOf(m.nickname))}</div><div class="name">${esc(m.nickname)}</div>`;
   el.onclick = () => setFollow(R.follow === m.uid ? 'all' : m.uid);
   m.el = el;
-  m.marker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([m.track[0][2], m.track[0][1]]).addTo(map);
+  m.marker = new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1' }).setLngLat([m.track[0][2], m.track[0][1]]).addTo(map);
 }
 
 /* ---------- 鏡頭 ---------- */

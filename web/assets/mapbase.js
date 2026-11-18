@@ -139,6 +139,16 @@ function showMapError(container, msg) {
   container.after(el);
 }
 
+// 不考慮傾斜，算出能把範圍放進留白內可視區的 zoom（cameraForBounds 算不出來時的備案）
+function flatZoom(b, padding = {}, maxZoom = 15, map) {
+  const box = map ? map.getContainer() : null;
+  const W = (box?.clientWidth || innerWidth) - (padding.left || 0) - (padding.right || 0);
+  const H = (box?.clientHeight || innerHeight) - (padding.top || 0) - (padding.bottom || 0);
+  const sw = maplibregl.MercatorCoordinate.fromLngLat(b.getSouthWest()), ne = maplibregl.MercatorCoordinate.fromLngLat(b.getNorthEast());
+  const dx = Math.max(1e-9, Math.abs(ne.x - sw.x)), dy = Math.max(1e-9, Math.abs(ne.y - sw.y));
+  return Math.min(maxZoom, Math.log2(Math.max(1, Math.min(W / (dx * 512), H / (dy * 512)))));
+}
+
 export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, interactive = true, syncTheme = true, styles = DEFAULT_ORDER } = {}) {
   const ORDER = styles;
   let cur = style;
@@ -176,11 +186,13 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     const box = map.getCanvasContainer();
     box.addEventListener('touchstart', () => { touching = true; }, { passive: true });
     for (const ev of ['touchend', 'touchcancel']) box.addEventListener(ev, (e) => { if (!e.touches.length) touching = false; }, { passive: true });
-    map.triggerRepaint = () => {
-      const wait = last + 33 - performance.now();
-      if (touching || wait <= 0) { last = performance.now(); repaint(); return; }
-      if (!pending) pending = setTimeout(() => { pending = 0; last = performance.now(); repaint(); }, wait);
+    // 跟著螢幕更新排程（60Hz 螢幕就是隔一格畫一次），間隔平均；用 setTimeout 會忽快忽慢，畫面看起來在抖
+    const tryPaint = () => {
+      pending = 0;
+      const now = performance.now();
+      if (touching || now - last >= 25) { last = now; repaint(); } else pending = requestAnimationFrame(tryPaint);
     };
+    map.triggerRepaint = () => { if (touching) { last = performance.now(); repaint(); } else if (!pending) tryPaint(); };
   }
   if (!terrain) map.setMaxPitch(0);
 
@@ -260,6 +272,15 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   // MapLibre 5 的鏡頭動畫被打斷時，地形高度可能停在 0（鏡頭會鑽進 3000 公尺的山裡）。
   // 每次停下來就把畫面中心的高度校正成地形高度。
   let following = false, smoothEl = null, lastT = 0, lastKey = '';
+  // 手指／滑鼠按在地圖上時，跟隨先停手：jumpTo 會中止 MapLibre 正在辨識的拖曳、縮放手勢，跟隨中就怎麼拖都拖不動
+  let held = 0;
+  { const box = map.getCanvasContainer();
+    box.addEventListener('touchstart', (e) => { held = e.touches.length; }, { passive: true });
+    for (const ev of ['touchend', 'touchcancel']) box.addEventListener(ev, (e) => { held = e.touches.length; }, { passive: true });
+    // 滑鼠只看真的滑鼠（手機點一下也會補送 mousedown／mouseup，不能拿來判斷）
+    box.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') held = 1; });
+    addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse') held = 0; });
+    box.addEventListener('wheel', () => { lastT = performance.now(); }, { passive: true }); }
   let busyUntil = 0;  // 鏡頭動畫（指北針、2D/3D）結束前，跟隨模式不要每格重設鏡頭把動畫打斷
   const animate = (opts) => { busyUntil = performance.now() + (opts.duration ?? 500) + 80; map.easeTo(opts); };
   let grp = null, grpT = 0; // 全隊鏡頭目前的（平滑後）中心與縮放
@@ -293,7 +314,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     // 而是周圍取幾個點平均後再慢慢追，看起來就是平穩地沿著山坡移動。
     follow(center, extra = {}) {
       const now = performance.now();
-      if (now < busyUntil) { lastT = now; return; }  // 指北針、切 2D/3D 的動畫進行中，跟隨先讓路
+      if (now < busyUntil || held) { lastT = now; return; }  // 指北針、切 2D/3D 的動畫進行中，或手指按在地圖上，跟隨先讓路
       const dt = Math.min(0.2, (now - (lastT || now)) / 1000);
       lastT = now;
       if (!following) { following = true; map.setCenterClampedToGround(false); smoothEl = is3d && map.getTerrain() ? map.getCenterElevation() : null; }  // 從目前鏡頭高度開始追，不會一接手就跳
@@ -317,15 +338,22 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     // 每隔一段時間重新 easeTo 會一頓一頓的，動畫結束時地形高度校正還會讓畫面跳一下）。
     // 有人快跑出畫面時拉遠要快，拉近則慢慢來，避免縮放一直來回。
     followGroup(pts, { padding, maxZoom = 14.5 } = {}) {
-      if (!pts.length || performance.now() < busyUntil) return;
-      const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
+      if (!pts.length || performance.now() < busyUntil || held) return;
+      // 中心用全隊的重心（彎道上某人折返時，外框中心會左右甩，重心穩很多），範圍取以重心為中心、能包住所有人的對稱框
+      const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+      const hx = Math.max(...pts.map((p) => Math.abs(p[0] - cx))), hy = Math.max(...pts.map((p) => Math.abs(p[1] - cy)));
+      const b = new maplibregl.LngLatBounds([cx - hx, cy - hy], [cx + hx, cy + hy]);
       const cam = map.cameraForBounds(b, { padding, maxZoom, bearing: map.getBearing() });
-      const c = b.getCenter();
-      const tz = cam?.zoom ?? map.getZoom();
+      const c = { lng: cx, lat: cy };
+      // 鏡頭傾斜很大、畫面又很高（例如手機直拿看戰情室電腦版）時 cameraForBounds 會算不出來，改用平面換算
+      let tz = cam?.zoom ?? flatZoom(b, padding, maxZoom, map);
       const now = performance.now();
       const dt = Math.min(0.2, (now - (grpT || now)) / 1000);
       grpT = now;
       if (!grp || !following) { const mc = map.getCenter(); grp = { lon: mc.lng, lat: mc.lat, zoom: map.getZoom() }; }
+      // zoom 遲滯：要拉遠（有人快出畫面）就跟；要拉近，差超過 0.4 級才慢慢拉近，小幅變化不理，畫面不會一直呼吸
+      if (tz > grp.zoom && tz - grp.zoom < 0.4) tz = grp.zoom;
+      else if (tz > grp.zoom) tz -= 0.2;
       const kc = 1 - Math.exp(-dt / 0.7);
       const kz = 1 - Math.exp(-dt / (tz < grp.zoom ? 0.5 : 2.2));
       grp.lon += (c.lng - grp.lon) * kc;

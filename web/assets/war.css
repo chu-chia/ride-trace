@@ -106,3 +106,13 @@ html,body{width:100%;height:100%;overflow:hidden}
   .mobile-sheet{border-radius:var(--r-panel) var(--r-panel) 0 0;border-bottom:0}
   .sheet-summary{padding:2px var(--sp-3) var(--sp-2) var(--sp-2)}
 }
+
+/* 手機直拿看「電腦版」：上面約 45% 是地圖，下面兩欄放分析圖表（war.js 加 html.desk-portrait；不能自訂版面） */
+.desk-portrait .war-panel{transition:none}
+.desk-portrait .head{left:.8%!important;top:.6%!important;width:34%!important;height:auto!important;min-height:0}
+.desk-portrait .cards{left:.8%!important;top:46%!important;width:48.8%!important;height:26%!important}
+.desk-portrait .conditions{left:auto!important;right:.8%!important;top:46%!important;width:48.8%!important;height:26%!important}
+.desk-portrait .prog{left:.8%!important;top:72.8%!important;width:98.4%!important;height:12.6%!important}
+.desk-portrait .feed{left:.8%!important;right:auto!important;top:86.2%!important;width:98.4%!important;height:13%!important}
+.desk-portrait .war-panel.small{height:auto!important}
+.desk-portrait #editLayout,.desk-portrait #resetLayout{display:none}

@@ -18,6 +18,8 @@ const panels = [...document.querySelectorAll('.war-panel')];
 const stage = $('#stage');
 const mobile = matchMedia('(max-width:1100px)');
 // 手機（觸控、螢幕窄）才出現「電腦版／手機版」切換鈕；切換後重新載入，讓整頁用新的版面寬度重排
+// 直拿手機看電腦版：版面是 1280 寬、2700 多高的直長畫面，改用「上面地圖、下面分析圖表」的固定排法（html.desk-portrait）
+const deskPortrait = () => document.documentElement.classList.contains('desk-portrait');
 {
   const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 820;
   let desk = false;
@@ -27,6 +29,8 @@ const mobile = matchMedia('(max-width:1100px)');
     b.style.display = '';
     setLabel(b, desk ? '手機版' : '電腦版');
     b.onclick = () => { try { localStorage.setItem('qiji:war:desk', desk ? '0' : '1'); } catch { /* 私密模式 */ } location.reload(); };
+    const portrait = () => document.documentElement.classList.toggle('desk-portrait', desk && innerHeight > innerWidth * 1.2);
+    portrait(); addEventListener('resize', portrait);
   }
 }
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -40,6 +44,7 @@ function saveLayout() {
   try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* 瀏覽器停用儲存時仍可操作 */ }
 }
 function restoreLayout() {
+  if (deskPortrait()) { panels.forEach((el) => { el.style.cssText = ''; }); return; } // 直式電腦版用固定排法
   let layout;
   try { layout = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null'); } catch { return; }
   if (!layout || typeof layout !== 'object') return;
@@ -58,7 +63,7 @@ function restoreLayout() {
   }
 }
 function setEditing(on) {
-  editing = on && !mobile.matches;
+  editing = on && !mobile.matches && !deskPortrait();
   stage.classList.toggle('editing', editing);
   $('#editLayout').setAttribute('aria-pressed', String(editing));
   $('#editLayout').textContent = editing ? '完成編輯' : '編輯版面';
@@ -160,7 +165,7 @@ function upsert(u, state = {}) {
     el.style.setProperty('--c', u.color);
     el.style.setProperty('--ink', inkOn(u.color));
     el.innerHTML = `<div class="arrow"></div><div class="dot">${esc(initialOf(u.nickname))}</div><div class="name">${esc(u.nickname)}</div>`;
-    m = { u, state: {}, recent: [], el, marker: new maplibregl.Marker({ element: el, anchor: 'center' }), trail: [], pos: null, from: null, to: null, t0: 0, onMap: false };
+    m = { u, state: {}, recent: [], el, marker: new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1' }), trail: [], pos: null, from: null, to: null, t0: 0, onMap: false };
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
@@ -184,7 +189,7 @@ M.onStyle(() => {
 /* ---------- 運鏡：手動操作後暫停跟隨 ---------- */
 let lastT = performance.now(), lastTrail = 0;
 let autoFollow = true;
-const padRaw = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : { top: 90, bottom: 160, left: 395, right: 365 };
+const padRaw = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : deskPortrait() ? { top: 120, bottom: Math.round(innerHeight * .56), left: 60, right: 120 } : { top: 90, bottom: 160, left: 395, right: 365 };
 function pauseFollow(e) {
   if (!e.originalEvent) return;
   autoFollow = false;
@@ -371,7 +376,12 @@ function buildProfile() {
   S.profiling = true;
   if (autoFollow) { map.setPitch(0); map.setBearing(0); }
   map.fitBounds(b, { padding: pad(), duration: 0 });
-  map.once('idle', () => {
+  // 等地圖 idle（地形圖磚到齊）再取高度；但軌跡每 0.5 秒更新、手機省電重畫時地圖可能一直不 idle，
+  // 最多等 4 秒，不然 S.profiling 一直是 true，鏡頭永遠停在整條路線、不會框住全隊
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
     const total = S.route.cum_km.at(-1), out = [];
     let j = 0;
     for (let k = 0; k <= 160; k++) {
@@ -384,7 +394,9 @@ function buildProfile() {
     if (autoFollow) map.setPitch(60);
     S.profiling = false;
     renderProgress();
-  });
+  };
+  map.once('idle', finish);
+  setTimeout(finish, 4000);
 }
 function renderProgress() {
   const svg = $('#profile');
