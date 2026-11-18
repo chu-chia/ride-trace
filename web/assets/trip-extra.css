@@ -126,3 +126,4 @@ body:has(#panel.small) .qx-turn{left:248px;max-width:min(360px,calc(100vw - 320p
   .qx-pop{max-height:none}
   .qc-list{max-height:220px}
 }
+#gpsInfo.warn{color:var(--warn-ink);font-weight:600;opacity:1}

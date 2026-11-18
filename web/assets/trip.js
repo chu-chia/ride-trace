@@ -1,6 +1,7 @@
 import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
 import { createMap, declutter } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
+import { gpsQueue } from '/assets/gpsqueue.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
@@ -396,6 +397,7 @@ function handle(msg) {
     case 'snapshot': {
       const t = msg.trip;
       S.trip = t; S.me = t.me;
+      ensureQueue();  // 上次沒補完的位置（例如在山上重新整理過）接著補
       t.members.forEach((u) => {
         const m = upsertMember(u, { ...u.state });
         m.trail = t.trails[u.uid] || [];
@@ -478,17 +480,35 @@ $('#gpsBtn').onclick = () => {
   $('#gpsBtn').textContent = '停止回報'; $('#gpsBtn').className = 'btn';
   $('#gpsInfo').textContent = '等待定位…';
 };
+// 送出佇列（gpsqueue.js）：斷網時點先存在手機，恢復後依序補傳
+let gpsQ = null;
+let gpsAcc = null;
+function ensureQueue() {
+  if (gpsQ || !S.me) return gpsQ;
+  gpsQ = gpsQueue(S.me, { onChange: renderGpsInfo });
+  return gpsQ;
+}
+function renderGpsInfo({ pending, sent, error }) {
+  const el = $('#gpsInfo');
+  if (pending > 1 || (pending && error)) {
+    el.textContent = `${error || '補傳中'} · 手機暫存 ${pending} 筆，恢復連線後自動補傳`;
+    el.classList.add('warn');
+    return;
+  }
+  el.classList.remove('warn');
+  if (!S.gps) { if (sent) el.textContent = `暫存的位置已全部補傳（${sent} 筆）`; return; }
+  el.textContent = `已送出 ${sent} 筆${gpsAcc != null ? ` · 精度 ${Math.round(gpsAcc)} m` : ''} · ${clock(Date.now())}`;
+}
 async function onFix(p) {
   if (!S.gps) return;
   const c = p.coords, now = Date.now();
   const moving = c.speed == null || c.speed > 1.5;
   if (now - S.gps.last < (moving ? 2500 : 30000)) return;   // 騎乘中 2.5 秒一點，停車時 30 秒一點
   S.gps.last = now;
-  try {
-    await api('/api/track', { method: 'POST', body: { lat: c.latitude, lon: c.longitude, alt: c.altitude, speed: c.speed, heading: c.heading, acc: c.accuracy, batt: await battery(), ts: Math.round(p.timestamp), src: 'web' } });
-    S.gps.sent++;
-    $('#gpsInfo').textContent = `已送出 ${S.gps.sent} 筆 · 精度 ${Math.round(c.accuracy)} m · ${clock(now)}`;
-  } catch (e) { $('#gpsInfo').textContent = '送出失敗：' + e.message; }
+  gpsAcc = c.accuracy;
+  const q = ensureQueue();
+  if (!q) return;   // 行程資料還沒載入（不知道是誰），下一點再送
+  q.push({ lat: c.latitude, lon: c.longitude, alt: c.altitude, speed: c.speed, heading: c.heading, acc: c.accuracy, batt: await battery(), ts: Math.round(p.timestamp), src: 'web' });
 }
 
 $('#endBtn').onclick = async () => {

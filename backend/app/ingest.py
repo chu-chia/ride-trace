@@ -143,6 +143,30 @@ async def track(fix: Fix, uid: str = Depends(current_uid)):
     return await ingest(uid, fix)
 
 
+class Batch(BaseModel):
+    points: list[Fix]
+
+
+@router.post("/api/track/batch")
+async def track_batch(body: Batch, uid: str = Depends(current_uid)):
+    """網頁斷網時暫存的點一次補傳（gpsqueue.js）。依 GPS 時間排序後逐點走同一條 ingest，
+    所以軌跡、里程、足跡都跟即時送的一樣；單點座標不合法就略過，不影響其他點。"""
+    if len(body.points) > 500:
+        raise HTTPException(413, "一次最多 500 點")
+    ok = stale = bad = 0
+    trip = None
+    for fix in sorted(body.points, key=lambda f: f.ts or 0):
+        try:
+            res = await ingest(uid, fix)
+        except HTTPException:
+            bad += 1
+            continue
+        ok += 1
+        stale += res["stale"]
+        trip = res["trip"] or trip
+    return {"ok": True, "accepted": ok, "stale": stale, "rejected": bad, "trip": trip}
+
+
 @router.api_route("/osmand", methods=["GET", "POST"])
 async def osmand(request: Request):
     """Traccar Client：舊版用 OsmAnd 協定（query string，速度單位是節），新版送 JSON。"""
