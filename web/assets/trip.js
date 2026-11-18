@@ -397,6 +397,8 @@ function handle(msg) {
   switch (msg.kind) {
     case 'snapshot': {
       const t = msg.trip;
+      // 行程結束後只剩回放：直接換到回放頁（replace，按上一頁不會又回到這裡）
+      if (t.status === 'ended') { location.replace(`/replay?id=${tid}`); return; }
       S.trip = t; S.me = t.me;
       ensureQueue();  // 上次沒補完的位置（例如在山上重新整理過）接著補
       t.members.forEach((u) => {
@@ -428,6 +430,7 @@ function handle(msg) {
     case 'member': upsertMember(msg.user, {}); renderTeam(); break;
     case 'trip':
       S.trip.status = msg.status;
+      if (msg.status === 'ended') { toast('行程結束了，3 秒後前往回放', { icon: '騎' }); setTimeout(() => location.replace(`/replay?id=${tid}`), 3000); }
       if (msg.status === 'live') { S.trip.started = Date.now(); S.members.forEach((m) => (m.u.active = true)); }
       renderHeader();
       break;

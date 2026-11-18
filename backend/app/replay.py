@@ -1,4 +1,5 @@
 """回放：用 XRANGE 取出每個人的完整軌跡與事件，用 TS.MRANGE 一次取所有人的速度、海拔曲線。"""
+import json
 import math
 
 from fastapi import APIRouter, Depends, Query
@@ -76,13 +77,25 @@ def summarize(pts: list[list]) -> dict:
     }
 
 
-@router.get("/{tid}/replay")
-async def replay(tid: str, uid: str = Depends(current_uid)):
-    await require_member(tid, uid)
-    detail = await trip_detail(tid, uid)
-    t0 = t1 = None
-    for m in detail["members"]:
-        rows = await r.xrange(K.track(tid, m["uid"]))
+REPLAY_MIN_GAP_MS = 2000      # 送給前端的軌跡最密 2 秒一點（模擬器一秒好幾點，10 MB 太大）；摘要仍用完整資料算
+REPLAY_CACHE_S = 7 * 86400
+
+
+def _thin(pts: list[list]) -> list[list]:
+    out = []
+    for p in pts:
+        if not out or p[0] - out[-1][0] >= REPLAY_MIN_GAP_MS:
+            out.append(p)
+    if pts and out[-1] is not pts[-1]:
+        out.append(pts[-1])
+    return out
+
+
+async def _tracks(tid: str, uids: list[str]) -> dict:
+    """每個人的軌跡（抽稀後）與整趟摘要。"""
+    out = {}
+    for u in uids:
+        rows = await r.xrange(K.track(tid, u))
         pts = []
         for _, f in rows:
             lat, lon = _f(f.get("lat")), _f(f.get("lon"))
@@ -94,12 +107,47 @@ async def replay(tid: str, uid: str = Depends(current_uid)):
                         None if spd is None else round(spd * 3.6, 1),
                         None if _f(f.get("heading")) is None else round(_f(f.get("heading"))), _f(f.get("acc"))])
         pts.sort(key=lambda p: p[0])  # Stream 是到達順序，斷訊補傳的點要依 GPS 時間重排
-        m["summary"] = summarize(pts)
-        m["track"] = [p[:6] for p in pts]  # acc 只拿來算摘要，不送前端
+        out[u] = {"summary": summarize(pts), "track": [p[:6] for p in _thin(pts)]}  # acc 只拿來算摘要，不送前端
+    return out
+
+
+async def cached_tracks(tid: str, uids: list[str], ended: bool) -> dict:
+    """整包（抽稀後的軌跡＋摘要）快取在 Redis（cache-aside）：已結束的行程軌跡不會再變，留 7 天；
+    進行中的只留 30 秒（回放看到的是到剛剛為止）。"""
+    ck = f"cache:replay:{tid}"
+    cached = await r.get(ck)
+    if cached:
+        tracks = json.loads(cached)
+        if set(tracks) == set(uids):
+            return tracks
+    tracks = await _tracks(tid, uids)
+    await r.set(ck, json.dumps(tracks, separators=(",", ":")), ex=REPLAY_CACHE_S if ended else 30)
+    return tracks
+
+
+async def warm(tid: str):
+    """行程剛結束時在背景先算好，第一個按「看回放」的人就不用等。"""
+    try:
+        await r.delete(f"cache:replay:{tid}")
+        await cached_tracks(tid, list(await r.smembers(K.members(tid))), True)
+    except Exception:  # noqa: BLE001  背景預熱失敗不影響任何事
+        pass
+
+
+@router.get("/{tid}/replay")
+async def replay(tid: str, uid: str = Depends(current_uid)):
+    await require_member(tid, uid)
+    detail = await trip_detail(tid, uid)
+    uids = [m["uid"] for m in detail["members"]]
+    tracks = await cached_tracks(tid, uids, detail.get("status") == "ended")
+    t0 = t1 = None
+    for m in detail["members"]:
+        tr = tracks.get(m["uid"], {"track": [], "summary": summarize([])})
+        m["track"], m["summary"] = tr["track"], tr["summary"]
         m.pop("state", None)
-        if pts:
-            t0 = pts[0][0] if t0 is None else min(t0, pts[0][0])
-            t1 = pts[-1][0] if t1 is None else max(t1, pts[-1][0])
+        if m["track"]:
+            t0 = m["track"][0][0] if t0 is None else min(t0, m["track"][0][0])
+            t1 = m["track"][-1][0] if t1 is None else max(t1, m["track"][-1][0])
     raw = await r.xrange(K.events(tid))
     evs = [event_from_stream(i, f) for i, f in raw]
     # 聊天另存一條 Stream（trip:{id}:chat），回放時併進事件時間軸

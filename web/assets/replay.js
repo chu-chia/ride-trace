@@ -1,5 +1,5 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, $, $$, dock, esc, avatar, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
+import { api, $, $$, dock, esc, initialOf, inkOn, press, clock, dur } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 
 // 寬螢幕：標題列（返回、行程名）併進右側面板頂端；手機維持浮在左上（先做，避免資料載完才跳版面）
@@ -7,7 +7,8 @@ dock($('.topbar'), $('.panel'), '(min-width: 861px)');
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
-$('#back').href = `/trip?id=${tid}`;
+// 返回一律回首頁（行程結束後只剩回放，回行程頁沒有意義）
+$('#back').href = '/';
 
 const EV = { lost: 'var(--crit)', back: 'var(--ok)', start: 'var(--accent)', end: 'var(--muted)', stop: 'var(--muted)', join: 'var(--accent)', kick: 'var(--warn)', behind: 'var(--warn)', ahead: 'var(--warn)', regroup: 'var(--ok)', arrive: 'var(--ok)', allin: 'var(--ok)', speedcam: 'var(--warn)', roadevent: 'var(--warn)', weather: 'var(--accent)', msg: 'var(--accent)', chat: 'var(--accent)', mark: 'var(--warn)', sos: 'var(--crit)', sos_off: 'var(--ok)', route: 'var(--accent)', offroute: 'var(--warn)', onroute: 'var(--ok)', stuck: 'var(--warn)', moving: 'var(--ok)', town: 'var(--accent)' };
 const SPEED_STOPS = [0, '#5e60ce', 20, '#4ea8de', 40, '#56cfe1', 60, '#ffd166', 90, '#ef476f'];
@@ -145,8 +146,9 @@ function setFollow(uid) {
   R.follow = uid;
   if (uid !== 'all' && uid !== 'off') R.sel = uid;
   R.zoomed = false;
+  R.fly = null;
   R.bearing = null;
-  M.unfollow();
+  if (uid === 'all' || uid === 'off') M.unfollow();  // 換跟拍對象時不放開，鏡頭高度才能連續
   $('#cam').value = uid;
   press($('#bFollow'), uid !== 'off');
   $('#bFollow').textContent = uid === 'off' ? '跟隨視角' : '跟隨中';
@@ -163,10 +165,9 @@ $('#bFollow').onclick = () => setFollow(R.follow === 'off' ? R.followTarget : 'o
 press($('#bFollow'), true);
 
 /* ---------- 面板 ---------- */
-function renderRiders() {
-  $('#riders').innerHTML = riders.map((m) => `<button data-uid="${m.uid}" class="${m.uid === R.sel ? 'on' : ''}">${avatar(m)}${esc(m.nickname)}</button>`).join('');
-}
-$('#riders').onclick = (e) => { const b = e.target.closest('button'); if (b) setFollow(b.dataset.uid); };
+// 全隊狀態的每一列就是選人：點了鏡頭跟拍那個人，摘要／曲線也換成他
+function renderRiders() { renderTeam(); }
+$('#teamRows').onclick = (e) => { const b = e.target.closest('[data-uid]'); if (b) setFollow(b.dataset.uid); };
 
 function renderSummary() {
   const m = riders.find((x) => x.uid === R.sel) || riders[0], s = m.summary;
@@ -188,17 +189,23 @@ function renderTeam() {
   const active = states.filter(({ st }) => !st.before);
   const lead = active.length ? Math.max(...active.map(({ st }) => st.km)) : null;
   $('#teamBrief').textContent = `${riders.length} 人 · ${active.length} 人已出發`;
-  if (!$('#teamStatus').open) return;
-  $('#teamRows').innerHTML = states.map(({ m, st }) => {
+  // 列只建一次，之後只改數字：播放中每 0.25 秒整個重畫的話，點下去的按鈕會被換掉而點不到
+  if (!$('#teamRows').children.length) {
+    $('#teamRows').innerHTML = riders.map((m) => `<button type="button" class="team-row" data-uid="${m.uid}" aria-label="跟拍 ${esc(m.nickname)}"><span class="team-name"><i style="background:${esc(m.color)}"></i><b>${esc(m.nickname)}</b></span><span class="num" data-k="spd"></span><span class="num" data-k="alt"></span><span class="num" data-k="km"></span><span class="num" data-k="gap"></span></button>`).join('');
+  }
+  const focus = R.follow !== 'all' && R.follow !== 'off' ? R.follow : R.sel;
+  for (const { m, st } of states) {
+    const row = $(`#teamRows [data-uid="${m.uid}"]`);
     const started = !st.before;
-    const speed = started && st.kmh != null ? Math.round(st.kmh) : '–';
-    const alt = started && st.alt != null ? Math.round(st.alt) : '–';
-    const km = started ? st.km.toFixed(1) : '–';
-    const gap = started && lead != null ? Math.max(0, lead - st.km).toFixed(1) : '–';
-    return `<div class="team-row"><span class="team-name"><i style="background:${esc(m.color)}"></i><b>${esc(m.nickname)}</b></span><span class="num">${speed}<small>km/h</small></span><span class="num">${alt}<small>m 海拔</small></span><span class="num">${km}<small>km 已騎</small></span><span class="num">${gap}<small>km 距領先</small></span></div>`;
-  }).join('');
+    const set = (k, v, unit) => { row.querySelector(`[data-k="${k}"]`).innerHTML = `${v}<small>${unit}</small>`; };
+    set('spd', started && st.kmh != null ? Math.round(st.kmh) : '–', 'km/h');
+    set('alt', started && st.alt != null ? Math.round(st.alt) : '–', 'm 海拔');
+    set('km', started ? st.km.toFixed(1) : '–', 'km 已騎');
+    set('gap', started && lead != null ? Math.max(0, lead - st.km).toFixed(1) : '–', 'km 距領先');
+    row.classList.toggle('on', m.uid === focus);
+    row.setAttribute('aria-pressed', m.uid === focus);
+  }
 }
-$('#teamStatus').addEventListener('toggle', renderTeam);
 
 const nameOf = (uid) => data.members.find((m) => m.uid === uid)?.nickname || '';
 const riderColor = (uid) => data.members.find((m) => String(m.uid) === String(uid))?.color || 'var(--muted)';
@@ -317,18 +324,30 @@ function frame(now) {
   if (R.follow !== 'all' && R.follow !== 'off' && R.styleReady && now > (R.easeUntil || 0)) {
     const m = riders.find((x) => x.uid === R.follow);
     const st = stateAt(m, R.t);
+    // 切換跟拍對象：不用 easeTo 飛到「按下那一刻」的位置（播放中人早就往前走了，動畫結束會再跳一次），
+    // 而是每一格朝他「現在」的位置內插過去，飛完直接接上跟拍，中間沒有交接的跳動
     if (!R.zoomed) {
-      R.zoomed = true; R.easeUntil = now + 1000;
-      map.easeTo({ center: st.pos, zoom: Math.max(map.getZoom(), 15), pitch: M.is3d ? 62 : 0, padding: pad(), duration: 950 });
-    } else if (now > (R.easeUntil || 0)) {
-      const target = bearingAt(m, R.t);
-      if (target != null) {
-        if (R.bearing == null) R.bearing = map.getBearing();
-        let d = ((target - R.bearing + 540) % 360) - 180;
-        R.bearing += d * (1 - Math.exp(-dt / 1.2));
-      }
-      M.follow(st.pos, { padding: pad(), ...(R.bearing != null ? { bearing: R.bearing } : {}) });
+      R.zoomed = true;
+      const c = map.getCenter();
+      const km = hav(c.lat, c.lng, st.pos[1], st.pos[0]) / 1000;
+      R.fly = { at: now, from: [c.lng, c.lat], z0: map.getZoom(), p0: map.getPitch(), z1: Math.max(map.getZoom(), 15), p1: M.is3d ? 62 : 0,
+                dur: Math.min(1800, 700 + km * 40), dip: Math.max(0, Math.min(5, Math.log2(Math.max(1, km / 2)))) };
     }
+    let center = st.pos, extra = {};
+    if (R.fly) {
+      const f = R.fly, k = Math.min(1, (now - f.at) / f.dur), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+      center = [f.from[0] + (st.pos[0] - f.from[0]) * e, f.from[1] + (st.pos[1] - f.from[1]) * e];
+      // 距離遠時中途先拉遠一點再拉近，畫面不會一路掃過一大堆圖磚
+      extra = { zoom: f.z0 + (f.z1 - f.z0) * e - f.dip * Math.sin(Math.PI * e), pitch: f.p0 + (f.p1 - f.p0) * e };
+      if (k >= 1) R.fly = null;
+    }
+    const target = bearingAt(m, R.t);
+    if (target != null) {
+      if (R.bearing == null) R.bearing = map.getBearing();
+      let d = ((target - R.bearing + 540) % 360) - 180;
+      R.bearing += d * (1 - Math.exp(-dt / 1.2));
+    }
+    M.follow(center, { padding: pad(), ...extra, ...(R.bearing != null ? { bearing: R.bearing } : {}) });
   } else if (R.follow === 'all' && R.styleReady && (R.playing || now - (R.seekAt || 0) < 1500)
              && now > (R.easeUntil || 0)) {
     // 全隊：每一格平滑地框住所有人（暫停時不動，保留整趟總覽或使用者自己調的視角）

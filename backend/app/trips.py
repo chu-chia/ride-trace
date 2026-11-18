@@ -1,4 +1,5 @@
 """行程：開團、邀請碼、加入、開始、結束自己的紀錄、踢人。"""
+import asyncio
 import secrets
 import time
 
@@ -188,6 +189,8 @@ async def finish_record(tid: str, uid: str, text: str = "結束自己的紀錄")
         fixes = [x for x in fixes if x]
         await events.emit(tid, "end", None, "全員結束紀錄，行程自動結束", ts=max(fixes) if fixes else None)
         await events.publish(tid, {"kind": "trip", "status": "ended"})
+        from . import replay  # replay 也 import trips，放這裡避免循環
+        asyncio.create_task(replay.warm(tid))
     return {"left": left, "ended": bool(ended)}
 
 

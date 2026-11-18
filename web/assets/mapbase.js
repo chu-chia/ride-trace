@@ -290,7 +290,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       if (now < busyUntil) { lastT = now; return; }  // 指北針、切 2D/3D 的動畫進行中，跟隨先讓路
       const dt = Math.min(0.2, (now - (lastT || now)) / 1000);
       lastT = now;
-      if (!following) { following = true; map.setCenterClampedToGround(false); smoothEl = null; }
+      if (!following) { following = true; map.setCenterClampedToGround(false); smoothEl = is3d && map.getTerrain() ? map.getCenterElevation() : null; }  // 從目前鏡頭高度開始追，不會一接手就跳
       let el = 0;
       if (is3d && map.getTerrain()) {
         const d = 0.0015, D = 0.003; // 約 150、300 公尺兩圈
