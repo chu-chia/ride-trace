@@ -10,10 +10,7 @@
 <link rel="stylesheet" href="/vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <style>
   main{max-width:1180px;margin:0 auto;padding:20px 16px 40px;display:flex;flex-direction:column;gap:14px}
-  header{display:flex;align-items:center;gap:12px}
-  header a{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:22px;color:var(--fg);text-decoration:none;background:var(--surface)}
-  header h1{margin:0;font-size:22px}
-  header span{margin-left:auto;font-size:12.5px;color:var(--muted)}
+  .page-top span{margin-left:auto;font-size:var(--fs-s);color:var(--muted)}
   .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
   .kpi{background:var(--surface);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
   .kpi b{font-size:24px}
@@ -82,7 +79,7 @@
 </head>
 <body>
 <main>
-  <header><a href="/" aria-label="回首頁">‹</a><h1>管理後台</h1><span id="upd">載入中…</span></header>
+  <header class="page-top"><a class="icon-btn" href="/" aria-label="回首頁"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a><h1>管理後台</h1><span id="upd">載入中…</span></header>
   <div id="denied" class="denied card" hidden>只有管理者可以看後台</div>
   <div id="app" hidden>
     <div class="card" id="testCard" style="margin-bottom:14px">
