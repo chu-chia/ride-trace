@@ -83,6 +83,8 @@ uv run python -m tools.simulate --group wuling --code ABC123 --speed 20 --drop 2
 
 在網頁「行程 → 回報」分頁可以看到伺服器網址（`https://<你的網址>/osmand`）和每個帳號一組的裝置 ID。同時支援舊版 OsmAnd 協定（query string，速度單位是節）和新版 JSON 格式。原生 App 可以在背景回報，騎車時建議用它而不是網頁定位。
 
+Traccar Client 的 **SOS 按鈕**（送出 `alarm=sos`）會走跟網頁 SOS 一樣的流程：事件＋全隊推播＋紅色橫幅，重送不會重複發；解除要在網頁按「解除求救」。
+
 ## 前方路況（交通部 TDX）
 
 `.env` 填 `TDX_CLIENT_ID`、`TDX_CLIENT_SECRET`（tdx.transportdata.tw 會員中心 → 資料服務 → API 金鑰），`docker compose up -d api worker`。用的是「省道即時性道路事件」（施工、事故、管制、落石、活動）。來源偶爾經緯度寫反、或里程換算失敗被放在台1線 0K（臺北車站前），程式會校正或略過。後台「外部資料同步」看得到筆數與本月呼叫次數。

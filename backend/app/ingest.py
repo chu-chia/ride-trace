@@ -7,7 +7,7 @@ from urllib.parse import parse_qsl
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from . import events
+from . import events, interact
 from .auth import current_uid
 from .db import K, r
 from .geo import bucket_of, day_key, segment_cells
@@ -143,6 +143,7 @@ async def osmand(request: Request):
         except ValueError:
             # iOS Traccar Client 用 x-www-form-urlencoded 送，自己解析，不依賴 python-multipart
             q.update(dict(parse_qsl(raw.decode("utf-8", "replace"))))
+    alarm = _alarm(q, body)
     if isinstance(body, dict) and "location" in body:
         loc = body["location"]
         c = loc.get("coords", {})
@@ -164,4 +165,22 @@ async def osmand(request: Request):
     uid = await r.get(K.device(device)) if device else None
     if not uid:
         raise HTTPException(403, "裝置 ID 沒有綁定帳號")
-    return await ingest(uid, fix)
+    res = await ingest(uid, fix)
+    if alarm == "sos" and res["trip"]:
+        # Traccar Client 的 SOS 按鈕：先寫入這一點的位置，再走跟網頁 SOS 相同的流程（事件、推播、紅色橫幅）
+        ev = await interact.raise_sos(res["trip"], uid, via="Traccar")
+        res["sos"] = ev["id"] if ev else "already"
+    return res
+
+
+def _alarm(q: dict, body) -> str:
+    """OsmAnd 協定是 ?alarm=sos；新版 JSON 可能放在 body、location 或 location.extras。"""
+    cands = [q.get("alarm")]
+    if isinstance(body, dict):
+        loc = body.get("location") if isinstance(body.get("location"), dict) else {}
+        extras = loc.get("extras") if isinstance(loc.get("extras"), dict) else {}
+        cands += [body.get("alarm"), loc.get("alarm"), extras.get("alarm"), loc.get("event")]
+    for c in cands:
+        if isinstance(c, str) and c.strip():
+            return c.strip().lower()
+    return ""

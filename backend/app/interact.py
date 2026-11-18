@@ -147,17 +147,27 @@ async def get_sos(tid: str, uid: str = Depends(current_uid)):
     return await active_sos(tid)
 
 
-@router.post("/{tid}/sos")
-async def send_sos(tid: str, uid: str = Depends(current_uid)):
-    """位置用伺服器上最後一次回報的位置（手機網頁定位或 Traccar），不靠前端傳。"""
-    await require_live_member(tid, uid)
+async def raise_sos(tid: str, uid: str, via: str = "") -> dict | None:
+    """網頁 SOS 與 Traccar 的 alarm=sos 共用：寫事件（推播、橫幅都由事件帶出）＋記在 trip:{id}:sos。
+    已經有未解除的 SOS 就回 None（Traccar 可能重送同一個警報）。
+    位置用伺服器上最後一次回報的位置（手機網頁定位或 Traccar），不靠前端傳。"""
     if await r.hexists(K.sos(tid), uid):
-        raise HTTPException(409, "你的 SOS 已經發出，隊友都看得到")
+        return None
     pos = await my_position(tid, uid)
     extra = {"lat": pos[0], "lon": pos[1]} if pos else {}
-    ev = await events.emit(tid, "sos", uid, "發出 SOS 求救" + ("" if pos else "（還沒有位置）"),
-                           ts=await event_ts(tid, uid), **extra)
-    await r.hset(K.sos(tid), uid, ev["id"])
+    text = "發出 SOS 求救" + (f"（{via}）" if via else "") + ("" if pos else "（還沒有位置）")
+    ev = await events.emit(tid, "sos", uid, text, ts=await event_ts(tid, uid), **extra)
+    # HSETNX：兩個請求同時進來時只留第一個事件
+    await r.hsetnx(K.sos(tid), uid, ev["id"])
+    return ev
+
+
+@router.post("/{tid}/sos")
+async def send_sos(tid: str, uid: str = Depends(current_uid)):
+    await require_live_member(tid, uid)
+    ev = await raise_sos(tid, uid)
+    if ev is None:
+        raise HTTPException(409, "你的 SOS 已經發出，隊友都看得到")
     return ev
 
 
