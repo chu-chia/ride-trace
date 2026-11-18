@@ -49,9 +49,17 @@ def _ts(v) -> int | None:
             return None
 
 
+MAX_FUTURE_MS = 5 * 60_000       # 手機時間比伺服器快超過 5 分鐘：改用伺服器時間（不然之後的正常點都會被當成舊點）
+MAX_PAST_MS = 24 * 3600_000      # 超過一天前的點不收（斷網補傳最多也就幾小時）
+
+
 async def ingest(uid: str, fix: Fix) -> dict:
     now = int(time.time() * 1000)
     ts = fix.ts or now
+    if ts > now + MAX_FUTURE_MS:
+        ts = now
+    elif ts < now - MAX_PAST_MS:
+        raise HTTPException(400, "這個點的時間超過一天前，不收")
     if not (-90 <= fix.lat <= 90 and -180 <= fix.lon <= 180):
         raise HTTPException(400, "座標不合法")
 
