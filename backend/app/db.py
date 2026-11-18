@@ -207,3 +207,19 @@ end
 return {new, all}
 """
 arrive = r.register_script(ARRIVE_LUA)
+
+# Worker（alerts group）：這個人的「警示時間游標」。點的 ts 比上一個處理過的新才回 1 並推進游標。
+# 斷網補傳、Traccar 重送、多個 worker 搶著處理時，舊點會晚到；沿路線里程（progress）與久停起點（stop_since）
+# 都只該被「更新的點」改寫，否則舊點會把里程拉回去造成落隊誤報、或把 stop_since 改成很久以前造成久停誤報。
+# 放在 state hash 的 ats 欄位，行程重置時跟著 state 一起刪。
+# KEYS: state    ARGV: ts（毫秒）
+ADVANCE_LUA = """
+local last = tonumber(redis.call('HGET', KEYS[1], 'ats') or '0')
+local ts = tonumber(ARGV[1])
+if ts > last then
+  redis.call('HSET', KEYS[1], 'ats', ARGV[1])
+  return 1
+end
+return 0
+"""
+advance_alert_ts = r.register_script(ADVANCE_LUA)

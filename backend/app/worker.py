@@ -22,7 +22,7 @@ import time
 from redis.exceptions import ResponseError
 
 from . import events, footprint, traffic, weather
-from .db import STATS_RULE_ARGS, K, arrive, check_lag, r, update_stats
+from .db import STATS_RULE_ARGS, K, advance_alert_ts, arrive, check_lag, r, update_stats
 from .longterm import record_point
 from .push import NOTIFY, handle_push
 from .geo import bearing_deg
@@ -443,15 +443,28 @@ async def check_stuck(tid: str, uid: str, f: dict):
                           lat=f["lat"], lon=f["lon"])
 
 
+async def is_fresh(tid: str, uid: str, f: dict) -> bool:
+    """這個點是否比這個人上一個進 alerts 的點新（同時推進游標）。ts 壞掉的點當作不新。"""
+    try:
+        ts = int(f["ts"])
+    except (KeyError, ValueError):
+        return False
+    return bool(await advance_alert_ts(keys=[K.state(tid, uid)], args=[ts]))
+
+
 async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
     """警示類：抵達集合點、前方測速（每筆都查）、落隊（同一批裡同一個行程只判斷一次）。"""
     for _, f in msgs:
         if f.get("trip") and f.get("uid") and "lat" in f:
-            await check_progress(f["trip"], f["uid"], f)  # 先算沿路線里程，落隊判斷會用到
+            # 只有比上一個處理過的點更新，才改寫沿路線里程與久停狀態（舊點晚到不能把它們倒回去）
+            fresh = await is_fresh(f["trip"], f["uid"], f)
+            if fresh:
+                await check_progress(f["trip"], f["uid"], f)  # 先算沿路線里程，落隊判斷會用到
             await check_arrival(f["trip"], f["uid"], float(f["lat"]), float(f["lon"]), int(f["ts"]))
             await check_speedcam(f["trip"], f["uid"], f)
             await check_hazard(f["trip"], f["uid"], f)
-            await check_stuck(f["trip"], f["uid"], f)
+            if fresh:
+                await check_stuck(f["trip"], f["uid"], f)
             await check_roadevent(f["trip"], f["uid"], f)
             await check_weather(f["trip"], f["uid"], f)
     trips = dict.fromkeys(f["trip"] for _, f in msgs if f.get("trip"))
