@@ -66,7 +66,13 @@ html,body{width:100%;height:100%;overflow:hidden}
 .sosbar div{background:var(--crit);color:#fff;font-weight:800;font-size:18px;padding:10px 20px;border-radius:14px;box-shadow:var(--shadow)}
 .empty{color:var(--muted);font-size:12px;margin:8px 0}
 .panel-toggle{position:absolute;top:var(--sp-3);right:var(--sp-3)}
-.war-panel.small .panel-body{display:none!important}.war-panel.small{height:60px!important}.war-panel.small .panel-toggle{background:var(--surface-2)}
+.war-panel.small .panel-body{display:none!important}.war-panel.small{height:60px!important;min-height:60px!important}
+/* 收合＝只有標題的膠囊，寬度跟著標題（位置由 war.js dock() 貼到最近的邊） */
+@media(min-width:1101px){.war-panel.small{width:max-content!important;max-width:min(440px,45vw);min-width:0}.war-panel.small .head-copy b{max-width:260px}}
+/* 騎士清單不要外框和底色，直接浮在地圖上（文字加陰影才讀得清楚） */
+.war-panel.cards{background:none;border-color:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+:root[data-theme="light"] .war-panel.cards{text-shadow:0 0 4px rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.95)}
+.war-panel.cards .team-row.on{background:color-mix(in srgb,var(--bg) 55%,transparent)}.war-panel.small .panel-toggle{background:var(--surface-2)}
 .war-panel.small .panel-note{display:none}
 .panel-resize{display:none;position:absolute;right:0;bottom:0;width:24px;height:24px;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 50%,var(--accent) 51%,var(--accent) 57%,transparent 58%)}
 .war-stage.editing .panel-grip{cursor:grab;touch-action:none;user-select:none}.war-stage.editing .panel-resize{display:block}.war-stage.editing .war-panel{outline:1px dashed var(--accent)}

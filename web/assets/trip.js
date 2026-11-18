@@ -1,4 +1,4 @@
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -101,7 +101,7 @@ function placeMarker(m) {
   m.el.classList.toggle('lost', st === 'lost');
   m.el.classList.toggle('rest', st === 'rest' || st === 'none');
   m.el.classList.toggle('done', st === 'done');
-  m.el.classList.toggle('gapflag', !!S.trip?.flags?.[m.u.uid] && st !== 'done');
+  gapGlow(m.el, !!S.trip?.flags?.[m.u.uid] && st !== 'done', S.trip?.gaps?.[m.u.uid], S.trip?.lag_km);
   const hd = s.heading != null && s.heading !== '' ? +s.heading : null;
   m.el.querySelector('.arrow').style.transform = `rotate(${(hd ?? 0) - map.getBearing()}deg)`;
   m.el.querySelector('.arrow').style.visibility = hd == null ? 'hidden' : '';
@@ -261,6 +261,7 @@ function syncTools() {
   press($('#bMe'), S.follow === S.me && !S.away);
   $('#bAll').classList.toggle('away', S.follow === 'all' && S.away);
   $('#bMe').classList.toggle('away', S.follow === S.me && S.away);
+  markFocus([...S.members].map(([id, m]) => [id, m.el]), S.follow === 'all' ? null : S.follow, S.away);
 }
 $('#bAll').onclick = () => setFollow('all');
 $('#bMe').onclick = () => pick(S.me);

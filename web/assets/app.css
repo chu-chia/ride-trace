@@ -103,8 +103,21 @@ a.li{color:inherit}
 .rider.lost .dot{background:#8e8e93;color:#fff;border-style:dashed}
 .rider.lost .arrow,.rider.rest .arrow,.rider.done .arrow{display:none}
 .rider.lost .name{color:var(--crit-ink)}
-.rider.gapflag .dot{box-shadow:0 0 0 4px var(--warn),0 2px 8px rgba(0,0,0,.35)}
-.rider.gapflag .name{color:var(--warn-ink)}
+/* 落隊／超前：不用實心框，改成淡淡的光暈；--g（0～1）＝超過門檻多少，0 黃、1 紅（common.js gapGlow） */
+.rider{--glow:color-mix(in srgb,#ff453a calc(var(--g,0) * 100%),#ffd60a)}
+.rider.gapflag .dot{box-shadow:0 0 12px 5px color-mix(in srgb,var(--glow) 50%,transparent),0 2px 8px rgba(0,0,0,.35)}
+.rider.gapflag .name{color:color-mix(in srgb,var(--glow) 70%,var(--fg))}
+/* 正在跟隨的人：放大一點、外圈一直往外擴散（省電模式只留一圈不動）；暫離時改成虛線圈 */
+.rider.focus{z-index:5!important}
+.rider.focus .dot{transform:scale(1.15);transition:transform .2s}
+.rider.focus::before,.rider.focus::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:2px solid var(--c);pointer-events:none;animation:rider-focus 1.8s ease-out infinite}
+.rider.focus::after{animation-delay:.9s}
+.rider.focus .name{background:var(--c);color:var(--ink,#fff)}
+.rider.focus.away::before{border-style:dashed;animation:none;opacity:.8}
+.rider.focus.away::after{display:none}
+.low-power .rider.focus::before{animation:none;opacity:.7}
+.low-power .rider.focus::after{display:none}
+@keyframes rider-focus{from{transform:scale(1);opacity:.85}to{transform:scale(2.1);opacity:0}}
 .rider.stacked .name{display:none}
 
 

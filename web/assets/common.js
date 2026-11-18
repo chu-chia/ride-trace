@@ -69,6 +69,22 @@ export function toast(text, { icon = '騎', color = '#d9500f', sub = '' } = {}) 
   setTimeout(() => el.remove(), 5000);
 }
 
+// 騎士標記的落隊光暈：flagged＝有落隊／超前旗標；超過門檻越多越紅（剛超過黃、超過兩倍門檻就是紅）
+export function gapGlow(el, flagged, gapKm, lagKm) {
+  el.classList.toggle('gapflag', !!flagged);
+  const lag = +lagKm || 1;
+  const g = flagged && Number.isFinite(+gapKm) ? Math.max(0, Math.min(1, (Math.abs(+gapKm) - lag) / lag)) : 0;
+  el.style.setProperty('--g', g.toFixed(2));
+}
+// 跟隨中的騎士標記：focus＝正在跟（away＝暫離中，虛線圈）
+export function markFocus(markers, uid, away) {
+  for (const [id, el] of markers) {
+    const on = id != null && String(id) === String(uid);
+    el.classList.toggle('focus', on);
+    el.classList.toggle('away', on && !!away);
+  }
+}
+
 // 隊員狀態表（回放、行程頁、戰情室共用的樣式）：每列＝顏色點＋名字（下面一行狀態）＋四欄數字，點一下選那個人。
 // 列只在人員或順序改變時重建，平常只更新文字：每秒重畫整個 innerHTML 的話，點下去的按鈕會被換掉而點不到。
 // rows：[{ uid, name, color, sub, subCls, cols: [[值, 單位] ×4], on, away }]

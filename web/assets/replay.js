@@ -1,5 +1,5 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate } from '/assets/common.js';
+import { api, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate, markFocus } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { cameraGestures } from '/assets/gestures.js';
 
@@ -193,7 +193,10 @@ $('#bAll').onclick = () => setFollow('all');
 
 /* ---------- 面板 ---------- */
 // 全隊狀態的每一列就是選人：點了鏡頭跟拍那個人，摘要／曲線也換成他
-function renderRiders() { renderTeam(); }
+function renderRiders() {
+  renderTeam();
+  markFocus(riders.map((m) => [m.uid, m.el]), R.follow === 'all' ? null : R.follow, R.away);
+}
 
 function renderSummary() {
   const m = riders.find((x) => x.uid === R.sel) || riders[0], s = m.summary;

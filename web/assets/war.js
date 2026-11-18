@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER } from '/assets/common.js';
+import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -37,10 +37,43 @@ const deskPortrait = () => document.documentElement.classList.contains('desk-por
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const snap = (v) => Math.round(v / 12) * 12;
 let editing = false, topLayer = 5;
+// ---------- 收合靠邊 ----------
+// 收合後變成只有標題的小膠囊：原本在左半就貼左、右半貼右；上半部往上疊在上一個面板下面，下半部往下貼底。
+// 展開時回到原本的位置大小（收合前的 inline style 存在 data-ostyle）。
+const dockable = () => !mobile.matches && !deskPortrait();
+function openBox(el) {  // 展開時的位置大小
+  const small = el.classList.contains('small'), cur = el.getAttribute('style') || '';
+  if (small) { el.classList.remove('small'); el.setAttribute('style', el.dataset.ostyle ?? ''); }
+  const r = el.getBoundingClientRect();
+  if (small) { el.classList.add('small'); el.setAttribute('style', cur); }
+  return { x: r.left, y: r.top, w: r.width, h: r.height };
+}
+function dock() {
+  if (!dockable()) return;
+  const g = Math.max(8, Math.round(innerWidth * 0.008));
+  const items = panels.filter((el) => el.classList.contains('small')).map((el) => {
+    const o = openBox(el);
+    el.setAttribute('style', el.dataset.ostyle ?? '');
+    el.style.removeProperty('width');
+    return { el, o, w: el.offsetWidth, h: el.offsetHeight, up: o.y + o.h / 2 < innerHeight / 2 };
+  });
+  const placed = panels.filter((el) => !el.classList.contains('small')).map((el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+  const order = [...items.filter((i) => i.up).sort((a, b) => a.o.y - b.o.y), ...items.filter((i) => !i.up).sort((a, b) => (b.o.y + b.o.h) - (a.o.y + a.o.h))];
+  for (const i of order) {
+    const x = i.o.x + i.o.w / 2 > innerWidth / 2 ? i.o.x + i.o.w - i.w : i.o.x;
+    const cross = (p) => p.x < x + i.w && x < p.x + p.w;
+    const y = i.up
+      ? Math.max(g, ...placed.filter((p) => cross(p) && p.y + p.h <= i.o.y + 1).map((p) => p.y + p.h + g))
+      : Math.min(innerHeight - g - i.h, ...placed.filter((p) => cross(p) && p.y >= i.o.y + i.o.h - 1).map((p) => p.y - g - i.h));
+    i.el.style.left = `${Math.round(x)}px`;
+    i.el.style.top = `${Math.round(y)}px`;
+    placed.push({ x, y, w: i.w, h: i.h });
+  }
+}
 function saveLayout() {
   const layout = Object.fromEntries(panels.map((el) => {
-    const r = el.getBoundingClientRect();
-    return [el.dataset.panel, { x: r.left / innerWidth, y: r.top / innerHeight, w: r.width / innerWidth, h: (el.classList.contains('small') ? +(el.dataset.openHeight || r.height) : r.height) / innerHeight, small: el.classList.contains('small') }];
+    const r = openBox(el);
+    return [el.dataset.panel, { x: r.x / innerWidth, y: r.y / innerHeight, w: r.w / innerWidth, h: (el.classList.contains('small') ? +(el.dataset.openHeight || r.h) : r.h) / innerHeight, small: el.classList.contains('small') }];
   }));
   try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* 瀏覽器停用儲存時仍可操作 */ }
 }
@@ -61,7 +94,9 @@ function restoreLayout() {
     el.style.top = `${clamp(p.y * innerHeight, 0, innerHeight - h)}px`;
     el.classList.toggle('small', !!p.small);
     el.querySelector('.panel-toggle')?.setAttribute('aria-expanded', String(!p.small));
+    if (p.small) el.dataset.ostyle = el.getAttribute('style') || '';
   }
+  dock();
 }
 function setEditing(on) {
   editing = on && !mobile.matches && !deskPortrait();
@@ -73,14 +108,22 @@ function edge(v, max) { return v < 18 ? 12 : max - v < 18 ? max : snap(v); }
 for (const el of panels) {
   el.addEventListener('pointerdown', () => { el.style.zIndex = ++topLayer; });
   el.querySelector('.panel-toggle').addEventListener('click', () => {
-    if (!el.classList.contains('small')) el.dataset.openHeight = String(el.getBoundingClientRect().height);
-    el.classList.toggle('small');
+    if (!el.classList.contains('small')) {
+      el.dataset.openHeight = String(el.getBoundingClientRect().height);
+      el.dataset.ostyle = el.getAttribute('style') || '';
+      el.classList.add('small');
+    } else {
+      el.classList.remove('small');
+      el.setAttribute('style', el.dataset.ostyle ?? '');
+      delete el.dataset.ostyle;
+    }
     el.querySelector('.panel-toggle').setAttribute('aria-expanded', String(!el.classList.contains('small')));
+    dock();
     saveLayout();
   });
   for (const handle of el.querySelectorAll('.panel-grip,.panel-resize')) {
     handle.addEventListener('pointerdown', (e) => {
-      if (!editing || mobile.matches || e.button !== 0 || e.target.closest('button,a')) return;
+      if (!editing || mobile.matches || e.button !== 0 || e.target.closest('button,a') || el.classList.contains('small')) return;  // 收合中的膠囊不能拖，展開再排
       e.preventDefault(); e.stopPropagation();
       const r = el.getBoundingClientRect(), resize = handle.classList.contains('panel-resize');
       const x0 = e.clientX, y0 = e.clientY;
@@ -104,7 +147,7 @@ for (const el of panels) {
 }
 $('#editLayout').onclick = () => setEditing(!editing);
 $('#resetLayout').onclick = () => {
-  for (const el of panels) { el.removeAttribute('style'); delete el.dataset.openHeight; el.classList.remove('small'); el.querySelector('.panel-toggle').setAttribute('aria-expanded', 'true'); }
+  for (const el of panels) { el.removeAttribute('style'); delete el.dataset.openHeight; delete el.dataset.ostyle; el.classList.remove('small'); el.querySelector('.panel-toggle').setAttribute('aria-expanded', 'true'); }
   try { localStorage.removeItem(LAYOUT_KEY); } catch { /* 儲存空間不可用 */ }
   setEditing(false);
 };
@@ -231,7 +274,7 @@ function frame(now) {
   lastT = now;
   for (const m of S.members.values()) {
     if (m.to) {
-      const k = Math.min(1, (now - m.t0) / 1000);
+      const k = Math.min(1, (now - m.t0) / (m.dur || 1000));
       m.pos = [m.from[0] + (m.to[0] - m.from[0]) * k, m.from[1] + (m.to[1] - m.from[1]) * k];
       if (k >= 1) m.to = null;
     }
@@ -244,7 +287,7 @@ function frame(now) {
       ar.style.transform = `rotate(${(hd ?? 0) - map.getBearing()}deg)`;
       m.el.classList.toggle('lost', m.state.status === 'lost');
       m.el.classList.toggle('rest', status(m)[0] === '停車');
-      m.el.classList.toggle('gapflag', !!S.flags[m.u.uid] && m.state.status !== 'done');
+      gapGlow(m.el, !!S.flags[m.u.uid] && m.state.status !== 'done', S.gaps[m.u.uid], S.lagKm || S.trip?.lag_km);
     }
   }
   const pts = [...S.members.values()].filter((m) => m.pos && m.u.active !== false && m.state.status !== 'lost').map((m) => m.pos);
@@ -317,6 +360,7 @@ function renderCards() {
     };
   }), (uid) => { S.focus = S.focus === uid && autoFollow ? null : uid; M.unfollow(); resumeFollow(); });
   if (!list.length) $('#cards').innerHTML = '<p class="empty">還沒有隊友</p>';
+  markFocus([...S.members].map(([id, m]) => [id, m.el]), S.focus, !autoFollow);
 }
 
 /* ---------- 事件流 ---------- */
@@ -504,7 +548,10 @@ function handle(msg) {
       if (!m) break;
       m.state = { ...m.state, ...msg, status: 'ok', seen: Date.now() };
       if (numeric(msg.speed)) { m.recent.push({ at: Date.now(), kmh: +msg.speed * 3.6 }); m.recent = m.recent.filter((x) => Date.now() - x.at < 10 * 60_000).slice(-180); }
-      m.from = m.pos || [msg.lon, msg.lat]; m.to = [msg.lon, msg.lat]; m.t0 = performance.now();
+      // 動畫長度＝跟上一點的間隔（和行程頁一樣）：固定 1 秒的話，2 秒回報一次的人會「走一秒停一秒」，跟隨他時鏡頭一頓一頓
+      const tnow = performance.now(), gap = m.lastAt ? tnow - m.lastAt : 1000;
+      m.lastAt = tnow;
+      m.from = m.pos || [msg.lon, msg.lat]; m.to = [msg.lon, msg.lat]; m.t0 = tnow; m.dur = Math.min(3000, Math.max(250, gap * 1.1));
       if (m.pos && !m.lastRough) m.trail.push(m.pos);
       m.lastRough = !!msg.rough;  // 精度太差的點只移動圖釘，不接進軌跡線
       if (m.trail.length > 3000) m.trail.splice(0, 500);
@@ -512,7 +559,7 @@ function handle(msg) {
     }
     case 'status': { const m = S.members.get(msg.uid); if (m) { m.state.status = msg.status; if (msg.status === 'done') m.u.active = false; } break; }
     case 'stats': { const m = S.members.get(msg.uid); if (m) m.u.stats = msg; break; }
-    case 'gap': S.gaps = msg.gaps; S.flags = msg.flags; break;
+    case 'gap': S.gaps = msg.gaps; S.flags = msg.flags; S.lagKm = msg.lag_km; break;
     case 'progress': S.prog[msg.uid] = { km: msg.km, off: msg.off_m }; break;
     case 'route': loadRoute(); break;
     case 'waypoints': S.waypoints = msg.items || []; renderCards(); break;
