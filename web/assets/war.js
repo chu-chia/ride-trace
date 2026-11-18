@@ -523,7 +523,7 @@ function renderProgress() {
     const p = S.prog[m.u.uid];
     let d = wrap.querySelector(`[data-u="${m.u.uid}"]`);
     if (!p || m.u.active === false) { d?.remove(); continue; }
-    if (!d) { d = document.createElement('div'); d.className = 'pdot'; d.dataset.u = m.u.uid; d.style.setProperty('--c', m.u.color); wrap.append(d); }
+    if (!d) { d = document.createElement('div'); d.className = 'pdot'; d.dataset.u = m.u.uid; d.style.setProperty('--c', m.u.color); d.style.setProperty('--ink', inkOn(m.u.color)); wrap.append(d); }
     d.innerHTML = `<span>${esc(m.u.nickname)}</span><b>${esc(m.el.querySelector('.dot').textContent)}</b>`;
     const km = clamp(+p.km || 0, 0, total);
     d.style.left = `${(km / total) * 100}%`;

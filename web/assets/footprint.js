@@ -256,7 +256,7 @@ function renderCalendar() {
     const km = F.summary.days[keyOf(day)] || 0, strength = Math.min(1, Math.log1p(km) / Math.log1p(max));
     const height = km ? Math.max(3, strength * 76) : 2, selected = day >= F.from && day <= F.to;
     const color = km ? `hsl(${18 + strength * 30} 95% ${43 + strength * 18}%)` : 'var(--muted)';
-    if (day.endsWith('-01') || i === 0) out += `<text x="${i * step}" y="13" fill="var(--muted)" font-size="10">${day.slice(0, 7).replace('-', '/')}</text>`;
+    if (day.endsWith('-01') || i === 0) out += `<text x="${i * step}" y="13" fill="var(--muted)" font-size="12">${day.slice(0, 7).replace('-', '/')}</text>`;
     out += `<rect tabindex="0" role="button" aria-label="${day} ${km.toFixed(1)} 公里" data-d="${day}" data-km="${km.toFixed(1)}" x="${i * step + 1}" y="${baseline - height}" width="5" height="${height}" rx="2" fill="${color}" opacity="${selected ? 1 : .28}" ${selected ? 'stroke="var(--fg)" stroke-width=".4"' : ''}/>`;
   });
   host.innerHTML = `<svg width="${days.length * step}" height="125" viewBox="0 0 ${days.length * step} 125" aria-label="每日里程長條圖">${out}</svg>`;
