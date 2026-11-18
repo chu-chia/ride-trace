@@ -106,6 +106,38 @@ const DEM = {
   attribution: 'Terrain © Mapzen / AWS',
 };
 
+// ---------- 地圖掛掉時的保底 ----------
+// MapLibre 腳本沒載到（CDN／網路問題）或 WebGL 開不起來時，換成一個「什麼都不做」的替身：
+// 任何屬性、呼叫、new 都回傳自己，所以頁面其餘功能（SOS、隊友清單、訊息）照常運作，只是沒有地圖。
+function inert() {
+  const fn = function () {};
+  const p = new Proxy(fn, {
+    get(_, k) {
+      if (k === Symbol.toPrimitive) return () => 0;
+      if (k === Symbol.iterator) return function* () {};
+      if (k === 'then' || k === 'toJSON') return undefined;   // 不要被當成 Promise／JSON 物件
+      return p;
+    },
+    apply() { return p; },
+    construct() { return p; },
+    set() { return true; },
+  });
+  return p;
+}
+if (!window.maplibregl) {
+  window.maplibregl = inert();
+  window.qijiMapDown = '地圖程式沒有載入';
+}
+
+function showMapError(container, msg) {
+  const el = document.createElement('div');
+  el.className = 'map-loading glass';
+  el.setAttribute('role', 'alert');
+  el.style.cssText = 'max-width:min(360px,calc(100% - 32px));text-align:center;line-height:1.5';
+  el.textContent = `地圖載入失敗（${msg}）。隊友清單、訊息、SOS 仍然可以用。`;
+  container.after(el);
+}
+
 export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, interactive = true, syncTheme = true, styles = DEFAULT_ORDER } = {}) {
   const ORDER = styles;
   let cur = style;
@@ -115,11 +147,23 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   const theme = () => { if (syncTheme) document.documentElement.dataset.theme = cur === 'light' ? 'light' : 'dark'; };
   theme();
   const hooks = [];
-  const map = new maplibregl.Map({
-    container, style: STYLES[cur].url, center, zoom, interactive,
-    maxPitch: 80, attributionControl: { compact: true },
-    dragRotate: interactive3d, pitchWithRotate: interactive3d, touchPitch: interactive3d,
-  });
+  const el = typeof container === 'string' ? document.getElementById(container) : container;
+  let map;
+  try {
+    if (window.qijiMapDown) throw new Error(window.qijiMapDown);
+    map = new maplibregl.Map({
+      container, style: STYLES[cur].url, center, zoom, interactive,
+      maxPitch: 80, attributionControl: { compact: true },
+      dragRotate: interactive3d, pitchWithRotate: interactive3d, touchPitch: interactive3d,
+    });
+  } catch (e) {
+    // 例如 WebGL 開不起來：一樣換成替身，不讓整頁壞掉
+    console.error('地圖初始化失敗', e);
+    showMapError(el, e.message?.includes('WebGL') ? '這台裝置不支援 WebGL' : e.message || '未知錯誤');
+    map = inert();
+    const base = { map, style: cur, styleName: STYLES[cur].name, is3d: false, down: true, nextStyle: () => STYLES[cur].name };
+    return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => {}) });  // 其他方法（follow、set3d…）都是空的
+  }
   if (!interactive3d && interactive) map.touchZoomRotate.disableRotation();
 
   // 底圖、地形圖磚還沒出來前畫面是一片黑：先放「地圖載入中」，圖磚到齊就收掉
@@ -127,7 +171,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   loadingEl.className = 'map-loading glass';
   loadingEl.setAttribute('role', 'status');
   loadingEl.innerHTML = '<span class="spin" aria-hidden="true"></span>地圖載入中…';
-  (typeof container === 'string' ? document.getElementById(container) : container).after(loadingEl);
+  el.after(loadingEl);
   // 用第一次 load（樣式＋第一批圖磚畫出來）；跟隨鏡頭會一直載新圖磚，等「全部載完」會等太久
   const doneLoading = () => {
     loadingEl.remove();

@@ -68,4 +68,15 @@ class NoCacheStatic(StaticFiles):
         return resp
 
 
+class VendorStatic(StaticFiles):
+    """第三方套件（MapLibre 等）自架：路徑帶版本號，內容不會變，讓瀏覽器長期快取。
+    不靠 CDN：在山上網路不穩時 CDN 掛掉不會拖垮行程頁的 SOS。"""
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        if resp.status_code == 200:
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+
+
 app.mount("/assets", NoCacheStatic(directory=WEB_DIR / "assets"), name="assets")
+app.mount("/vendor", VendorStatic(directory=WEB_DIR / "vendor"), name="vendor")

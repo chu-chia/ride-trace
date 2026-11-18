@@ -301,5 +301,8 @@ $('#clear').onclick = async () => {
       renderPts(); drawMarkers();
       M.onStyle(() => preview());
     } else renderPts();
-  } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  } catch (err) {
+    if (!P.trip) $('#tName').textContent = '載入失敗，請重新整理';
+    toast(err.message, { icon: '!', color: '#ff3b30' });
+  }
 })();

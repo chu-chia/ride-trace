@@ -26,7 +26,7 @@ DBMS 課程的 Redis 個人專題。**重點是展示 Redis 的進階功能**，
 docker-compose.yml   redis(6390) / api(8750) / valhalla(8752)
 backend/app/         FastAPI：auth trips ingest live replay footprint
 backend/tools/       import_gpx、extract_tracks、match_tracks、simulate
-web/                 純 HTML＋ES module，MapLibre 5.24（unpkg）
+web/                 純 HTML＋ES module，MapLibre 5.24（自架在 web/vendor/，不靠 CDN；地圖掛掉時 mapbase.js 換成替身，SOS 等功能照常）
 data/                （不進版控）GPX 衍生資料、展示軌跡、Valhalla 路網
 ```
 

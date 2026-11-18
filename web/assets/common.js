@@ -1,11 +1,18 @@
 // 共用：API、通知、小工具
 export async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    credentials: 'same-origin',
-    headers: opts.body ? { 'content-type': 'application/json' } : {},
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      credentials: 'same-origin',
+      headers: opts.body ? { 'content-type': 'application/json' } : {},
+      ...opts,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch {
+    throw new Error(navigator.onLine === false ? '沒有網路，請檢查手機訊號' : '連不到伺服器，請稍後再試');
+  }
+  // Tailscale serve／反向代理在後端重啟時回 502～504
+  if (res.status >= 502 && res.status <= 504) throw new Error('伺服器暫時連不上（可能正在重新啟動），請稍後再試');
   if (res.status === 401 && !location.pathname.startsWith('/login')) {
     location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
     throw new Error('請先登入');

@@ -19,7 +19,12 @@ const M = createMap($('#map'), { style: 'dark', zoom: 7, terrain: true });
 const map = M.map;
 window.qijiMap = map;
 
-const data = await api(`/api/trips/${tid}/replay`);
+let data;
+try { data = await api(`/api/trips/${tid}/replay`); }
+catch (err) {
+  $('#tSub').innerHTML = `${esc(err.message)}・<a href="" style="color:inherit;text-decoration:underline">重新整理</a>`;
+  throw err;
+}
 const riders = data.members.filter((m) => m.track.length > 1);
 const t0 = data.t0, t1 = data.t1;
 const R = { t: t0, playing: false, rate: 60, follow: 'all', followTarget: 'all', color: 'rider', sel: riders[0]?.uid, bearing: null, zoomed: false };

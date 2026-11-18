@@ -166,7 +166,15 @@ $('#joinF').onsubmit = (e) => { e.preventDefault(); join($('#code').value.trim()
 
 const pending = new URLSearchParams(location.search).get('join');
 if (pending) join(pending.toUpperCase());
-loadTrips();
+// 後端重啟或沒網路時不要一直停在「載入中…」：顯示原因並自動重試
+async function loadTripsRetry(wait = 3000) {
+  try { await loadTrips(); }
+  catch (err) {
+    $('#trips').innerHTML = `<div class="li"><span class="muted">${esc(err.message)}・${Math.round(wait / 1000)} 秒後自動重試</span></div>`;
+    setTimeout(() => loadTripsRetry(Math.min(30000, wait * 2)), wait);
+  }
+}
+loadTripsRetry();
 
 // 先放上次的畫布快照，再以快取格子和最新格子依序重畫。
 const previewKey = `qiji-footprint-preview:${me.uid}`;
