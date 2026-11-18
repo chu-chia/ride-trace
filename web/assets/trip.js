@@ -1,4 +1,4 @@
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, sheetRestH } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
 import { gpsQueue } from '/assets/gpsqueue.js';
@@ -133,8 +133,8 @@ M.onStyle(() => {
 function panelPad() {
   const narrow = innerWidth <= 760;
   if (!narrow) return { top: 70, bottom: 90, left: ($('#panel').offsetWidth || 380) + 50, right: 80 };
-  const top = $('#panel').getBoundingClientRect().top;
-  return { top: 80, bottom: Math.max(60, innerHeight - top + 16), left: 30, right: 64 };
+  // 手機一律用「抽屜收合時」的高度：抽屜拉上拉下時鏡頭不跟著跳
+  return { top: 80, bottom: Math.max(60, sheetRestH($('#panel'), 160) + 16), left: 30, right: 64 };
 }
 const refreshPad = () => setTimeout(() => (S.pad = panelPad()), 350);
 S.refreshPad = refreshPad;

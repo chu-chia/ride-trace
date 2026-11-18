@@ -4,7 +4,11 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="騎跡">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>騎跡 RideTrace</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
@@ -164,7 +168,7 @@ $('#createF').onsubmit = async (e) => {
   try { const t = await api('/api/trips', { method: 'POST', body: { name: $('#tripName').value || '臨時開團' } }); location.href = '/trip?id=' + t.id; }
   catch (err) { $('#err').textContent = err.message; }
 };
-$('#joinF').onsubmit = (e) => { e.preventDefault(); join($('#code').value.trim().toUpperCase()); };
+$('#joinF').onsubmit = (e) => { e.preventDefault(); document.activeElement?.blur(); join($('#code').value.trim().toUpperCase()); };
 
 const pending = new URLSearchParams(location.search).get('join');
 if (pending) join(pending.toUpperCase());

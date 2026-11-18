@@ -90,8 +90,6 @@
   /* 手機：進度條在抽屜上方，SOS 留在面板底部。 */
   .qx-sos{height:40px}
   .qx-prog{width:auto;border-radius:12px;padding:7px 12px 10px}
-  /* 面板展開時，地圖空間不夠，先藏起全隊進度。 */
-  body:has(#panel:not(.small)) .qx-prog{display:none}
   .qx-prog-h{margin-bottom:7px;font-size:11.5px}
   .qx-prog-h b{font-size:12px}
   .qx-turn{left:max(10px,env(safe-area-inset-left,0px));top:calc(max(10px,env(safe-area-inset-top,0px)) + 62px);max-width:calc(100vw - 90px);padding:8px 14px 8px 8px}
@@ -121,8 +119,9 @@
 body:has(#panel.small) .qx-prog{left:calc(50% + (var(--panel-mini-w) + var(--edge)) / 2);width:min(420px,calc(100vw - var(--panel-mini-w) - 160px))}
 body:has(#panel.small) .qx-turn{left:calc(var(--panel-mini-w) + var(--edge) * 2)}
 @media(max-width:760px){
-  .qx-prog,body:has(#panel.small) .qx-prog{left:10px;right:10px;bottom:var(--panel-small-h,184px);transform:none;width:auto}
-  body:has(#panel:not(.small)) .qx-prog{display:none}
+  /* 全隊進度貼在抽屜上方、跟著抽屜高度走；抽屜往上拉時逐漸淡出，展開後完全藏起 */
+  .qx-prog,body:has(#panel.small) .qx-prog{left:10px;right:10px;bottom:calc(var(--sheet-h,176px) + 8px);transform:none;width:auto;opacity:calc(1 - var(--sheet-t,0) * 4)}
+  body:has(#panel:not(.small)) .qx-prog{pointer-events:none}
   .qx-turn,body:has(#panel.small) .qx-turn{left:10px;top:max(var(--edge),env(safe-area-inset-top,0px));max-width:calc(100vw - 80px)}
   .qx-pop{max-height:none}
   .qc-list{max-height:220px}

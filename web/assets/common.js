@@ -175,18 +175,49 @@ export function liquidGlass(el, { radius = 24, bezel = 20, scale = 90 } = {}) {
 }
 
 // 手機底部抽屜拖曳（參考美食地圖 useSheetDrag）：
-// 抽屜整塊都能拖（頂列、摘要、把手，按鈕上也行），抽屜跟著手指走；放開時看速度（快速一甩）或位置決定開合。
+// 抽屜整塊都能拖（頂列、摘要、把手，按鈕上也行），抽屜跟著手指走；放開時看速度（快速一甩）或距離決定開合。
 // 展開時在清單裡往下拉：清單已在最頂端就改成拖抽屜收合，否則照常捲動。
 // 用 touch 事件是因為原生捲動會搶走 pointer 事件；接手拖曳後才 preventDefault。
+// 抽屜每一格的實際高度都寫進 --sheet-h（px）與 --sheet-t（0 收合～1 展開），
+// 進度條、時間軸、比例尺用它貼在抽屜上方，拖曳和動畫中都會順順跟著走，不會在兩個位置之間跳。
 const SHEET_MQ = matchMedia('(max-width: 760px)');
 const NO_DRAG = 'input, select, textarea, [contenteditable], .no-drag';
-const TAP_SLOP = 6, FLICK = 0.45; // px、px/ms
+const TAP_SLOP = 6, FLICK = 0.45, ANIM = 280; // px、px/ms、ms
 export function sheetDrag(sheet, { isOpen, setOpen, scroll }) {
-  let st = 'idle', scroller = null, x0 = 0, y0 = 0, h0 = 0, minH = 0, maxH = 0, h = 0, trail = [], endAt = 0, timer = 0;
+  const root = document.documentElement.style;
+  let st = 'idle', scroller = null, x0 = 0, y0 = 0, h0 = 0, minH = 0, maxH = 0, h = 0, trail = [], endAt = 0, timer = 0, busy = false;
+  const publish = () => {
+    const cur = sheet.offsetHeight;
+    if (!busy) { if (isOpen()) maxH = cur; else minH = cur; } // 平常就順便記下兩端的高度
+    if (!busy && !isOpen()) sheet.dataset.minH = cur;
+    root.setProperty('--sheet-h', `${cur}px`);
+    const t = maxH > minH ? (cur - minH) / (maxH - minH) : (isOpen() ? 1 : 0);
+    root.setProperty('--sheet-t', Math.min(1, Math.max(0, t)).toFixed(3));
+  };
+  if ('ResizeObserver' in window) new ResizeObserver(publish).observe(sheet); // 轉場動畫中每一格都會觸發
   const measure = () => {
+    busy = true;
     sheet.style.transition = 'none'; sheet.style.height = '';
     sheet.classList.add('small'); minH = sheet.offsetHeight;
     sheet.classList.remove('small'); maxH = sheet.offsetHeight;
+    sheet.dataset.minH = minH;
+  };
+  // 從目前高度動畫到開或關，結束後才交回 CSS（點把手和放開拖曳都走這裡）
+  const settle = (open) => {
+    sheet.style.transition = '';
+    sheet.style.height = `${open ? maxH : minH}px`;
+    if (!open) sheet.classList.add('small'); // 收合時內容先藏，只動高度
+    clearTimeout(timer);
+    timer = setTimeout(() => { sheet.style.height = ''; busy = false; setOpen(open); publish(); }, ANIM);
+  };
+  const toggle = (open = !isOpen()) => {
+    if (!SHEET_MQ.matches) { setOpen(open); return; }
+    clearTimeout(timer);
+    const from = sheet.offsetHeight;
+    measure();
+    sheet.style.height = `${from}px`;
+    void sheet.offsetHeight; // 先套用起點，下一步的高度變化才會有轉場
+    settle(open);
   };
   sheet.addEventListener('touchstart', (e) => {
     st = 'idle';
@@ -205,9 +236,10 @@ export function sheetDrag(sheet, { isOpen, setOpen, scroll }) {
       if (Math.abs(dy) < TAP_SLOP && Math.abs(t.clientX - x0) < TAP_SLOP) return;
       if (Math.abs(t.clientX - x0) > Math.abs(dy)) { st = 'idle'; return; } // 橫向滑動不搶
       clearTimeout(timer);
-      const open = isOpen();
+      const from = sheet.offsetHeight;
       measure();
-      h0 = open ? maxH : minH;
+      h0 = from;
+      sheet.style.height = `${h0}px`;
       y0 = t.clientY; // 從接手的位置開始算，抽屜不會突然跳一段
       st = 'dragging';
     }
@@ -220,18 +252,15 @@ export function sheetDrag(sheet, { isOpen, setOpen, scroll }) {
   }, { passive: false });
   const end = (e) => {
     if (st === 'pending' && e?.type === 'touchend' && !isOpen() && !e.target.closest('a, button, input, select, textarea, label')) {
-      st = 'idle'; endAt = performance.now(); setOpen(true); return; // 收合時點摘要空白處也能展開
+      st = 'idle'; endAt = performance.now(); toggle(true); return; // 收合時點摘要空白處也能展開
     }
     if (st !== 'dragging') { st = 'idle'; return; }
     st = 'idle'; endAt = performance.now();
     const [ta, ya] = trail[0] || [0, 0], [tb, yb] = trail.at(-1) || [1, 0];
     const speed = (yb - ya) / Math.max(1, tb - ta), moved = h - h0, need = Math.min(90, (maxH - minH) / 4);
+    const wasOpen = h0 > (minH + maxH) / 2;
     // 快速一甩看方向；慢慢拉則要拉超過一段距離（90px 或全程四分之一）才換狀態，否則彈回
-    const open = speed < -FLICK ? true : speed > FLICK ? false : Math.abs(moved) > need ? moved > 0 : h0 === maxH;
-    sheet.style.transition = '';
-    sheet.style.height = `${open ? maxH : minH}px`;
-    if (!open) sheet.classList.add('small'); // 收合時內容先藏，只動高度
-    timer = setTimeout(() => { sheet.style.height = ''; setOpen(open); }, 280);
+    settle(speed < -FLICK ? true : speed > FLICK ? false : Math.abs(moved) > need ? moved > 0 : wasOpen);
   };
   sheet.addEventListener('touchend', end);
   sheet.addEventListener('touchcancel', end);
@@ -239,7 +268,16 @@ export function sheetDrag(sheet, { isOpen, setOpen, scroll }) {
   sheet.addEventListener('click', (e) => {
     if (performance.now() - endAt < 400) { e.preventDefault(); e.stopPropagation(); }
   }, true);
+  return { toggle };
 }
+
+// 地圖留白用：手機抽屜「收合時」的高度。展開或拖曳中都回傳同一個值，
+// 地圖鏡頭不會因為抽屜拉上拉下而跟著跳；抽屜展開時本來就是在看面板。
+export const sheetRestH = (el, fallback = 120) => Number(el?.dataset.minH) || fallback;
+
+// 手機：不給頁面縮放（地圖自己的雙指縮放不受影響），從上一頁返回時也不要自動叫出鍵盤
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+addEventListener('pageshow', (e) => { if (e.persisted) document.activeElement?.blur?.(); });
 
 // 左側欄：收合鈕（電腦）與拉把手（手機）行為一致，每頁各自記住開合狀態
 export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 760 } = {}) {
@@ -255,13 +293,9 @@ export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 7
     onChange?.(small);
   };
   if (btn) btn.onclick = () => set(!small);
-  if (handle) handle.onclick = () => set(!small);
-  sheetDrag(panel, { isOpen: () => !small, setOpen: (open) => set(!open), scroll: '.panel-body' });
   set(small, false);
-  // 手機收合時抽屜高度不固定（摘要一行或兩行），持續量實際高度，讓時間軸、進度條、比例尺貼在它上方
-  if ('ResizeObserver' in window) new ResizeObserver(() => {
-    if (small) document.documentElement.style.setProperty('--panel-small-h', `${panel.offsetHeight + 8}px`);
-  }).observe(panel);
+  const drag = sheetDrag(panel, { isOpen: () => !small, setOpen: (open) => set(!open), scroll: '.panel-body' });
+  if (handle) handle.onclick = () => drag.toggle();
   liquidGlass(panel);
   return { set, get small() { return small; } };
 }

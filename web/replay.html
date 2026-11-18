@@ -4,7 +4,14 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="theme-color" content="#d9500f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="騎跡">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>回放｜騎跡 RideTrace</title>
 <link rel="stylesheet" href="/vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
@@ -39,11 +46,10 @@
   .legend i{display:block;flex:1;height:8px;border-radius:4px}
   .maplibregl-ctrl-bottom-right{bottom:84px}
   @media (max-width:760px){
-    .timeline,body:has(.panel.small) .timeline{left:var(--sp-2);right:var(--sp-2);bottom:calc(var(--panel-h) + var(--sp-2));padding:var(--sp-2) var(--sp-3);gap:var(--sp-2)}
-    body:has(.panel.small) .timeline{bottom:var(--panel-small-h,120px)}
+    .timeline,body:has(.panel.small) .timeline{left:var(--sp-2);right:var(--sp-2);bottom:calc(var(--sheet-h,120px) + var(--sp-2));padding:var(--sp-2) var(--sp-3);gap:var(--sp-2)}
     .track{min-width:0}
     .tl-time b{font-size:15px}
-    .maplibregl-ctrl-bottom-right{bottom:calc(var(--panel-h) + 70px)}
+    .maplibregl-ctrl-bottom-right{bottom:calc(var(--sheet-h,120px) + 70px)}
   }
 </style>
 </head>

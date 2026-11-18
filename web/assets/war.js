@@ -17,6 +17,18 @@ const FEED_FILTER_KEY = 'qiji:war:feed-filter';
 const panels = [...document.querySelectorAll('.war-panel')];
 const stage = $('#stage');
 const mobile = matchMedia('(max-width:1100px)');
+// 手機（觸控、螢幕窄）才出現「電腦版／手機版」切換鈕；切換後重新載入，讓整頁用新的版面寬度重排
+{
+  const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 820;
+  let desk = false;
+  try { desk = localStorage.getItem('qiji:war:desk') === '1'; } catch { /* 私密模式 */ }
+  const b = $('#deskView');
+  if (phone) {
+    b.style.display = '';
+    setLabel(b, desk ? '手機版' : '電腦版');
+    b.onclick = () => { try { localStorage.setItem('qiji:war:desk', desk ? '0' : '1'); } catch { /* 私密模式 */ } location.reload(); };
+  }
+}
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const snap = (v) => Math.round(v / 12) * 12;
 let editing = false, topLayer = 5;
