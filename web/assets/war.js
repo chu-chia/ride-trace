@@ -2,6 +2,7 @@
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
 import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
+import { liveSocket } from '/assets/livesock.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
@@ -415,10 +416,9 @@ function renderProgress() {
 }
 
 /* ---------- WebSocket ---------- */
+// 自動重連＋斷線橫幅在 livesock.js（和行程頁共用）
 function connect() {
-  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/trips/${tid}`);
-  ws.onmessage = (e) => handle(JSON.parse(e.data));
-  ws.onclose = (e) => { if (e.code === 4403) { $('#sub').textContent = '你不是這個行程的成員'; return; } setTimeout(connect, 2000); };
+  liveSocket(`/ws/trips/${tid}`, { onMessage: handle, onForbidden: () => { $('#sub').textContent = '你不是這個行程的成員'; } });
 }
 function handle(msg) {
   switch (msg.kind) {

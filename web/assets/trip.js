@@ -1,5 +1,6 @@
 import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast } from '/assets/common.js';
 import { createMap, declutter } from '/assets/mapbase.js';
+import { liveSocket } from '/assets/livesock.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 if (!tid) location.href = '/';
@@ -381,13 +382,12 @@ function renderAll() { renderHeader(); renderTeam(); renderEvents(); renderInvit
 setInterval(() => { if (S.trip) { renderHeader(); renderTeam(); S.members.forEach(placeMarker); } }, 1000);
 
 /* ---------- WebSocket ---------- */
+// 自動重連＋斷線橫幅在 livesock.js（和戰情室共用）
 function connect() {
-  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/trips/${tid}`);
-  ws.onmessage = (e) => handle(JSON.parse(e.data));
-  ws.onclose = (e) => {
-    if (e.code === 4403) { toast('你不是這個行程的成員', { icon: '!', color: '#ff3b30' }); setTimeout(() => (location.href = '/'), 1500); return; }
-    setTimeout(connect, 2000);
-  };
+  liveSocket(`/ws/trips/${tid}`, {
+    onMessage: handle,
+    onForbidden: () => { toast('你不是這個行程的成員', { icon: '!', color: '#ff3b30' }); setTimeout(() => (location.href = '/'), 1500); },
+  });
 }
 
 function handle(msg) {

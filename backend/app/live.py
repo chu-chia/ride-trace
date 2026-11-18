@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -12,6 +13,7 @@ from .trips import build_snapshot
 
 router = APIRouter()
 log = logging.getLogger("qiji.live")
+PING_S = 15
 
 
 @router.websocket("/ws/trips/{tid}")
@@ -23,17 +25,23 @@ async def trip_ws(ws: WebSocket, tid: str):
         return
     await ws.accept()
     await r.incr("stat:ws")                       # 後台：目前的 WebSocket 連線數
-    await r.zadd("online:viewer", {uid: int(__import__("time").time() * 1000)})
+    await r.zadd("online:viewer", {uid: int(time.time() * 1000)})
     ps = r.pubsub()
     await ps.subscribe(K.live(tid))
     try:
         await ws.send_text(json.dumps({"kind": "snapshot", "trip": await build_snapshot(tid, uid)}, ensure_ascii=False))
 
         async def pump():
+            last = time.monotonic()
             while True:
                 msg = await ps.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if msg and msg["type"] == "message":
                     await ws.send_text(msg["data"])
+                    last = time.monotonic()
+                elif time.monotonic() - last >= PING_S:
+                    # 心跳：前端超過 40 秒沒收到任何訊息就顯示「連線中斷」並重連；送不出去也讓這端及早發現斷線
+                    await ws.send_text('{"kind":"ping"}')
+                    last = time.monotonic()
 
         async def recv():
             while True:
