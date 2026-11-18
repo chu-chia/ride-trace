@@ -13,7 +13,10 @@ from .db import K, r
 router = APIRouter(prefix="/api")
 SESSION_TTL = 30 * 24 * 3600
 COOKIE = "qiji_session"
-PALETTE = ["#0a84ff", "#ff9f0a", "#30d158", "#bf5af2", "#ff375f", "#5ac8fa", "#ffd60a", "#64d2ff", "#ac8e68", "#ff6482"]
+# 註冊頁和設定頁共用同一組（UX-47）：拿掉太像的兩個（#64d2ff 像天藍、#ff6482 像桃紅），補上靛藍、薄荷；名字給螢幕閱讀器念
+PALETTE_NAMED = [("#0a84ff", "藍"), ("#ff9f0a", "橘"), ("#30d158", "綠"), ("#bf5af2", "紫"), ("#ff375f", "桃紅"),
+                 ("#5ac8fa", "天藍"), ("#ffd60a", "黃"), ("#ac8e68", "棕"), ("#5e5ce6", "靛藍"), ("#00c7be", "薄荷")]
+PALETTE = [c for c, _ in PALETTE_NAMED]
 
 
 def hash_pw(pw: str) -> str:
@@ -123,7 +126,7 @@ async def login(body: LoginIn, resp: Response):
     uid = await r.get(K.username(body.username.strip().lower()))
     pw = await r.hget(K.user(uid), "pw") if uid else None
     if not uid or not pw or not check_pw(body.password, pw):
-        raise HTTPException(401, "帳號或密碼不對")
+        raise HTTPException(401, "帳號或密碼不對，請再確認一次（密碼有分大小寫）。忘記密碼請按下面的「忘記密碼？」")
     tok = await _new_session(resp, uid)
     return {"user": await public_user(uid), "token": tok}
 
@@ -170,10 +173,18 @@ async def update_me(body: ProfileIn, uid: str = Depends(current_uid)):
     return await public_user(uid)
 
 
+@router.get("/palette")
+async def palette():
+    """頭像顏色選項：註冊頁（還沒登入）和設定頁共用，附中文名字。"""
+    seq = int(await r.get("seq:user") or 0)
+    # next：註冊時沒自己挑，會分到的顏色（依 uid 輪流，UX-09）；同時有人註冊時可能差一格，不影響
+    return {"colors": PALETTE, "named": [{"color": c, "name": n} for c, n in PALETTE_NAMED],
+            "next": PALETTE[(seq + 1) % len(PALETTE)]}
+
+
 @router.get("/me/palette")
-async def palette(uid: str = Depends(current_uid)):
-    """設定頁的頭像顏色選項（跟註冊時能選的一樣）。"""
-    return {"colors": PALETTE}
+async def my_palette(uid: str = Depends(current_uid)):
+    return await palette()
 
 
 class PasswordIn(BaseModel):
