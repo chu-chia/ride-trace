@@ -223,18 +223,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       // 2D 仍可旋轉（右鍵／Ctrl 拖曳、雙指旋轉），只是不會傾斜
       if (is3d) { map.touchPitch.enable(); map.dragRotate.enable(); } else map.touchPitch.disable();
     }
-    renderHint();
   }
 
-  // 電腦操作 3D 時，下方提示怎麼旋轉視角（手機用雙指，不顯示）
-  const hint = document.createElement('div');
-  hint.className = 'map-hint glass';
-  hint.textContent = '按住 Ctrl 拖曳可以旋轉視角';
-  hint.hidden = true;
-  if (interactive && interactive3d) el.after(hint);
-  function renderHint() {
-    hint.hidden = !(is3d && matchMedia('(hover: hover) and (pointer: fine)').matches);
-  }
 
   function applyTerrain() {
     if (!map.getSource('dem')) {

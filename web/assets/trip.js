@@ -1,4 +1,4 @@
-import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable } from '/assets/common.js';
+import { api, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
 import { gpsQueue } from '/assets/gpsqueue.js';
@@ -123,38 +123,25 @@ M.onStyle(() => {
     map.addLayer({ id: 'trails-casing', type: 'line', source: 'trails', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#000', 'line-opacity': 0.25, 'line-width': 6 } });
     map.addLayer({ id: 'trails', type: 'line', source: 'trails', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 3.5, 'line-opacity': 0.9 } });
   }
-  $('#bStyle').textContent = M.styleName;
+  setLabel($('#bStyle'), M.styleName);
   S.styleReady = true; // isStyleLoaded() 在圖磚載入中都是 false，不能拿來判斷
 });
 
 /* ---------- 鏡頭 ---------- */
 ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => { if (e.originalEvent) { S.lastInteract = Date.now(); S.fly = null; S.followZoomed = false; M.unfollow(); } }));
-// 面板收合狀態與螢幕尺寸分開記錄；瀏覽器限制儲存時仍可操作。
-const PANEL_KEY = 'qiji.trip.panel.collapsed';
-let collapsed = innerWidth <= 760;
-try { const saved = localStorage.getItem(PANEL_KEY); if (saved !== null) collapsed = saved === '1'; } catch { /* 私密模式可能停用儲存 */ }
-function setCollapsed(value) {
-  collapsed = value;
-  $('#panel').classList.toggle('small', value);
-  $('#collapseBtn').textContent = value ? '›' : '‹';
-  $('#collapseBtn').setAttribute('aria-label', value ? '展開面板' : '收合面板');
-  $('#collapseBtn').setAttribute('aria-expanded', String(!value));
-  $('#handle').setAttribute('aria-expanded', String(!value));
-  try { localStorage.setItem(PANEL_KEY, value ? '1' : '0'); } catch { /* 略過 */ }
-  refreshPad();
-}
-$('#panel').classList.toggle('small', collapsed);
+// 側欄收合（電腦收合鈕／手機拉把手）由 common.js initPanel 統一處理，這裡只更新地圖留白
 function panelPad() {
   const narrow = innerWidth <= 760;
-  if (!narrow) return { top: 70, bottom: 90, left: $('#panel').classList.contains('small') ? 270 : 440, right: 70 };
+  if (!narrow) return { top: 70, bottom: 90, left: ($('#panel').offsetWidth || 380) + 50, right: 80 };
   const top = $('#panel').getBoundingClientRect().top;
   return { top: 80, bottom: Math.max(60, innerHeight - top + 16), left: 30, right: 64 };
 }
-S.pad = panelPad();
 const refreshPad = () => setTimeout(() => (S.pad = panelPad()), 350);
 S.refreshPad = refreshPad;
 addEventListener('resize', refreshPad);
-setCollapsed(collapsed);
+const PANEL = initPanel($('#panel'), 'trip', { onChange: refreshPad });
+S.pad = panelPad();
+const setCollapsed = (v) => PANEL.set(v);
 
 // 要跟著誰：選了某個人就跟他；「全隊」但地圖上只有一個人時，也跟著那個人
 function followTarget() {
@@ -241,14 +228,14 @@ function syncTools() {
 }
 $('#bAll').onclick = () => setFollow('all');
 $('#bMe').onclick = () => setFollow(S.me);
-$('#bStyle').onclick = () => { $('#bStyle').textContent = M.nextStyle(); };
+$('#bStyle').onclick = () => setLabel($('#bStyle'), M.nextStyle());
 $('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 
 /* ---------- 面板 ---------- */
 function selectTab(name) {
   const primary = ['wp', 'events', 'mark'].includes(name) ? 'more' : name;
   $$('#tabs button').forEach((x) => x.classList.toggle('on', x.dataset.t === primary));
-  $$('.body[data-b]').forEach((x) => (x.hidden = x.dataset.b !== name));
+  $$('.panel-body[data-b]').forEach((x) => (x.hidden = x.dataset.b !== name));
   setCollapsed(false);
   dispatchEvent(new CustomEvent('qiji:tab', { detail: { tab: name, more: $('#moreNav button.on')?.dataset.moreTab } }));
 }
@@ -261,16 +248,6 @@ $('#tabs').onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) sel
 $('#moreNav').onclick = (e) => { const b = e.target.closest('[data-more-tab]'); if (b) selectMore(b.dataset.moreTab); };
 $$('[data-open-tab]').forEach((b) => { b.onclick = () => selectTab(b.dataset.openTab); });
 $$('[data-back-more]').forEach((b) => { b.onclick = () => selectTab('more'); });
-$('#collapseBtn').onclick = () => setCollapsed(!collapsed);
-let draggedHandle = false;
-$('#handle').onclick = () => { if (draggedHandle) { draggedHandle = false; return; } setCollapsed(!collapsed); };
-let startY = null;
-$('#handle').addEventListener('pointerdown', (e) => { startY = e.clientY; $('#handle').setPointerCapture(e.pointerId); });
-$('#handle').addEventListener('pointerup', (e) => {
-  if (startY == null) return;
-  const delta = e.clientY - startY; startY = null;
-  if (Math.abs(delta) > 36) { draggedHandle = true; setCollapsed(delta > 0); e.preventDefault(); setTimeout(() => { draggedHandle = false; }, 0); }
-});
 addEventListener('qiji:open-tab', (e) => { if (e.detail.more) selectMore(e.detail.more); else selectTab(e.detail.tab); });
 addEventListener('DOMContentLoaded', () => { if (['team', 'route', 'msg', 'more'].includes(location.hash.slice(1))) selectTab(location.hash.slice(1)); });
 
