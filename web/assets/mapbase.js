@@ -102,7 +102,8 @@ function recolorNavy(map) {
   }
 }
 const DEM = {
-  type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 14,
+  // maxzoom 12：更細的地形放大用就好，圖磚請求少很多（手機流量、電力，也是「地圖載入中」拖很久的主因，UX-12）
+  type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 12,
   tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
   attribution: 'Terrain © Mapzen / AWS',
 };
@@ -208,14 +209,22 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   loadingEl.setAttribute('role', 'status');
   loadingEl.innerHTML = '<span class="spin" aria-hidden="true"></span>地圖載入中…';
   el.after(loadingEl);
-  // 用第一次 load（樣式＋第一批圖磚畫出來）；跟隨鏡頭會一直載新圖磚，等「全部載完」會等太久
+  // 底圖畫出來就收：底圖（向量／衛星）的圖磚第一次載入完成、或第一次 idle、或 load，哪個先到用哪個。
+  // 不能只等 load：3D 地形圖磚鏡頭一動就被取消重抓，load 可能拖到 30 秒（UX-12）。最多蓋 5 秒
+  let loaded = false;
   const doneLoading = () => {
+    if (loaded) return;
+    loaded = true;
+    map.off('sourcedata', onBase);
     loadingEl.remove();
     // 精簡版來源標示預設是展開的，在手機上會蓋住一條地圖；收成 ⓘ，點了再展開
     map.getContainer().querySelector('.maplibregl-ctrl-attrib.maplibregl-compact-show')?.classList.remove('maplibregl-compact-show');
   };
+  const onBase = (e) => { if ((e.sourceId === 'openmaptiles' || e.sourceId === 'sat') && e.isSourceLoaded && e.tile) doneLoading(); };
+  map.on('sourcedata', onBase);
   map.once('load', doneLoading);
-  setTimeout(doneLoading, 30000); // 網路很慢時也不要一直蓋著
+  map.once('idle', doneLoading);
+  setTimeout(doneLoading, 5000); // 網路很慢時也不要一直蓋著
 
   const firstSymbol = () => map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
 

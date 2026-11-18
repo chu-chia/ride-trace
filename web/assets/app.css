@@ -265,3 +265,9 @@ body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-mini-w
 .qx-fatal h1{margin:0;font-size:22px;line-height:1.3}
 .qx-fatal p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.6}
 .qx-fatal .acts{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+
+/* 兩段式確認的倒數條（common.js armConfirm） */
+.arming{position:relative;overflow:hidden}
+.arming::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:currentColor;opacity:.75;transform-origin:left;animation:qxArm var(--arm,6s) linear forwards}
+@keyframes qxArm{to{transform:scaleX(0)}}
+@media (prefers-reduced-motion:reduce){.arming::after{animation-duration:0s;animation-delay:var(--arm,6s)}}

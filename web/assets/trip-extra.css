@@ -56,8 +56,10 @@
 .qx-kinds input:checked+span{background:var(--accent);color:#fff;font-weight:600}
 /* SOS：紅色，長按時外圈填滿 */
 .qx-sos{position:relative;height:42px;min-width:56px;padding:0 12px;border:0;border-radius:12px;background:#e5352b;color:#fff;font-weight:800;font-size:13px;cursor:pointer;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
-.qx-sos i{position:absolute;inset:0;background:rgba(0,0,0,.28);transform:scaleX(0);transform-origin:left}
-.qx-sos.holding i{transform:scaleX(1);transition:transform 1.5s linear}
+.qx-sos i{position:absolute;inset:0;background:rgba(0,0,0,.28);transform:scaleX(var(--p,0));transform-origin:left}
+/* 長按進度：左邊的圓環跟著填滿（trip-extra.js 每一格更新 --p，UX-22） */
+.qx-sos.holding::before{content:"";position:absolute;left:14px;top:50%;width:26px;height:26px;margin-top:-13px;border-radius:50%;background:conic-gradient(#fff calc(var(--p,0) * 360deg),rgba(255,255,255,.28) 0);-webkit-mask:radial-gradient(circle,transparent 8px,#000 9px);mask:radial-gradient(circle,transparent 8px,#000 9px);z-index:1}
+.qx-sos.holding span{padding-left:30px}
 .qx-sos span{position:relative}
 .qx-sos.active{background:#1f9d55}
 .qx-sosbar{position:fixed;z-index:40;top:max(70px,calc(env(safe-area-inset-top,0px) + 60px));left:50%;transform:translateX(-50%);width:min(420px,calc(100% - 24px));display:flex;flex-direction:column;gap:6px}
@@ -130,3 +132,8 @@ body:has(#panel.small) .qx-turn{left:calc(var(--panel-mini-w) + var(--edge) * 2)
   .qc-list{max-height:220px}
 }
 #gpsInfo.warn{color:var(--warn-ink);font-weight:600;opacity:1}
+
+/* 聊天輸入框固定在面板底部，手機上不用再往下捲（UX-28） */
+#chatForm.qc-form{position:sticky;bottom:calc(-1 * var(--sp-4));z-index:2;margin:0 -2px calc(-1 * var(--sp-4));padding:8px 2px calc(8px + var(--sp-4));background:var(--lg-tint,var(--bg));-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:0 -1px 0 var(--line)}
+.qc-outbox{padding:8px 10px;border-radius:10px;background:color-mix(in srgb,#ff9f0a 18%,transparent);line-height:1.5}
+.qc-outbox[hidden]{display:none}
