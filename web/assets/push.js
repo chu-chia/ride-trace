@@ -1,4 +1,4 @@
-// Web Push：在這台裝置開／關通知。行程頁「回報」分頁的卡片用 mountPushCard()。
+// Web Push：在這台裝置開／關通知。行程頁「更多 → 裝置與通知」、設定頁、後台都用 mountPushCard()。
 import { api, esc, toast } from '/assets/common.js';
 
 const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -47,6 +47,14 @@ export async function disablePush() {
   await sub.unsubscribe();
 }
 
+// iPhone 用瀏覽器開（不是主畫面 App）時收不到推播：畫三個步驟，不要只丟一段說明（UX-32）
+const IOS_STEPS = `<div class="small" style="color:var(--warn-ink)">iPhone 要從主畫面的騎跡 App 打開才收得到通知（iOS 16.4 以上）：</div>
+  <ol class="push-steps">
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg><span>在 Safari 按下方的「分享」</span></li>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg><span>往下滑，選「加入主畫面」→「新增」</span></li>
+    <li><svg viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" style="fill:#d9500f"/><path d="M5 19c3-1 4-6 8-7s5 2 8-5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="21" cy="7" r="2.6" fill="#fff"/></svg><span>從主畫面的「騎跡」圖示打開，回到這張卡片按「開啟通知」</span></li>
+  </ol>`;
+
 const ago = (ts) => {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
   return s < 60 ? `${s} 秒前` : s < 3600 ? `${Math.round(s / 60)} 分鐘前` : s < 86400 ? `${Math.round(s / 3600)} 小時前` : new Date(ts).toLocaleDateString('zh-TW');
@@ -72,7 +80,7 @@ export async function mountPushCard(el) {
     const on = local && cfg.registered;
     let state = '', action = '';
     if (!cfg.enabled) state = '伺服器還沒設定推播金鑰（.env 的 VAPID_*）。';
-    else if (isIOS() && !standalone()) state = 'iPhone 要用「網頁 App」模式才能收通知：用 Safari 打開這個網址 →「分享 → 加入主畫面」，再從主畫面的騎跡圖示打開（上方不會有網址列），回到這裡開啟通知（iOS 16.4 以上）。';
+    else if (isIOS() && !standalone()) state = 'ios';
     else if (!supported()) state = '這個瀏覽器不支援網頁推播。';
     else if (!window.isSecureContext) state = '要用 HTTPS 網址打開才能開通知。';
     else if (Notification.permission === 'denied') state = '通知被封鎖了，要到瀏覽器的網站設定裡改成允許。';
@@ -88,7 +96,7 @@ export async function mountPushCard(el) {
       <div class="eyebrow">通知（Web Push）</div>
       <div class="small muted">${on ? `這台裝置已開啟，螢幕鎖著、網頁沒開也收得到。你的帳號共 ${cfg.devices} 台裝置。`
         : `開了之後，螢幕鎖著、網頁沒開也收得到下面這 ${types.length} 種通知。`}</div>
-      ${state ? `<div class="small" style="color:var(--warn-ink)">${esc(state)}</div>` : ''}
+      ${state === 'ios' ? IOS_STEPS : state ? `<div class="small" style="color:var(--warn-ink)">${esc(state)}</div>` : ''}
       ${action ? `<div class="qx-inline">${action}</div>` : ''}
       ${on ? `<div class="small muted">${last}</div>` : ''}
       <details class="push-types"${on ? '' : ' open'}><summary class="small">會推播哪些事（${types.filter((t) => t.on).length}／${types.length} 種開著）</summary>

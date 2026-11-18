@@ -407,7 +407,7 @@ function renderMarkPanel() {
   $('#markAdd')?.addEventListener('click', () => startPick('mark'));
   $('#markHere')?.addEventListener('click', () => {
     const me = S.members.get(S.me);
-    if (!me?.pos) { toast('還沒有你的位置，先到「更多 → 回報裝置」開始定位', { icon: '!', color: '#ff9f0a' }); return; }
+    if (!me?.pos) { toast('還沒有你的位置，先到「更多 → 裝置與通知」開始定位', { icon: '!', color: '#ff9f0a' }); return; }
     X.pick = { mode: 'mark', lngLat: { lng: me.pos[0], lat: me.pos[1] } };
     render();
   });
@@ -653,5 +653,11 @@ loadSos();
 loadRoute();
 window.qijiExtra = X; // 除錯用
 
-/* ---------- 推播通知（更多 → 回報裝置） ---------- */
-mountPushCard(document.getElementById('pushCard'));
+/* ---------- 推播通知（更多 → 裝置與通知） ---------- */
+mountPushCard(document.getElementById('pushCard')).then(() => {
+  // 第一次進行程頁、這台還沒開通知：提醒一次去哪裡開（UX-08），之後不再跳
+  const card = document.getElementById('pushCard');
+  if (!card.querySelector('#pushOn, .push-steps')) return;
+  try { if (localStorage.getItem('qiji:pushHint')) return; localStorage.setItem('qiji:pushHint', '1'); } catch { return; }
+  toast('要收隊友的 SOS、失聯通知嗎？', { icon: '鈴', sub: '到「更多 → 裝置與通知」開啟，首頁的「設定」也有同一個開關' });
+});

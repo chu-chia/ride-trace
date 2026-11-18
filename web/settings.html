@@ -17,8 +17,8 @@
 <style>
   .card h2{margin:0 0 12px;font-size:15px}
   .card form{display:flex;flex-direction:column;gap:10px}
-  .card label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
-  .card input{font:inherit;font-size:15px;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .card form label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
+  .card form input{font:inherit;font-size:15px;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
   .preview{display:flex;align-items:center;gap:12px;margin-bottom:12px}
   .preview .avatar{width:48px;height:48px;font-size:19px}
   .preview b{font-size:16px;display:block}
@@ -28,7 +28,11 @@
   .msg{font-size:13px;min-height:18px}
   .msg.ok{color:var(--ok-ink)}.msg.err{color:var(--crit-ink)}
   .row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px}
-  .row code{font-size:13px;background:var(--surface-2);padding:4px 8px;border-radius:8px}
+  .row code{font-size:13px;background:var(--surface-2);padding:4px 8px;border-radius:8px;overflow-wrap:anywhere;word-break:break-all;min-width:0;text-align:right}
+  /* 放大 200% 時長網址會撐出水平捲動：允許換行，標題和值擠不下就上下排（UX-15） */
+  .row{flex-wrap:wrap}
+  .row>span{flex:1 1 auto}
+  .page{overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -44,6 +48,12 @@
       <button class="btn primary" type="submit">儲存</button>
       <div class="msg" id="profileMsg" role="status"></div>
     </form>
+  </section>
+
+  <section class="card">
+    <h2>通知</h2>
+    <p class="small muted" style="margin:-4px 0 12px">隊友 SOS、失聯、落隊會推播到這台裝置。每台手機、電腦要各自開一次；行程頁的「更多 → 裝置與通知」也是同一個開關。</p>
+    <div id="pushCard" style="display:flex;flex-direction:column;gap:10px"></div>
   </section>
 
   <section class="card">
@@ -80,12 +90,15 @@
 <script type="module">
 import { api, $, esc, avatar, LOW_POWER } from '/assets/common.js';
 import { resumeMs } from '/assets/gestures.js';
+import { mountPushCard } from '/assets/push.js';
+mountPushCard($('#pushCard'));  // 和行程頁同一張推播卡（UX-08）
 $('#lowPower').checked = LOW_POWER;
 $('#resume').value = String(resumeMs() / 1000);
 $('#resume').onchange = (e) => { try { localStorage.setItem('qiji:resume', e.target.value); } catch { /* 私密模式 */ } };
 $('#lowPower').onchange = (e) => { try { localStorage.setItem('qiji:lowpower', e.target.checked ? '1' : '0'); } catch { /* 私密模式 */ } document.documentElement.classList.toggle('low-power', e.target.checked); };
 const me = await api('/api/me');
-const { colors } = await api('/api/me/palette');
+const { colors, named } = await api('/api/me/palette');
+const colorName = Object.fromEntries((named || []).map((x) => [x.color, x.name]));
 let color = me.color;
 $('#nick').value = me.nickname;
 $('#pvUser').textContent = '@' + me.username;
@@ -93,7 +106,7 @@ function preview() {
   const nick = $('#nick').value.trim() || me.nickname;
   $('#av').innerHTML = avatar({ nickname: nick, color });
   $('#pvName').textContent = nick;
-  $('#colors').innerHTML = colors.map((c) => `<button type="button" style="--c:${esc(c)}" data-c="${esc(c)}" aria-label="顏色 ${esc(c)}" aria-pressed="${c === color}"></button>`).join('');
+  $('#colors').innerHTML = colors.map((c) => `<button type="button" style="--c:${esc(c)}" data-c="${esc(c)}" aria-label="${esc(colorName[c] || '顏色')}" aria-pressed="${c === color}"></button>`).join('');
 }
 preview();
 $('#nick').oninput = preview;

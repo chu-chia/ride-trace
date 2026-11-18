@@ -27,10 +27,23 @@
   --glass:rgba(28,28,30,.84); --shadow:0 10px 34px rgba(0,0,0,.5); color-scheme:dark;
 }
 *{box-sizing:border-box}
+/* 推播卡片（push.js）：行程頁「裝置與通知」、設定頁、後台共用，所以放在全站樣式 */
+.qx-inline{display:flex;gap:8px}
+.qx-inline>*{flex:1}
+.push-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13.5px}
+.push-row input{width:18px;height:18px;accent-color:var(--accent-fill)}
+.push-types summary{cursor:pointer;padding:6px 0;color:var(--muted,inherit)}
+.push-types .push-row{padding:6px 0;border-top:1px solid color-mix(in srgb,currentColor 10%,transparent)}
+.push-types .push-row input:disabled{opacity:.5}
+.push-steps{margin:0;padding:0;list-style:none;counter-reset:st;display:flex;flex-direction:column;gap:8px}
+.push-steps li{counter-increment:st;display:flex;align-items:center;gap:10px;font-size:13.5px;padding:8px 10px;border-radius:10px;background:var(--surface-2)}
+.push-steps li::before{content:counter(st);flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--accent-fill);color:#fff;font-size:12px;font-weight:700}
+.push-steps svg{width:20px;height:20px;flex:none;color:var(--accent-ink)}
 [hidden]{display:none!important}
 html{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%}
 /* 地圖頁整頁不捲動：iOS 鍵盤收起後頁面停在捲過的位置，固定按鈕的點擊位置會跟畫面錯開 */
-html:has(#map),html:has(#map) body{height:100%;overflow:hidden;overscroll-behavior:none}
+/* 登入頁背後的 #map 只是裝飾，不能把整頁鎖住，否則手機上「建立帳號」的送出鈕會在畫面外點不到（UX-01） */
+html:not(.page-scroll):has(#map),html:not(.page-scroll):has(#map) body{height:100%;overflow:hidden;overscroll-behavior:none}
 html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.45}
 button,input,select{font:inherit;color:inherit}
 a{color:var(--accent);text-decoration:none}

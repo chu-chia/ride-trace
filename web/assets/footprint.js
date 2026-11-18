@@ -349,7 +349,7 @@ function loadAllCells() {
 function applySummary(s, meta) {
   if (meta.unchanged) return;
   if (!s.points) {
-    $('#overall').textContent = '還沒有足跡資料。用 tools/import_gpx 匯入 GPX，或開始一趟行程。';
+    $('#overall').textContent = '還沒有足跡。騎完第一趟，走過的路就會亮起來。';
     return;
   }
   const previous = F.summary;

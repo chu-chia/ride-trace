@@ -2,13 +2,14 @@
 import asyncio
 import secrets
 import time
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from redis.exceptions import ResponseError, WatchError
 
 from . import events
-from .auth import current_uid, public_user
+from .auth import PALETTE, current_uid, public_user
 from .db import K, end_record, r
 from .geo import is_rough
 from .worker import LAG_DEFAULT_KM, stats_dict
@@ -16,6 +17,7 @@ from .worker import LAG_DEFAULT_KM, stats_dict
 router = APIRouter(prefix="/api/trips")
 INVITE_TTL = 24 * 3600
 CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+TPE = timezone(timedelta(hours=8))  # 台灣沒有日光節約，固定 +8，不靠容器裡的 tzdata
 
 
 def now_ms():
@@ -45,13 +47,32 @@ async def kicked_by_events(tid: str, uid: str) -> bool:
     return False
 
 
+def default_name() -> str:
+    """名稱留空：用台灣日期，不會每一趟都叫「臨時開團」（UX-44）。"""
+    d = datetime.now(TPE)
+    return f"{d.month}/{d.day}（{'一二三四五六日'[d.weekday()]}）臨時開團"
+
+
+def dedupe_colors(members: list[dict]) -> None:
+    """同一趟有人撞色：依加入順序（uid 小的優先）保留原色，後面的人在這趟改用還沒人用的顏色（UX-09）。
+    只改這趟顯示的顏色，帳號設定不動；own_color 留著原本的顏色。"""
+    own = {m["color"] for m in members}
+    used = set()
+    for m in members:
+        if m["color"] in used:
+            free = next((c for c in PALETTE if c not in own and c not in used), None)
+            if free:
+                m["own_color"], m["color"] = m["color"], free
+        used.add(m["color"])
+
+
 class CreateIn(BaseModel):
     name: str
 
 
 @router.post("")
 async def create_trip(body: CreateIn, uid: str = Depends(current_uid)):
-    name = body.name.strip()[:30] or "臨時開團"
+    name = body.name.strip()[:30] or default_name()
     tid = str(await r.incr("seq:trip"))
     for _ in range(10):
         code = "".join(secrets.choice(CODE_CHARS) for _ in range(6))
@@ -106,9 +127,25 @@ async def join_trip(body: JoinIn, uid: str = Depends(current_uid)):
         await r.set(K.active_trip(uid), tid)
     if new:
         u = await public_user(uid)
+        team = [await public_user(m) for m in sorted(await r.smembers(K.members(tid)), key=int)]
+        dedupe_colors(team)
+        u = next((m for m in team if m["uid"] == uid), u)
         await events.emit(tid, "join", uid, "加入行程")
         await events.publish(tid, {"kind": "member", "user": u})
     return await trip_detail(tid, uid)
+
+
+@router.get("/invite/{code}")
+async def invite_preview(code: str):
+    """邀請連結的登入頁用（還沒登入）：只回行程名、團主暱稱、狀態、人數，讓人知道自己要加入哪一團（UX-43）。
+    拿得到邀請碼的人本來就能加入，所以不必登入；成員名單、位置都不回。"""
+    tid = await r.get(K.invite(code.strip().upper()))
+    t = await r.hgetall(K.trip(tid)) if tid else None
+    if not t:
+        raise HTTPException(404, "邀請碼不存在或已過期")
+    owner = await public_user(t["owner"]) if t.get("owner") else None
+    return {"name": t.get("name", ""), "owner": owner["nickname"] if owner else "", "status": t.get("status"),
+            "member_count": await r.scard(K.members(tid))}
 
 
 @router.get("/{tid}")
@@ -129,6 +166,7 @@ async def trip_detail(tid: str, uid: str) -> dict:
         u["state"] = await r.hgetall(K.state(tid, m))
         u["stats"] = stats_dict(await r.hmget(K.stats(tid, m), "km", "max_kmh", "moving_s"))
         members.append(u)
+    dedupe_colors(members)
     t["members"] = members
     t["me"] = uid
     t["is_owner"] = t.get("owner") == uid

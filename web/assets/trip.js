@@ -154,7 +154,9 @@ function panelPad() {
   if (!narrow) return { top: 70, bottom: 90, left: ($('#panel').offsetWidth || 380) + 50, right: 80 };
   // 用抽屜實際的高度；開合後 smoothPad 讓鏡頭慢慢滑到新的置中位置（拖曳中不更新，所以不會跟著手指晃）
   // 抽屜拉高時留白最多用到畫面高度的 60%，不然可視區只剩一條、cameraForBounds 也會算不出來（UX-11）
-  return { top: 80, bottom: Math.min(innerHeight * 0.6, Math.max(60, innerHeight - $('#panel').getBoundingClientRect().top + 16)), left: 30, right: 64 };
+  // 放大 200%（195 px 寬）時固定 px 的留白會吃掉大半畫面，左右上方都跟著畫面縮（UX-15）
+  const top = Math.min(80, innerHeight * 0.16), left = Math.min(30, innerWidth * 0.08), right = Math.min(64, innerWidth * 0.2);
+  return { top, bottom: Math.min(innerHeight * 0.6, Math.max(Math.min(60, innerHeight * 0.12), innerHeight - $('#panel').getBoundingClientRect().top + 16)), left, right };
 }
 let PAD = null;
 const refreshPad = () => setTimeout(() => PAD?.refresh(), innerWidth <= 760 ? 0 : 300); // 電腦側欄寬度有 0.25 秒轉場，等它停
@@ -353,7 +355,7 @@ function renderHeader() {
   if (t.status === 'planned') {
     setBanner(t.is_owner
       ? `<div>行程還沒開始。等大家到齊後按開始，所有人的位置才會開始記錄，也會通知全隊。</div><div class="bannerBtns">${inviteBtn}<button class="btn primary" id="startBtn">開始行程</button></div>`
-      : `<div>等待建立者開始行程。可以先到「更多 → 回報裝置」設定位置來源。</div><div class="bannerBtns">${inviteBtn}</div>`,
+      : `<div>等待建立者開始行程。可以先到「更多 → 裝置與通知」設定位置來源。</div><div class="bannerBtns">${inviteBtn}</div>`,
     () => $('#startBtn')?.addEventListener('click', (e) => {
       // 一按就會推播給全隊：先確認一次（UX-45）
       armConfirm(e.currentTarget, '再按一次開始（會通知全隊）', async () => {
@@ -364,7 +366,7 @@ function renderHeader() {
   } else if (t.status === 'ended') {
     setBanner(`<div>行程已結束，可以整隊回放這一趟。</div><a class="btn primary" href="/replay?id=${tid}">看回放</a>`);
   } else if (t.status === 'live' && (meActive || t.is_owner)) {
-    // 「我騎完了」放在面板上，不用到 更多 → 回報裝置 找；建立者可以直接結束整趟（UX-10）
+    // 「我騎完了」放在面板上，不用到 更多 → 裝置與通知 找；建立者可以直接結束整趟（UX-10）
     setBanner(`<div class="bannerBtns">${meActive ? '<button class="btn" id="doneBtn">我騎完了</button>' : ''}${t.is_owner ? '<button class="btn danger" id="finishBtn">結束整趟行程</button>' : ''}</div>`, () => {
       $('#doneBtn')?.addEventListener('click', (e) => armConfirm(e.currentTarget, '再按一次結束我的紀錄', endMine));
       $('#finishBtn')?.addEventListener('click', (e) => armConfirm(e.currentTarget, '再按一次結束全隊', async () => {
