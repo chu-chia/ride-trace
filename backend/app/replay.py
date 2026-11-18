@@ -22,11 +22,14 @@ def _f(v, default=None):
 
 
 def summarize(pts: list[list]) -> dict:
-    """pts: [ts, lat, lon, alt, km/h, heading, acc]（acc 可省略）。"""
+    """整趟摘要。pts: [ts, lat, lon, alt, km/h, heading, acc]（acc 可省略），依 GPS 時間排好。
+    這是里程、移動時間、極速的唯一定義：回放直接用；每個人結束紀錄時也用它重算即時統計（finalize_stats），
+    所以行程頁、首頁、回放看到的數字一樣。行程進行中的即時統計（worker 的 Lua）是同一套規則的近似值。"""
     if len(pts) < 2:
         return {"km": 0, "duration_ms": 0, "moving_ms": 0, "avg_kmh": 0, "max_kmh": 0, "climb_m": 0, "max_alt": None, "stops": 0}
     dist = moving = climb = 0.0
     speeds = []
+    reported = []   # 手機回報的速度（GPS 都卜勒測速，比用位置換算的穩）
     stops = 0
     still_since = None
     last_alt = None
@@ -55,6 +58,8 @@ def summarize(pts: list[list]) -> dict:
             speeds.append(v)
         if b[4] is not None and b[4] < MAX_SPEED_KMH:
             speeds.append(b[4])
+            if not (len(b) > 6 and is_rough(b[6])):
+                reported.append(b[4])
         if b[3] is not None:
             if last_alt is None:
                 last_alt = b[3]
@@ -64,7 +69,8 @@ def summarize(pts: list[list]) -> dict:
                 last_alt = b[3]
     alts = [p[3] for p in pts if p[3] is not None]
     speeds.sort()
-    max_kmh = speeds[int(len(speeds) * 0.99)] if speeds else 0  # 取 99 百分位，避開 GPS 尖峰
+    # 極速：手機回報速度的最大值（跟即時統計一樣）；沒有回報速度時才用換算速度的 99 百分位（位置換算有跳點）
+    max_kmh = max(reported) if reported else (speeds[int(len(speeds) * 0.99)] if speeds else 0)
     return {
         "km": round(dist / 1000, 2),
         "duration_ms": pts[-1][0] - pts[0][0],
@@ -91,24 +97,41 @@ def _thin(pts: list[list]) -> list[list]:
     return out
 
 
+async def _points(tid: str, uid: str) -> list[list]:
+    rows = await r.xrange(K.track(tid, uid))
+    pts = []
+    for _, f in rows:
+        lat, lon = _f(f.get("lat")), _f(f.get("lon"))
+        if lat is None or lon is None or is_rough(f.get("acc")):  # 精度太差的舊點不畫、不算
+            continue
+        spd = _f(f.get("speed"))
+        pts.append([int(f["ts"]), round(lat, 6), round(lon, 6),
+                    None if _f(f.get("alt")) is None else round(_f(f.get("alt")), 1),
+                    None if spd is None else round(spd * 3.6, 1),
+                    None if _f(f.get("heading")) is None else round(_f(f.get("heading"))), _f(f.get("acc"))])
+    pts.sort(key=lambda p: p[0])  # Stream 是到達順序，斷訊補傳的點要依 GPS 時間重排
+    return pts
+
+
 async def _tracks(tid: str, uids: list[str]) -> dict:
     """每個人的軌跡（抽稀後）與整趟摘要。"""
     out = {}
     for u in uids:
-        rows = await r.xrange(K.track(tid, u))
-        pts = []
-        for _, f in rows:
-            lat, lon = _f(f.get("lat")), _f(f.get("lon"))
-            if lat is None or lon is None or is_rough(f.get("acc")):  # 精度太差的舊點不畫、不算
-                continue
-            spd = _f(f.get("speed"))
-            pts.append([int(f["ts"]), round(lat, 6), round(lon, 6),
-                        None if _f(f.get("alt")) is None else round(_f(f.get("alt")), 1),
-                        None if spd is None else round(spd * 3.6, 1),
-                        None if _f(f.get("heading")) is None else round(_f(f.get("heading"))), _f(f.get("acc"))])
-        pts.sort(key=lambda p: p[0])  # Stream 是到達順序，斷訊補傳的點要依 GPS 時間重排
+        pts = await _points(tid, u)
         out[u] = {"summary": summarize(pts), "track": [p[:6] for p in _thin(pts)]}  # acc 只拿來算摘要，不送前端
     return out
+
+
+async def finalize_stats(tid: str, uid: str) -> dict | None:
+    """結束紀錄時用整條軌跡重算即時統計（km、moving_s、max_kmh），跟回放摘要一致。
+    lts 設成最後一點：還在 Stream 裡排隊的舊點，Lua 會當成重複的略過，不會再加上去。"""
+    pts = await _points(tid, uid)
+    if not pts:
+        return None
+    s = summarize(pts)
+    await r.hset(K.stats(tid, uid), mapping={"km": s["km"], "moving_s": round(s["moving_ms"] / 1000, 1),
+                                             "max_kmh": s["max_kmh"], "lts": pts[-1][0], "finalized": 1})
+    return s
 
 
 async def cached_tracks(tid: str, uids: list[str], ended: bool) -> dict:
@@ -128,8 +151,12 @@ async def cached_tracks(tid: str, uids: list[str], ended: bool) -> dict:
 async def warm(tid: str):
     """行程剛結束時在背景先算好，第一個按「看回放」的人就不用等。"""
     try:
+        members = list(await r.smembers(K.members(tid)))
+        for u in members:  # 強制結束、全員結束時，還沒重算的人在這裡補上
+            if not await r.hget(K.stats(tid, u), "finalized"):
+                await finalize_stats(tid, u)
         await r.delete(f"cache:replay:{tid}")
-        await cached_tracks(tid, list(await r.smembers(K.members(tid))), True)
+        await cached_tracks(tid, members, True)
     except Exception:  # noqa: BLE001  背景預熱失敗不影響任何事
         pass
 

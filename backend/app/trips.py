@@ -180,7 +180,11 @@ async def finish_record(tid: str, uid: str, text: str = "結束自己的紀錄")
         keys=[K.active(tid), K.trip(tid), K.hb(tid, uid), K.active_trip(uid)],
         args=[uid, tid, now_ms()],
     )
+    from . import replay  # replay 也 import trips，放這裡避免循環
     if removed:
+        # 用整條軌跡重算這個人的里程／移動時間／極速，跟回放摘要一致
+        if await replay.finalize_stats(tid, uid):
+            await events.publish(tid, {"kind": "stats", "uid": uid, **stats_dict(await r.hmget(K.stats(tid, uid), "km", "max_kmh", "moving_s"))})
         await r.hset(K.state(tid, uid), "status", "done")
         await events.emit(tid, "stop", uid, text, ts=last_ts)
         await events.publish(tid, {"kind": "status", "uid": uid, "status": "done"})
@@ -189,7 +193,6 @@ async def finish_record(tid: str, uid: str, text: str = "結束自己的紀錄")
         fixes = [x for x in fixes if x]
         await events.emit(tid, "end", None, "全員結束紀錄，行程自動結束", ts=max(fixes) if fixes else None)
         await events.publish(tid, {"kind": "trip", "status": "ended"})
-        from . import replay  # replay 也 import trips，放這裡避免循環
         asyncio.create_task(replay.warm(tid))
     return {"left": left, "ended": bool(ended)}
 

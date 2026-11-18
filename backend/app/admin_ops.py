@@ -80,6 +80,9 @@ async def end_trip(tid: str):
                 p.hset(K.state(tid, uid), "status", "done")
         await p.execute()
     await events.publish(tid, {"kind": "trip", "status": "ended"})
+    from . import replay
+    import asyncio
+    asyncio.create_task(replay.warm(tid))  # 重算每個人的統計（跟回放一致）並預熱回放
     return {"ok": True, "id": tid}
 
 
