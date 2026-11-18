@@ -36,7 +36,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .cd .next-stop{grid-column:1/-1;padding:10px;background:var(--surface-2);border-radius:10px}
 .cd .next-stop b{display:block;font-size:12px;color:var(--fg)}
 .cd .next-stop small{display:block;font-size:11px;color:var(--muted)}
-.conditions{left:77%;top:1.6%;width:21.5%;height:35.2%}
+.conditions{right:.8%;top:1.6%;width:21.5%;height:37.4%}  /* 右邊間距和左邊一樣 0.8% */
 .conditions-body{padding:0 14px 14px;overflow:auto!important}
 .condition-group{margin-top:9px;border-top:1px solid var(--line);padding-top:9px}
 .condition-group:first-child{margin-top:0;border:0;padding-top:0}
@@ -44,7 +44,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .condition-row{display:flex;align-items:flex-start;gap:9px;padding:5px 0;font-size:12px;line-height:1.35}
 .condition-row b{font-weight:650}.condition-row small{display:block;color:var(--muted)}
 .condition-mark{font-weight:750;min-width:39px;color:var(--accent)}
-.feed{left:77.3%;top:39.2%;width:21.5%;height:41.4%}
+.feed{right:.8%;top:42.2%;width:21.5%;height:41.4%}
 .feed-filters{display:flex;gap:3px;margin:0 14px 8px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);flex:none;overflow:visible!important}
 .feed-filters button{flex:1;min-width:0;padding:6px 2px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:11px;font-weight:650;cursor:pointer}
 .feed-filters button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 4px #0002}
@@ -101,3 +101,4 @@ html,body{width:100%;height:100%;overflow:hidden}
 .card-list.team-rows{gap:0;padding:2px 8px 10px}
 /* 3D 旋轉提示：放在全隊進度面板右邊的空位（預設版面下方中間被進度面板佔住） */
 @media(min-width:1101px){.map-hint{left:calc(56.4% + 14px);transform:none;bottom:12px}}
+.home-mobile{display:none}@media(max-width:1100px){.home-mobile{display:inline-flex}}

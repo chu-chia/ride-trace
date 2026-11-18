@@ -12,7 +12,7 @@ window.qijiMap = map;
 map.setPitch(60);
 const S = { trip: null, members: new Map(), events: [], route: null, prog: {}, gaps: {}, flags: {}, sos: new Map(), waypoints: [], weather: [], traffic: [], profile: null, styleReady: false };
 window.qijiWar = S;
-const LAYOUT_KEY = `qiji:war:layout:v5:${tid}`;  // 改了預設版面就升版號，舊的自訂版面不會蓋掉新預設
+const LAYOUT_KEY = `qiji:war:layout:v6:${tid}`;  // 改了預設版面就升版號，舊的自訂版面不會蓋掉新預設
 const FEED_FILTER_KEY = 'qiji:war:feed-filter';
 const panels = [...document.querySelectorAll('.war-panel')];
 const stage = $('#stage');

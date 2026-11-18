@@ -15,7 +15,7 @@
 <div class="war-stage" id="stage">
   <header class="war-panel glass head" data-panel="head">
     <div class="panel-top panel-grip"><div class="head-copy"><span class="eyebrow">騎跡 RIDETRACE · 戰情室</span><b id="name">載入行程中</b><span class="muted" id="sub">連線中…</span></div><span class="clock num" id="clock"></span></div>
-    <div class="head-actions panel-body"><button class="war-btn" id="editLayout" type="button" aria-pressed="false">編輯版面</button><button class="war-btn" id="resetLayout" type="button">重設版面</button><a class="war-btn" id="tripLink" href="/">行程頁 ↗</a></div>
+    <div class="head-actions panel-body"><a class="war-btn" href="/" aria-label="回首頁">‹ 首頁</a><button class="war-btn" id="editLayout" type="button" aria-pressed="false">編輯版面</button><button class="war-btn" id="resetLayout" type="button">重設版面</button><a class="war-btn" id="tripLink" href="/">行程頁 ↗</a></div>
     <button class="panel-toggle" aria-label="收合行程資訊" aria-expanded="true" type="button">⌃</button><div class="panel-resize" role="button" aria-label="縮放行程資訊面板"></div>
   </header>
   <section class="war-panel glass cards" data-panel="cards" aria-label="騎士清單">
@@ -36,7 +36,7 @@
     <div class="progress-body panel-body"><div class="profile-wrap" id="pwrap"><svg id="profile" preserveAspectRatio="none"></svg></div><div class="pmeta" id="pmeta"></div></div><button class="panel-toggle" aria-label="收合全隊進度" aria-expanded="true" type="button">⌃</button><div class="panel-resize" role="button" aria-label="縮放全隊進度面板"></div>
   </section>
 </div>
-<div class="map-tools"><button class="war-btn" id="centerTeam" type="button">◎ 全隊置中</button><button class="war-btn" id="mapStyle" type="button">深色地圖</button></div>
+<div class="map-tools"><a class="war-btn home-mobile" href="/" aria-label="回首頁">‹ 首頁</a><button class="war-btn" id="centerTeam" type="button">◎ 全隊置中</button><button class="war-btn" id="mapStyle" type="button">深色地圖</button></div>
 <div class="mobile-sheet glass small" id="mobileSheet"><button id="sheetHandle" class="sheet-handle" type="button" aria-label="展開戰情室資訊" aria-expanded="false"></button><div class="sheet-summary"><b>戰情室</b><span id="sheetBrief" class="muted">載入中…</span><button id="sheetToggle" class="war-btn" type="button" aria-expanded="false">展開</button></div><nav class="seg sheet-tabs" aria-label="戰情室資訊"><button class="on" data-tab="cards">騎士</button><button data-tab="progress">進度</button><button data-tab="conditions">天氣路況</button><button data-tab="feed">事件</button></nav><div class="sheet-content" id="sheetContent"></div></div>
 <div class="sosbar" id="sosbar"></div>
 <script src="/vendor/maplibre-gl-5.24.0/maplibre-gl.js"></script>

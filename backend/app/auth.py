@@ -145,6 +145,29 @@ async def update_me(body: ProfileIn, uid: str = Depends(current_uid)):
     return await public_user(uid)
 
 
+@router.get("/me/palette")
+async def palette(uid: str = Depends(current_uid)):
+    """設定頁的頭像顏色選項（跟註冊時能選的一樣）。"""
+    return {"colors": PALETTE}
+
+
+class PasswordIn(BaseModel):
+    old: str
+    new: str
+
+
+@router.post("/me/password")
+async def change_password(body: PasswordIn, uid: str = Depends(current_uid)):
+    if not check_pw(body.old, await r.hget(K.user(uid), "pw") or ""):
+        raise HTTPException(400, "目前的密碼不對")
+    if len(body.new) < 6:
+        raise HTTPException(400, "新密碼至少 6 個字")
+    if body.new == body.old:
+        raise HTTPException(400, "新密碼和目前的一樣")
+    await r.hset(K.user(uid), "pw", hash_pw(body.new))
+    return {"ok": True}
+
+
 @router.get("/me/device")
 async def my_device(uid: str = Depends(current_uid)):
     """Traccar Client 用的裝置 ID：隨機產生，對應到使用者，避免別人冒充回報。"""

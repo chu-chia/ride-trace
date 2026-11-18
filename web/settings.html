@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>設定 · 騎跡</title>
+<meta name="theme-color" content="#d9500f">
+<link rel="stylesheet" href="/assets/app.css">
+<style>
+  .top{display:flex;align-items:center;gap:10px;padding-top:4px}
+  .top a{font-size:26px;line-height:1;text-decoration:none;color:var(--fg);padding:4px 8px 4px 0}
+  .top h1{margin:0;font-size:24px}
+  .card h2{margin:0 0 12px;font-size:15px}
+  .card form{display:flex;flex-direction:column;gap:10px}
+  .card label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
+  .card input{font:inherit;font-size:15px;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .preview{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .preview .avatar{width:48px;height:48px;font-size:19px}
+  .preview b{font-size:16px;display:block}
+  .swatches{display:flex;flex-wrap:wrap;gap:10px}
+  .swatches button{width:36px;height:36px;border-radius:50%;border:0;background:var(--c);cursor:pointer;box-shadow:inset 0 0 0 2px rgba(0,0,0,.12)}
+  .swatches button[aria-pressed="true"]{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--fg)}
+  .msg{font-size:13px;min-height:18px}
+  .msg.ok{color:var(--ok-ink)}.msg.err{color:var(--crit-ink)}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px}
+  .row code{font-size:13px;background:var(--surface-2);padding:4px 8px;border-radius:8px}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="top"><a href="/" aria-label="回首頁">‹</a><h1>設定</h1></header>
+
+  <section class="card">
+    <h2>個人資料</h2>
+    <div class="preview"><div id="av"></div><div><b id="pvName"></b><span class="small muted" id="pvUser"></span></div></div>
+    <form id="profileF">
+      <label>暱稱（隊友在地圖上看到的名字，最多 12 字）<input id="nick" maxlength="12" required></label>
+      <div><div class="small muted" style="margin-bottom:8px">頭像顏色（地圖圖釘、軌跡線都用這個顏色）</div><div class="swatches" id="colors" role="group" aria-label="頭像顏色"></div></div>
+      <button class="btn primary" type="submit">儲存</button>
+      <div class="msg" id="profileMsg" role="status"></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>變更密碼</h2>
+    <form id="pwF">
+      <label>目前的密碼<input type="password" id="pwOld" autocomplete="current-password" required></label>
+      <label>新密碼（至少 6 個字）<input type="password" id="pwNew" autocomplete="new-password" minlength="6" required></label>
+      <label>再輸入一次新密碼<input type="password" id="pwNew2" autocomplete="new-password" minlength="6" required></label>
+      <button class="btn primary" type="submit">變更密碼</button>
+      <div class="msg" id="pwMsg" role="status"></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Traccar Client</h2>
+    <div class="row"><span>伺服器網址</span><code id="trUrl"></code></div>
+    <div class="row" style="margin-top:8px"><span>裝置 ID</span><code id="trId">…</code></div>
+    <p class="small muted" style="margin:10px 0 0">iPhone 背景定位要用 Traccar Client，把上面兩個值填進去；裝置 ID 是你專屬的，不要給別人。</p>
+  </section>
+</main>
+<script type="module">
+import { api, $, esc, avatar } from '/assets/common.js';
+const me = await api('/api/me');
+const { colors } = await api('/api/me/palette');
+let color = me.color;
+$('#nick').value = me.nickname;
+$('#pvUser').textContent = '@' + me.username;
+function preview() {
+  const nick = $('#nick').value.trim() || me.nickname;
+  $('#av').innerHTML = avatar({ nickname: nick, color });
+  $('#pvName').textContent = nick;
+  $('#colors').innerHTML = colors.map((c) => `<button type="button" style="--c:${esc(c)}" data-c="${esc(c)}" aria-label="顏色 ${esc(c)}" aria-pressed="${c === color}"></button>`).join('');
+}
+preview();
+$('#nick').oninput = preview;
+$('#colors').onclick = (e) => { const b = e.target.closest('[data-c]'); if (b) { color = b.dataset.c; preview(); } };
+$('#profileF').onsubmit = async (e) => {
+  e.preventDefault();
+  const m = $('#profileMsg');
+  try { await api('/api/me', { method: 'PATCH', body: { nickname: $('#nick').value.trim(), color } }); m.className = 'msg ok'; m.textContent = '已儲存，隊友重新整理後就會看到'; }
+  catch (err) { m.className = 'msg err'; m.textContent = err.message; }
+};
+$('#pwF').onsubmit = async (e) => {
+  e.preventDefault();
+  const m = $('#pwMsg');
+  if ($('#pwNew').value !== $('#pwNew2').value) { m.className = 'msg err'; m.textContent = '兩次輸入的新密碼不一樣'; return; }
+  try {
+    await api('/api/me/password', { method: 'POST', body: { old: $('#pwOld').value, new: $('#pwNew').value } });
+    m.className = 'msg ok'; m.textContent = '密碼已變更'; e.target.reset();
+  } catch (err) { m.className = 'msg err'; m.textContent = err.message; }
+};
+$('#trUrl').textContent = `${location.origin}/osmand`;
+api('/api/me/device').then((d) => ($('#trId').textContent = d.device_id)).catch(() => {});
+</script>
+</body>
+</html>
