@@ -99,6 +99,11 @@ async def search(q: str = Query(min_length=1, max_length=40), lon: float | None 
         res = await r.execute_command("FT.SEARCH", "idx:poi", base, "LANGUAGE", "chinese", "SORTBY", "rank", "DESC",
                                       "LIMIT", 0, 12, "DIALECT", 2)
         add(poi_dict(pid, h, lon, lat) for pid, h in _parse(res))
+    # 多個詞要同時符合（AND）；像「北海岸 金山老街」這種「區域＋地點」沒有一筆同時有兩個詞，
+    # 就改成每個詞分開找再合併（UX-26）。長的詞通常比較具體（金山老街 > 北海岸），先放
+    if len(words) > 1 and len(out) < 3:
+        for w in sorted(words, key=len, reverse=True):
+            add(await search(w, lon, lat, kind, uid))
     return out[:12]
 
 

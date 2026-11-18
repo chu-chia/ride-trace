@@ -1,4 +1,4 @@
-import { api, tripGate, armConfirm, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
+import { api, tripGate, armConfirm, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -167,6 +167,7 @@ const PANEL = initPanel($('#panel'), 'trip', { onChange: () => { refreshPad(); s
 PAD = smoothPad(panelPad);
 Object.defineProperty(S, 'pad', { get: () => PAD.get(), set() {}, configurable: true });
 const setCollapsed = (v) => PANEL.set(v);
+S.panel = PANEL; // trip-extra.js：在地圖上點選位置時先收起抽屜（UX-34）
 
 // 「全隊」框哪些人：有位置、這趟有出發（active，或已騎完 done）、沒有失聯。
 // 沒出發的成員（例如建立者自己在家）位置在別處，算進來鏡頭會先拉到全台灣
@@ -434,13 +435,15 @@ $('#teamAdmin').onclick = (e) => {
   });
 };
 
+// 和戰情室同一個篩選元件、同一個預設（全部），選擇也共用（UX-29）
+const EVF = eventFilter($('#evFilter'), 'qiji:war:feed-filter:v2', () => renderEvents());
 function renderEvents() {
   const name = (uid) => S.members.get(uid)?.u.nickname || S.trip?.people?.[uid]?.nickname || '';  // people：已被移出的人（UX-54）
   // 不同來源（警示、聊天、加入…）的事件到達順序和發生時間不一定一樣：依事件時間排，新的在上（同時間保留到達順序）（UX-35）
-  $('#events').innerHTML = S.events.slice().reverse().sort((a, b) => +b.ts - +a.ts).map((e) => {
+  $('#events').innerHTML = S.events.filter(EVF.match).reverse().sort((a, b) => +b.ts - +a.ts).map((e) => {
     const [, color] = EV[e.type] || ['', 'var(--muted)'];
     return `<div class="ev"><time class="num">${clock(+e.ts)}</time><i style="--c:${color}"></i><span>${e.uid ? `<b>${esc(name(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`;
-  }).join('') || '<div class="muted small">還沒有事件</div>';
+  }).join('') || `<div class="muted small">${S.events.length ? '目前沒有這類事件' : '還沒有事件'}</div>`;
 }
 
 function renderInvite() {

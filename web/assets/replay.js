@@ -242,8 +242,56 @@ const riderColor = (uid) => data.members.find((m) => String(m.uid) === String(ui
 const tickEvents = data.events.filter((e) => e.ts >= t0 && e.ts <= t1 && !['create', 'town'].includes(e.type));
 $('#events').innerHTML = tickEvents.map((e) => `<div class="ev" data-t="${e.ts}"><time class="num">${clock(e.ts)}</time><i style="--c:${e.uid ? esc(riderColor(e.uid)) : 'var(--muted)'}"></i><span>${e.uid ? `<b>${esc(nameOf(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`).join('') || '<div class="small muted">這趟沒有事件</div>';
 $('#events').onclick = (e) => { const r = e.target.closest('[data-t]'); if (r) seek(+r.dataset.t - 5000); };
-$('#ticks').innerHTML = tickEvents.map((e) => `<button class="tick" style="left:${((e.ts - t0) / (t1 - t0)) * 100}%;--c:${EV[e.type] || 'var(--muted)'}" data-t="${e.ts}" title="${clock(e.ts)} ${esc(nameOf(e.uid))} ${esc(e.text)}"></button>`).join('');
-$('#ticks').onclick = (e) => { const b = e.target.closest('.tick'); if (b) seek(+b.dataset.t - 5000); };
+// 時間軸上的事件點（UX-55）：靠太近（< 26 px）的合併成一顆數字泡泡，點了展開清單；單一事件的點 12 px，可點範圍 ≥ 28 px
+const evLabel = (e) => `${clock(e.ts)} ${e.uid ? nameOf(e.uid) + ' ' : ''}${e.text}`;
+function drawTicks() {
+  const box = $('#ticks'), W = box.clientWidth || 1, GAP = 26;
+  // 固定寬度的格子：同一格的事件合併，點畫在格子中央，相鄰兩顆至少隔 GAP，不會疊在一起
+  const bins = new Map();
+  for (const e of tickEvents) {
+    const k = Math.min(Math.max(0, Math.floor(W / GAP) - 1), Math.floor((((e.ts - t0) / (t1 - t0 || 1)) * W) / GAP));
+    (bins.get(k) || bins.set(k, { k, items: [] }).get(k)).items.push(e);
+  }
+  const groups = [...bins.values()].sort((a, c) => a.k - c.k);
+  box.innerHTML = groups.map((g, i) => {
+    const x = (g.k + 0.5) * GAP, e = g.items[0];
+    if (g.items.length === 1) return `<button type="button" class="tick" style="left:${x}px;--c:${EV[e.type] || 'var(--muted)'}" data-t="${e.ts}" title="${esc(evLabel(e))}" aria-label="${esc(evLabel(e))}"></button>`;
+    const sos = g.items.some((x2) => x2.type === 'sos');
+    return `<button type="button" class="tick group${sos ? ' sos' : ''}" style="left:${x}px" data-g="${i}" aria-haspopup="true" aria-label="${clock(g.items[0].ts)}～${clock(g.items.at(-1).ts)} 共 ${g.items.length} 個事件，點一下展開">${g.items.length}</button>`;
+  }).join('');
+  box._groups = groups;
+}
+function closeTickPop() { $('#tickPop')?.remove(); }
+function openTickPop(btn, items) {
+  closeTickPop();
+  const pop = document.createElement('div');
+  pop.id = 'tickPop';
+  pop.className = 'tickpop';  // 不用玻璃：清單文字多，底色不透明才讀得清楚
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', `${items.length} 個事件`);
+  pop.innerHTML = `<div class="tp-head"><b>${items.length} 個事件</b><button type="button" class="tp-x" aria-label="關閉">✕</button></div>
+    <div class="tp-list">${items.map((e) => `<button type="button" class="ev" data-t="${e.ts}"><time class="num">${clock(e.ts)}</time><i style="--c:${EV[e.type] || 'var(--muted)'}"></i><span>${e.uid ? `<b>${esc(nameOf(e.uid))}</b> ` : ''}${esc(e.text)}</span></button>`).join('')}</div>`;
+  document.body.append(pop);
+  const r = btn.getBoundingClientRect(), pw = pop.offsetWidth;
+  pop.style.left = `${Math.max(8, Math.min(innerWidth - pw - 8, r.left + r.width / 2 - pw / 2))}px`;
+  pop.style.bottom = `${innerHeight - r.top + 8}px`;
+  pop.querySelector('.tp-x').onclick = closeTickPop;
+  pop.querySelector('.tp-list').onclick = (e) => { const x = e.target.closest('[data-t]'); if (x) { seek(+x.dataset.t - 5000); closeTickPop(); } };
+  pop.querySelector('.tp-list button')?.focus();
+}
+drawTicks();
+// 時間軸寬度會跟著視窗、側欄收合改變：寬度變了才重排（重排時順便關掉展開的清單）
+let ticksW = 0;
+new ResizeObserver(() => { const w = $('#ticks').clientWidth; if (w !== ticksW) { ticksW = w; closeTickPop(); drawTicks(); } }).observe($('#ticks'));
+$('#ticks').onclick = (e) => {
+  const b = e.target.closest('.tick');
+  if (!b) return;
+  e.stopPropagation();
+  if (b.dataset.g != null) openTickPop(b, $('#ticks')._groups[+b.dataset.g].items);
+  else seek(+b.dataset.t - 5000);
+};
+document.addEventListener('click', (e) => { if (!e.target.closest('#tickPop,.tick')) closeTickPop(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTickPop(); });
 
 /* ---------- 圖表（海拔用軌跡、速度用 TimeSeries 降採樣） ---------- */
 let SPD = {};

@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak } from '/assets/common.js';
+import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -14,7 +14,7 @@ map.setPitch(60);
 const S = { trip: null, members: new Map(), events: [], route: null, prog: {}, gaps: {}, flags: {}, sos: new Map(), waypoints: [], weather: [], traffic: [], profile: null, styleReady: false };
 window.qijiWar = S;
 const LAYOUT_KEY = `qiji:war:layout:v6:${tid}`;  // 改了預設版面就升版號，舊的自訂版面不會蓋掉新預設
-const FEED_FILTER_KEY = 'qiji:war:feed-filter';
+const FEED_FILTER_KEY = 'qiji:war:feed-filter:v2';  // v2：預設改成「全部」（UX-29），舊的「重要」不沿用
 const panels = [...document.querySelectorAll('.war-panel')];
 const stage = $('#stage');
 const mobile = matchMedia('(max-width:1100px)');
@@ -230,13 +230,29 @@ M.onStyle(() => {
   if (!map.getLayer('route')) map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3d9bff', 'line-width': 6, 'line-opacity': 0.85 } });
   if (!map.getSource('trails')) map.addSource('trails', { type: 'geojson', data: trailsGeo() });
   if (!map.getLayer('trails')) map.addLayer({ id: 'trails', type: 'line', source: 'trails', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 4 } });
+  bigLabels();
   S.styleReady = true;
 });
+// 大螢幕要一眼看出「他們在哪」（UX-29）：地名只留中文、城市與鄉鎮名放大；衛星底圖沒有文字層就略過
+function bigLabels() {
+  const zh = ['coalesce', ['get', 'name:zh-Hant'], ['get', 'name:zh'], ['get', 'name']];
+  for (const l of map.getStyle().layers) {
+    if (l.type !== 'symbol' || !l.layout?.['text-field'] || !/^(label_|place)/.test(l.id)) continue;
+    try { map.setLayoutProperty(l.id, 'text-field', zh); } catch { /* 該層不吃這個值 */ }
+  }
+  // 深色底圖（openfreemap dark）叫 place_*，淺色（Liberty）叫 label_*
+  const big = [[['place_city_large', 'label_city_capital'], [5, 16, 9, 22, 13, 26]], [['place_city', 'label_city'], [5, 14, 9, 20, 13, 24]],
+    [['place_town', 'label_town'], [8, 13, 12, 17, 15, 20]], [['place_village', 'label_village'], [10, 12, 14, 15]]];
+  for (const [ids, size] of big) for (const id of ids) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'text-size', ['interpolate', ['linear'], ['zoom'], ...size]);
+  }
+}
 
 /* ---------- 運鏡：手動操作後暫停跟隨 ---------- */
 let lastT = performance.now(), lastTrail = 0;
 let autoFollow = true;  // false＝暫離（使用者拖了地圖）
 let awayAt = 0;
+let lastFit = '';  // fitLast() 上次框的那組位置
 const padRaw = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : deskPortrait() ? { top: 120, bottom: Math.round(innerHeight * .56), left: 60, right: 120 } : { top: 90, bottom: 160, left: 395, right: 365 };
 // 手勢規則（docs/地圖手勢規則.md）：拖曳＝暫離（按鈕／列變外框，10 秒沒動自動回去）；縮放、旋轉、傾斜繼續跟隨；
 // 全隊模式下縮放也算暫離
@@ -250,6 +266,7 @@ function goAway() {
 }
 function resumeFollow() {
   autoFollow = true;
+  lastFit = '';  // 回到全隊時，沒人在線也要重新框一次
   M.regroup();
   GEST.sync();
   syncFollowBtn();
@@ -302,23 +319,49 @@ function frame(now) {
     if (fm?.pos) M.follow(fm.pos, { padding: pad() });  // 點了隊員表：鏡頭跟著他
     else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
     else M.followGroup(pts, { padding: pad(), maxZoom: 14 });
-  }
+  } else if (S.styleReady && !pts.length && !S.profiling && autoFollow && !M.busy) fitLast();
   if (now - lastTrail > 500) { lastTrail = now; map.getSource('trails')?.setData(trailsGeo()); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
+// 沒有人在線（全失聯、還沒出發、都結束了）：框住每個人最後的位置；連最後位置都沒有就框路線，再不行框台灣（UX-29）。
+// 同一組位置只框一次，使用者動了地圖就交給使用者（手勢規則 v2：鏡頭狀態不變，只是沒有東西可以跟）
+function fitLast() {
+  const last = [...S.members.values()].filter((m) => m.pos).map((m) => m.pos);
+  const pts = last.length ? last : S.route?.coords?.length ? [S.route.coords[0], S.route.coords.at(-1)] : [];
+  const key = pts.map((p) => p.map((v) => v.toFixed(3)).join(',')).join(';') || 'tw';
+  if (key === lastFit) return;
+  lastFit = key;
+  if (!pts.length) { map.easeTo({ center: [120.95, 23.7], zoom: 6.6, padding: pad(), duration: 800 }); return; }
+  if (pts.length === 1) { map.easeTo({ center: pts[0], zoom: 13.5, padding: pad(), duration: 800 }); return; }
+  const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
+  map.fitBounds(b, { padding: pad(), maxZoom: 14, duration: 800 });
+}
+
 /* ---------- 騎士資訊與下一站 ETA ---------- */
 const fmtKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`);
 const numeric = (v) => v != null && v !== '' && Number.isFinite(+v);
+// 狀態詞分開寫（UX-29）：已經騎到終點、只是沒按結束的人不要叫「訊號弱」；很久沒回報寫「停止回報（N 分前）」
+const seenAt = (s) => +s.seen || +s.ts || 0;
+function arrived(m) {
+  const p = S.prog[m.u.uid], total = S.route?.cum_km?.at(-1);
+  return numeric(p?.km) && numeric(total) && +p.km >= total - 0.3;
+}
 function status(m) {
   const s = m.state;
   if (s.status === 'done') return ['已結束', 'muted'];
-  if (s.status === 'lost') return ['失聯', 'crit'];
-  if (!numeric(s.lat)) return ['尚未回報', 'muted'];
+  if (!numeric(s.lat)) return [s.status === 'lost' ? '失聯' : '尚未回報', s.status === 'lost' ? 'crit' : 'muted'];
+  const quiet = Date.now() - seenAt(s) > 30000;
+  if (arrived(m) && (quiet || (+s.speed || 0) * 3.6 < 5)) return ['已抵達終點', 'ok'];
+  if (s.status === 'lost') return [seenAt(s) ? `失聯（${ago(seenAt(s))}）` : '失聯', 'crit'];
+  if (Date.now() - seenAt(s) > 10 * 60_000) return [`停止回報（${ago(seenAt(s))}）`, 'muted'];
   if (isWeak(s)) return ['訊號弱', 'warn'];
   return (+s.speed || 0) * 3.6 < 5 ? ['停車', 'info'] : ['騎乘中', 'ok'];
 }
+// 「不在線」：失聯、已結束、尚未回報、停止回報、已抵達（狀態詞後面可能帶時間，只比開頭）
+const OFF = ['已結束', '失聯', '尚未回報', '停止回報', '已抵達'];
+const isOff = (st) => OFF.some((w) => st.startsWith(w));
 function routeKmOf(lon, lat) {
   if (!S.route?.coords?.length) return null;
   const coords = S.route.coords, cum = S.route.cum_km, kx = Math.cos(lat * Math.PI / 180);
@@ -343,21 +386,21 @@ function recentSpeed(m) {
 }
 function renderCards() {
   const list = [...S.members.values()].sort((a, b) => (+S.prog[b.u.uid]?.km || 0) - (+S.prog[a.u.uid]?.km || 0));
-  const online = list.filter((m) => !['已結束', '失聯', '尚未回報'].includes(status(m)[0])).length;
+  const online = list.filter((m) => !isOff(status(m)[0])).length;
   $('#teamCount').textContent = `${list.length} 位`;
   $('#teamOnline').textContent = `${online}/${list.length} 在線`;
   $('#sheetBrief').textContent = `${online}/${list.length} 在線 · ${S.route ? '路線 ' + fmtKm(S.route.cum_km.at(-1)) : '尚無路線'}`;
   // 和回放頁同一種隊員表：點一下鏡頭跟著那個人，再點一次回到全隊
   teamTable($('#cards'), list.map((m) => {
     const s = m.state, [st, stClass] = status(m), p = S.prog[m.u.uid], flag = S.flags[m.u.uid];
-    const alert = S.sos.has(m.u.uid) ? ['SOS 求救', 'crit'] : flag === 'behind' && st !== '已結束' ? ['落隊', 'warn'] : flag === 'ahead' && st !== '已結束' ? ['超前', 'warn'] : [st, stClass];
-    const off = ['失聯', '已結束', '尚未回報'].includes(st);
+    const alert = S.sos.has(m.u.uid) ? ['SOS 求救', 'crit'] : flag === 'behind' && !isOff(st) ? ['落隊', 'warn'] : flag === 'ahead' && !isOff(st) ? ['超前', 'warn'] : [st, stClass];
+    const off = isOff(st);
     const stop = nextStop(p?.km), remaining = stop ? Math.max(0, stop.km - +p.km) : null;
     const avg = recentSpeed(m), eta = avg && remaining != null && Number.isFinite(remaining) ? clock(Date.now() + remaining / avg * 3600000) : null;
     const left = S.route && numeric(p?.km) ? Math.max(0, S.route.cum_km.at(-1) - +p.km) : null;
     return {
       uid: m.u.uid, name: m.u.nickname, color: m.u.color, on: S.focus === m.u.uid && autoFollow, away: S.focus === m.u.uid && !autoFollow,
-      sub: [alert[0], eta && stop ? `${stop.name === '終點' ? '' : stop.name + ' '}預計 ${eta}` : ''].filter(Boolean).join(' · '), subCls: alert[1],
+      sub: [alert[0], eta && stop && !off ? `${stop.name === '終點' ? '' : stop.name + ' '}預計 ${eta}` : ''].filter(Boolean).join(' · '), subCls: alert[1],
       cols: [[off ? '–' : Math.round((+s.speed || 0) * 3.6), 'km/h'], [numeric(s.alt) ? Math.round(+s.alt) : '–', 'm 海拔'],
              [(+m.u.stats?.km || 0).toFixed(1), 'km 已騎'], [left == null ? '–' : left.toFixed(1), 'km 距終點']],
     };
@@ -369,31 +412,9 @@ function renderCards() {
 /* ---------- 事件流 ---------- */
 const nameOf = (uid) => S.members.get(uid)?.u.nickname || '';
 const chatEv = (m) => ({ ...m, kind: 'event', type: 'chat', text: `聊天：${m.text}` });
-const FEED_TYPES = {
-  important: new Set(['sos', 'behind', 'ahead', 'offroute', 'stuck']),
-  road: new Set(['roadevent', 'weather', 'rain']),
-  message: new Set(['msg', 'chat', 'mark']),
-};
-let feedFilter = 'important';
-try {
-  const saved = localStorage.getItem(FEED_FILTER_KEY);
-  if (saved === 'all' || Object.hasOwn(FEED_TYPES, saved)) feedFilter = saved;
-} catch { /* 儲存空間不可用時維持重要事件 */ }
-function updateFeedFilter() {
-  document.querySelectorAll('[data-feed-filter]').forEach((button) => {
-    const active = button.dataset.feedFilter === feedFilter;
-    button.setAttribute('aria-pressed', String(active));
-  });
-}
-document.querySelectorAll('[data-feed-filter]').forEach((button) => button.addEventListener('click', () => {
-  feedFilter = button.dataset.feedFilter;
-  try { localStorage.setItem(FEED_FILTER_KEY, feedFilter); } catch { /* 儲存空間不可用時仍可篩選 */ }
-  updateFeedFilter();
-  renderFeed();
-}));
-updateFeedFilter();
+const FEED = eventFilter(document.querySelector('.feed-filters'), FEED_FILTER_KEY, () => renderFeed());
 function renderFeed() {
-  const events = S.events.filter((e) => feedFilter === 'all' || FEED_TYPES[feedFilter]?.has(e.type));
+  const events = S.events.filter(FEED.match);
   $('#feed').innerHTML = events.slice(-14).reverse().map((e) => `<div class="ev${e.type === 'sos' ? ' sos' : ''}"><time class="num">${clock(+e.ts)}</time>
     <i style="--c:${EV[e.type] || '#8e8e93'}"></i><span>${e.uid ? `<b>${esc(nameOf(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`).join('') || '<div class="empty">目前沒有這類事件</div>';
 }
