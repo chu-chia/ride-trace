@@ -131,7 +131,7 @@ Traccar Client 的 **SOS 按鈕**（送出 `alarm=sos`）會走跟網頁 SOS 一
 | Lua：落隊 | 有路線用「沿路線里程」中位數當中心（山路髮夾彎直線只差 400 m、沿路線落後 3 km 也抓得到），沒路線用座標中位數＋已騎里程；判斷＋改旗標在同一個 script，多個 worker 也只警示一次 |
 | Lua：聊天已讀 | `trip:{id}:chatread` 記每個人讀到的 Stream ID，比大小後只往前推；未讀數＝`XRANGE (已讀ID +` 數別人發的 |
 | Lua：抵達／全員到齊 | `SADD` 回傳 1 才通知抵達；`SDIFF active arrived` 為空＋`SET NX` 判斷全員到齊 |
-| `SET NX EX`／`NX PX` | 測速提醒去重（15 分鐘）、坑洞提醒去重、快速訊息限流（2 秒）、聊天限流（1 秒）、落隊判斷節流（每行程 2 秒一次）、推播去重（`push:sent:{事件}:{收件人}`，worker 重送不會推兩次）、推播冷卻（落隊 5 分鐘只推一次） |
+| `SET NX EX`／`NX PX` | 測速提醒去重（15 分鐘）、坑洞提醒去重、快速訊息限流（2 秒）、聊天限流（1 秒）、落隊判斷節流（每行程 2 秒一次）、推播去重（`push:sent:{事件}:{收件人}`，worker 重送不會推兩次）、推播冷卻（落隊 5 分鐘只推一次，超前共用同一把）、推播合併視窗（`push:grpwin:{trip}:{類型}` NX PX 45 秒：失聯／落隊／久停第一則立刻推，視窗內其他人先 `RPUSH push:grp:…`，到期由 `push:due`（Sorted Set，score＝到期時間）`ZRANGEBYSCORE`＋`ZREM` 搶到的 worker 合併成「3 人失聯：A、B、C」）、註冊速率限制（`rl:register:{IP}` `INCR`＋`EXPIRE`，10 分鐘 10 次） |
 | `HSETNX`／`HDEL` | 偏離路線／回到路線、異常久停／恢復移動，回傳值保證只通知一次 |
 
 ### 查詢與分析
