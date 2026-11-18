@@ -186,8 +186,8 @@ a.li{color:inherit}
 .panel-title .sub{font-size:var(--fs-s);color:var(--muted);display:flex;gap:var(--sp-2);align-items:center;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .panel-act{flex:none;display:inline-flex;align-items:center;gap:var(--sp-1);height:36px;padding:0 var(--sp-3);border:0;border-radius:var(--r-ctl);background:var(--surface-2);color:var(--fg);font:inherit;font-size:var(--fs-s);font-weight:600;white-space:nowrap;cursor:pointer;text-decoration:none}
 .panel-act svg{width:16px;height:16px}
-.panel-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:var(--sp-1) var(--sp-4) var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-3)}
-.panel-body>*{flex-shrink:0}
+.panel>.panel-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:var(--sp-1) var(--sp-4) var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-3)}
+.panel>.panel-body>*{flex-shrink:0}
 .panel-foot{padding:var(--sp-2) var(--sp-4) max(var(--sp-3),env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2)}
 .panel-mini{display:none;padding:0 var(--sp-4) var(--sp-3);gap:var(--sp-3);flex-wrap:wrap;font-size:var(--fs-s);color:var(--muted)}
 .panel-mini b{color:var(--fg)}

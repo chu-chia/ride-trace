@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable } from '/assets/common.js';
+import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { liveSocket } from '/assets/livesock.js';
 
@@ -93,7 +93,18 @@ $('#resetLayout').onclick = () => {
 restoreLayout();
 window.addEventListener('resize', () => { if (!mobile.matches) restoreLayout(); else setEditing(false); map.resize(); });
 $('#tripLink').href = `/trip?id=${encodeURIComponent(tid)}`;
-$('#mapStyle').onclick = () => { $('#mapStyle').textContent = `${M.nextStyle()}地圖`; };
+$('#mapStyle').onclick = () => setLabel($('#mapStyle'), M.nextStyle());
+panels.forEach((el) => liquidGlass(el));
+// 工具列放在右上、右側面板的左邊；面板被拖動或縮放後重新計算
+function placeTools() {
+  if (mobile.matches) return document.documentElement.style.removeProperty('--tools-right');
+  const right = panels.map((el) => el.getBoundingClientRect()).filter((r) => r.top < 160 && r.left > innerWidth / 2);
+  const x = right.length ? Math.min(...right.map((r) => r.left)) : innerWidth;
+  document.documentElement.style.setProperty('--tools-right', `${Math.round(innerWidth - x + 12)}px`);
+}
+placeTools();
+addEventListener('resize', placeTools);
+addEventListener('pointerup', () => setTimeout(placeTools, 0));
 
 /* 手機抽屜沿用行程頁的收合概念，內容移入目前分頁避免複製資料。 */
 const sheet = $('#mobileSheet');
@@ -107,14 +118,11 @@ function placeMobile() {
 }
 function setSheet(open) {
   sheet.classList.toggle('small', !open);
-  $('#sheetToggle').textContent = open ? '收合' : '展開';
-  $('#sheetToggle').setAttribute('aria-expanded', String(open));
   $('#sheetHandle').setAttribute('aria-expanded', String(open));
   $('#sheetHandle').setAttribute('aria-label', open ? '收合戰情室資訊' : '展開戰情室資訊');
   map.resize();
 }
-$('#sheetToggle').onclick = () => setSheet(sheet.classList.contains('small'));
-$('#sheetHandle').onclick = $('#sheetToggle').onclick;
+$('#sheetHandle').onclick = () => setSheet(sheet.classList.contains('small'));
 let touchStart = null;
 $('#sheetHandle').addEventListener('touchstart', (e) => { touchStart = e.touches[0].clientY; }, { passive: true });
 $('#sheetHandle').addEventListener('touchend', (e) => { if (touchStart == null) return; const dy = e.changedTouches[0].clientY - touchStart; if (Math.abs(dy) > 35) setSheet(dy < 0); touchStart = null; });
@@ -170,9 +178,12 @@ function pauseFollow(e) {
   if (!e.originalEvent) return;
   autoFollow = false;
   M.unfollow();
+  syncFollowBtn();
 }
+// 「全隊」鈕：自動框住全隊時按下；跟著某人或手動拖曳地圖時放開
+const syncFollowBtn = () => press($('#centerTeam'), autoFollow && !S.focus);
 for (const type of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart']) map.on(type, pauseFollow);
-$('#centerTeam').addEventListener('click', () => { autoFollow = true; S.focus = null; renderCards(); M.unfollow(); if (S.route && !S.profile) buildProfile(); });
+$('#centerTeam').addEventListener('click', () => { autoFollow = true; S.focus = null; renderCards(); M.unfollow(); syncFollowBtn(); if (S.route && !S.profile) buildProfile(); });
 function frame(now) {
   const dt = Math.min(0.2, (now - lastT) / 1000);
   lastT = now;
@@ -260,7 +271,7 @@ function renderCards() {
       cols: [[off ? '–' : Math.round((+s.speed || 0) * 3.6), 'km/h'], [numeric(s.alt) ? Math.round(+s.alt) : '–', 'm 海拔'],
              [(+m.u.stats?.km || 0).toFixed(1), 'km 已騎'], [left == null ? '–' : left.toFixed(1), 'km 距終點']],
     };
-  }), (uid) => { S.focus = S.focus === uid ? null : uid; autoFollow = true; M.unfollow(); renderCards(); });
+  }), (uid) => { S.focus = S.focus === uid ? null : uid; autoFollow = true; M.unfollow(); renderCards(); syncFollowBtn(); });
   if (!list.length) $('#cards').innerHTML = '<p class="empty">還沒有隊友</p>';
 }
 
