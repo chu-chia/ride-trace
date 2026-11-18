@@ -38,14 +38,28 @@
   .panel.small .topbar{padding-bottom:6px!important}
   .panel.small .topbar b{font-size:14px}
   #tabs{display:flex;flex-wrap:wrap;gap:4px;margin:14px 14px 8px;padding:0;background:none}
-  #tabs button{flex:0 0 calc(25% - 3px);padding:7px 4px;min-height:36px;font-size:12.5px;border-radius:9px;background:var(--surface-2)}
+  #tabs button{flex:1;padding:10px 4px;min-height:44px;font-size:13px;border-radius:9px;background:var(--surface-2)}
   #tabs button.on{background:var(--accent-fill);color:#fff}
   #tabs button[data-badge]:not([data-badge=""])::after{content:attr(data-badge);background:var(--crit);color:#fff;border-radius:9px;padding:0 4px;margin-left:3px;font-size:10px}
   .body{flex:1;min-height:0;overflow-y:auto;padding:4px 14px 18px;display:flex;flex-direction:column;gap:10px}
   .body[hidden]{display:none!important}
   .tab-desc{margin:0 0 6px;font-size:12px;color:var(--muted);line-height:1.5}
-  .panelFoot{flex:none;padding:10px 14px max(12px,env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
-  .panelFoot .qx-sos{width:100%;height:44px;font-size:15px}
+  .panelFoot{flex:none;padding:8px 14px max(12px,env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .warOpen{display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:12px;background:var(--surface-2);color:var(--fg);font-weight:700;text-decoration:none}
+  .sosOpen{min-width:54px;min-height:44px;border:0;border-radius:12px;background:var(--crit);color:#fff;font:inherit;font-weight:800;cursor:pointer}
+  .sosDialog[hidden]{display:none}
+  .sosDialog{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.65);display:grid;place-items:center;padding:16px}
+  .sosBox{width:min(360px,100%);padding:20px;border-radius:20px;background:var(--surface);color:var(--fg);box-shadow:0 20px 60px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:14px}
+  .sosBox h2{margin:0;font-size:20px}.sosBox p{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
+  .sosBox .qx-sos{height:52px;font-size:16px}.sosClose{align-self:flex-end;border:0;background:var(--surface-2);color:var(--fg);border-radius:10px;min-width:44px;min-height:44px;cursor:pointer}
+  .rideSummary{display:none}
+  .moreQuick{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}.moreQuick button{border:0;border-radius:9px;min-height:44px;background:var(--surface-2);color:var(--fg);font:inherit;cursor:pointer}
+  .subBack{align-self:flex-start;border:0;background:none;color:var(--accent);font:inherit;font-size:13px;min-height:36px;cursor:pointer}
+  .teamDetails{padding:8px 0 10px 46px;color:var(--muted);font-size:12px;line-height:1.55}
+  .teamMore{border:0;background:var(--surface-2);color:var(--fg);border-radius:8px;min-width:44px;min-height:44px;cursor:pointer;font:inherit;font-size:12px}
+  .teamFocus{border:0;background:none;color:var(--accent);font:inherit;min-height:44px;cursor:pointer;margin-left:8px}
+  #team .li{display:block;padding:7px 12px}
+  .teamMain{display:flex;align-items:center;gap:10px;min-height:56px}.teamMain .grow{min-width:0}.teamMain .t2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .li .right{text-align:right;font-size:12px;white-space:nowrap}
   #lagSet select{font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:5px 6px}
   .li .kick{border:0;background:none;color:var(--crit-ink);font-size:13px;cursor:pointer;padding:6px 10px;min-height:32px;margin-right:-10px;border-radius:8px}
@@ -74,12 +88,15 @@
     .stats{padding:6px 16px 0}
     .stats b{font-size:18px}
     .compactStats{display:none!important}
-    .panel.small .stats{display:grid!important;padding-top:0}
+    .panel.small .stats{display:none!important}
+    .panel.small .rideSummary{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 12px 0}
+    .rideSummary>div{min-width:0;padding:8px 10px;border-radius:10px;background:var(--surface-2)}
+    .rideSummary small{display:block;color:var(--muted);font-size:11px}.rideSummary b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
     #tabs{margin:8px 12px}
     .panelFoot{padding:7px 12px max(8px,env(safe-area-inset-bottom,0px))}
     .panelFoot .qx-sos{height:40px}
-    .panel.small .panelFoot{display:block;padding-top:3px}
-    .panel.small .panelFoot .qx-sos{height:35px}
+    .panel.small .panelFoot{display:flex;justify-content:space-between;padding-top:3px}
+    .panel.small .panelFoot .sosOpen{min-height:44px}
     .panel.small .topbar .go{display:none}
     .tools{top:max(12px,env(safe-area-inset-top,0px));right:max(10px,env(safe-area-inset-right,0px));gap:6px}
     .tools .tool{height:34px;min-width:40px;padding:0 7px;font-size:11px}
@@ -108,15 +125,16 @@
     <div><b class="num" id="sAlt">–</b><span>m 我的海拔</span></div>
   </div>
   <div class="compactStats"><span>在線 <b id="cOnline">0/0</b></span><span>我的速度 <b id="cSpeed">–</b> km/h</span></div>
+  <div class="rideSummary"><div><small>車隊</small><b id="quickTeam">載入中</b></div><div><small>路線</small><b id="quickRoute">載入中</b></div></div>
   <div class="banner" id="banner" hidden></div>
-  <nav class="seg" id="tabs" aria-label="行程功能"><button class="on" data-t="team">隊友</button><button data-t="route">路線</button><button data-t="wp">集合點</button><button data-t="msg">訊息</button><button data-t="events">事件</button><button data-t="mark">標註</button><button data-t="more">更多</button></nav>
+  <nav class="seg" id="tabs" aria-label="行程功能"><button class="on" data-t="team">隊友</button><button data-t="route">路線</button><button data-t="msg">訊息</button><button data-t="more">更多</button></nav>
   <div class="body" data-b="team"><p class="tab-desc">查看隊友位置、速度與騎乘狀態。</p><div class="list" id="team"></div></div>
-  <div class="body" data-b="route" hidden><p class="tab-desc">查看全隊路線進度，或前往規劃路線。</p><div class="qx-pop" id="routeContent"></div></div>
-  <div class="body" data-b="wp" hidden><p class="tab-desc">設定大家要會合的地點，抵達時會通知全隊。</p><div class="qx-pop" id="wpContent"></div></div>
+  <div class="body" data-b="route" hidden><p class="tab-desc">依順序查看起點、途經點與終點；點「查看」可在地圖定位。</p><div class="qx-pop" id="routeContent"></div></div>
+  <div class="body" data-b="wp" hidden><button class="subBack" data-back-more>‹ 返回更多</button><p class="tab-desc">設定大家要會合的地點，抵達時會通知全隊。</p><div class="qx-pop" id="wpContent"></div></div>
   <div class="body" data-b="msg" hidden><p class="tab-desc">傳快速訊息或聊天，讓全隊即時收到。</p><div class="qx-pop" id="msgContent"></div></div>
-  <div class="body" data-b="events" hidden><p class="tab-desc">查看行程中發生的警示與紀錄。</p><div id="events"></div></div>
-  <div class="body" data-b="mark" hidden><p class="tab-desc">標記路況或推薦地點，隊友靠近時會收到提醒。</p><div class="qx-pop" id="markContent"></div></div>
-  <div class="body" data-b="more" hidden><p class="tab-desc">邀請隊友、設定位置回報與查看騎乘工具。</p><div class="moreNav" id="moreNav"><button class="on" data-more-tab="invite">邀請隊友</button><button data-more-tab="report">回報裝置</button><button data-more-tab="cam">測速照相</button><button data-more-tab="lag">落隊警示</button><button data-more-tab="war">戰情室</button></div>
+  <div class="body" data-b="events" hidden><button class="subBack" data-back-more>‹ 返回更多</button><p class="tab-desc">查看行程中發生的警示與紀錄。</p><div id="events"></div></div>
+  <div class="body" data-b="mark" hidden><button class="subBack" data-back-more>‹ 返回更多</button><p class="tab-desc">標記路況或推薦地點，隊友靠近時會收到提醒。</p><div class="qx-pop" id="markContent"></div></div>
+  <div class="body" data-b="more" hidden><div class="moreQuick"><button data-open-tab="wp">集合點</button><button data-open-tab="events">事件</button><button data-open-tab="mark">標註</button></div><p class="tab-desc">邀請隊友、設定位置回報與查看騎乘工具。</p><div class="moreNav" id="moreNav"><button class="on" data-more-tab="invite">邀請隊友</button><button data-more-tab="report">回報裝置</button><button data-more-tab="cam">測速照相</button><button data-more-tab="lag">落隊警示</button><button data-more-tab="war">戰情室</button></div>
     <section class="moreSection" data-more="invite"><p class="tab-desc">分享邀請碼或連結，讓朋友加入行程。</p>
 
     <div class="card" style="display:flex;flex-direction:column;gap:10px;text-align:center">
@@ -146,8 +164,9 @@
     <section class="moreSection" data-more="lag" hidden><p class="tab-desc">設定與全隊距離多遠時提醒落隊。</p><div class="small muted" id="lagSet"></div></section>
     <section class="moreSection" data-more="war" hidden><p class="tab-desc">在電腦大螢幕觀看全隊位置與行程事件。</p><a class="btn block" id="warLink" target="_blank" rel="noopener">開啟戰情室</a></section>
   </div>
-  <div class="panelFoot"><button class="qx-sos" id="qxSos" title="長按 1.5 秒發出 SOS"><i></i><span>SOS</span></button></div>
+  <div class="panelFoot"><a class="warOpen" id="warFoot" target="_blank" rel="noopener">戰情室</a><button class="sosOpen" id="sosOpen" aria-label="開啟緊急求救選單">SOS</button></div>
 </aside>
+<div class="sosDialog" id="sosDialog" hidden><div class="sosBox" role="dialog" aria-modal="true" aria-labelledby="sosTitle"><button class="sosClose" id="sosClose" aria-label="關閉緊急求救選單">✕</button><h2 id="sosTitle">緊急求救</h2><p id="sosHelp">長按下方按鈕 1.5 秒，通知全隊並標出你的位置。</p><button class="qx-sos" id="qxSos" title="長按 1.5 秒發出 SOS"><i></i><span>SOS</span></button></div></div>
 <div class="qx-prog glass" id="qxProg" hidden></div>
 <div class="qx-turn glass" id="qxTurn" hidden></div>
 

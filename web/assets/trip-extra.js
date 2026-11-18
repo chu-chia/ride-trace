@@ -383,6 +383,13 @@ pop.addEventListener('click', async (e) => {
 
 /* ---------- SOS：長按 1.5 秒發出，橫幅一直顯示到本人解除 ---------- */
 const sosBtn = $('#qxSos');
+const sosOpen = $('#sosOpen');
+const sosDialog = $('#sosDialog');
+const closeSosDialog = () => { sosDialog.hidden = true; sosOpen.focus(); };
+sosOpen.addEventListener('click', () => { sosDialog.hidden = false; $('#sosHelp').textContent = mineSos() ? '按下方按鈕兩次，解除你的求救狀態。' : '長按下方按鈕 1.5 秒，通知全隊並標出你的位置。'; sosBtn.focus(); });
+$('#sosClose').addEventListener('click', closeSosDialog);
+sosDialog.addEventListener('click', (e) => { if (e.target === sosDialog) closeSosDialog(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sosDialog.hidden) closeSosDialog(); });
 const banner = document.createElement('div');
 banner.className = 'qx-sosbar';
 banner.hidden = true;
@@ -390,20 +397,24 @@ document.body.append(banner);
 X.sos = [];
 let hold = null;
 function mineSos() { return X.sos.find((e) => e.uid === S.me); }
-function syncSosBtn() { sosBtn.classList.toggle('active', !!mineSos()); sosBtn.querySelector('span').textContent = mineSos() ? '解除' : 'SOS'; }
-sosBtn.addEventListener('pointerdown', (e) => {
+function syncSosBtn() { sosBtn.classList.toggle('active', !!mineSos()); sosBtn.querySelector('span').textContent = mineSos() ? '解除求救' : '長按發出 SOS'; sosOpen.textContent = mineSos() ? '解除' : 'SOS'; sosOpen.setAttribute('aria-label', mineSos() ? '開啟解除求救選單' : '開啟緊急求救選單'); }
+function beginSosHold() {
   if (mineSos()) return;
-  e.preventDefault();
+  if (hold) return;
   sosBtn.classList.add('holding');
   hold = setTimeout(async () => {
     hold = null; sosBtn.classList.remove('holding');
     try { await api(`/api/trips/${tid}/sos`, { method: 'POST' }); navigator.vibrate?.(300); }
     catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
   }, 1500);
-});
+}
+sosBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); beginSosHold(); });
 const stopHold = () => { if (hold) { clearTimeout(hold); hold = null; sosBtn.classList.remove('holding'); toast('SOS 要按住 1.5 秒才會發出', { icon: 'S', color: '#ff3b30' }); } };
 sosBtn.addEventListener('pointerup', stopHold);
 sosBtn.addEventListener('pointerleave', stopHold);
+sosBtn.addEventListener('pointercancel', stopHold);
+sosBtn.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); beginSosHold(); } });
+sosBtn.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); stopHold(); } });
 sosBtn.addEventListener('click', async () => {
   if (!mineSos()) return;
   if (sosBtn.dataset.confirm !== '1') { sosBtn.dataset.confirm = '1'; sosBtn.querySelector('span').textContent = '確定？'; setTimeout(() => { sosBtn.dataset.confirm = ''; syncSosBtn(); }, 3000); return; }
@@ -494,12 +505,13 @@ const etaClock = (min) => clock(Date.now() + min * 60000);
 
 function renderProgress() {
   const bar = $('#qxProg');
-  if (!X.route) { bar.hidden = true; turnCard.hidden = true; return; }
+  if (!X.route) { bar.hidden = true; turnCard.hidden = true; $('#quickRoute').textContent = '尚未規劃路線'; return; }
   const total = X.route.cum_km.at(-1);
   const riders = [...S.members.values()].filter((m) => X.prog[m.u.uid] && m.u.active);
   const ticks = X.wps.map((w) => ({ w, km: routeKmOf(w.lon, w.lat) }));
   const me = X.prog[S.me];
   const left = me ? total - me.km : null;
+  $('#quickRoute').textContent = me ? `剩 ${fmtKm(Math.max(0, left))}` : `全長 ${fmtKm(total)}`;
   bar.hidden = false;
   bar.innerHTML = `
     <div class="qx-prog-h"><b>全隊進度</b><span>${me ? `我 ${fmtKm(me.km)} / ${fmtKm(total)} · 剩 ${fmtKm(left)} · 約 ${etaClock((left / speedKmh(S.me)) * 60)} 到` : `全長 ${fmtKm(total)}`}</span></div>
@@ -533,18 +545,20 @@ function renderRoutePanel() {
       ${owner ? `<a class="btn primary block" href="/plan?trip=${tid}">規劃路線</a>` : '<div class="small muted">建立者可以在「規劃路線」設定</div>'}`;
     return;
   }
-  const s = X.route.summary, total = X.route.cum_km.at(-1);
-  const rows = [...S.members.values()].filter((m) => X.prog[m.u.uid]).sort((a, b) => X.prog[b.u.uid].km - X.prog[a.u.uid].km).map((m) => {
-    const p = X.prog[m.u.uid], left = total - p.km, done = !m.u.active;
-    return `<div class="qx-row"><span class="qx-dot static" style="--c:${m.u.color}"></span><div class="grow"><div class="t1">${esc(m.u.nickname)}${p.off > 150 ? ' <span class="chip warn">偏離路線</span>' : ''}</div>
-      <div class="t2">${fmtKm(p.km)} / ${fmtKm(total)}${done ? ' · 已結束' : ` · 剩 ${fmtKm(left)} · 約 ${etaClock((left / speedKmh(m.u.uid)) * 60)} 到`}</div></div></div>`;
+  const s = X.route.summary;
+  const points = X.route.points || [];
+  const rows = points.map((p, i) => {
+    const kind = i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'via';
+    const label = i === 0 ? '起點' : i === points.length - 1 ? '終點' : `途經點 ${i}`;
+    const name = p.name?.trim() || `${(+p.lat).toFixed(4)}, ${(+p.lon).toFixed(4)}`;
+    return `<li class="routeStop ${kind}"><span class="routeNode" aria-hidden="true"></span><div class="routePlace"><small>${label}</small><b title="${esc(name)}">${esc(name)}</b></div><button type="button" data-goto data-lon="${+p.lon}" data-lat="${+p.lat}" aria-label="在地圖上查看${esc(name)}">查看</button></li>`;
   }).join('');
   pop.innerHTML = `
-    <div class="qx-head"><b>路線</b><span class="small muted">${s.km.toFixed(1)} km · 預估 ${Math.floor(s.min / 60)}:${String(s.min % 60).padStart(2, '0')} · ${{ scooter: '機車', heavy: '重機', car: '汽車' }[X.route.vehicle || (X.route.avoid_highways === false ? 'heavy' : 'scooter')]} · 落隊改用沿路線距離</span></div>
-    <div class="qx-list">${rows || '<div class="small muted" style="padding:6px 2px">還沒有人開始回報位置</div>'}</div>
+    <div class="qx-head"><b>行程路線</b><span class="small muted">${s.km.toFixed(1)} km · 預估 ${Math.floor(s.min / 60)} 小時 ${s.min % 60} 分 · ${{ scooter: '機車', heavy: '重機', car: '汽車' }[X.route.vehicle || (X.route.avoid_highways === false ? 'heavy' : 'scooter')]}</span></div>
+    <ol class="routeStops">${rows || '<li class="small muted">尚無停靠點資料</li>'}</ol>
     <a class="btn block" href="/plan?trip=${tid}">${owner ? '修改路線' : '看路線規劃'}</a>`;
 }
-setInterval(() => { if (X.route) { renderProgress(); if (X.open === 'route') renderRoutePanel(); } }, 2000);
+setInterval(() => { if (X.route) renderProgress(); }, 2000);
 
 /* ---------- WebSocket 訊息 ---------- */
 addEventListener('qiji:msg', (e) => {
