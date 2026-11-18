@@ -72,7 +72,21 @@ html,body{width:100%;height:100%;overflow:hidden}
 /* 騎士清單不要外框和底色，直接浮在地圖上（文字加陰影才讀得清楚） */
 .war-panel.cards{background:none;border-color:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;text-shadow:0 1px 3px rgba(0,0,0,.9)}
 :root[data-theme="light"] .war-panel.cards{text-shadow:0 0 4px rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.95)}
-.war-panel.cards .team-row.on{background:color-mix(in srgb,var(--bg) 55%,transparent)}.war-panel.small .panel-toggle{background:var(--surface-2)}
+/* 騎士清單（電腦版）：不要標題列（編輯版面時才出現，拖曳用）、整體縮小；跟隨中的人不用底色，右邊一個小箭頭（暫離時變淡） */
+@media(min-width:1101px){
+  .war-stage:not(.editing) .war-panel.cards>.panel-top,.war-panel.cards>.panel-toggle{display:none}
+  .war-panel.cards .card-list.team-rows{padding:0 4px}
+  .war-panel.cards .team-row{position:relative;padding:5px 16px 5px 4px;gap:2px;border-top-color:color-mix(in srgb,var(--line) 60%,transparent)}
+  .war-panel.cards .team-name b{font-size:12px}
+  .war-panel.cards .team-row .num{font-size:12.5px}
+  .war-panel.cards .team-row small{font-size:8.5px}
+  .war-panel.cards .team-row .team-sub{font-size:10px}
+}
+.war-panel.cards .team-row,.war-panel.cards .team-row.on,.war-panel.cards .team-row:hover{background:none}
+.war-panel.cards .team-row.away,.war-panel.cards .team-row:focus-visible{box-shadow:none;outline:none}
+.war-panel.cards .team-row.on::after,.war-panel.cards .team-row.away::after{content:"";position:absolute;right:3px;top:50%;transform:translateY(-50%);border:5px solid transparent;border-right:7px solid var(--accent);border-left:0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+.war-panel.cards .team-row.away::after{opacity:.45}
+.war-panel.cards .team-row:hover .team-name b{text-decoration:underline;text-underline-offset:3px}.war-panel.small .panel-toggle{background:var(--surface-2)}
 .war-panel.small .panel-note{display:none}
 .panel-resize{display:none;position:absolute;right:0;bottom:0;width:24px;height:24px;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 50%,var(--accent) 51%,var(--accent) 57%,transparent 58%)}
 .war-stage.editing .panel-grip{cursor:grab;touch-action:none;user-select:none}.war-stage.editing .panel-resize{display:block}.war-stage.editing .war-panel{outline:1px dashed var(--accent)}

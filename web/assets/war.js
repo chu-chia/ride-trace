@@ -96,6 +96,9 @@ function restoreLayout() {
     el.querySelector('.panel-toggle')?.setAttribute('aria-expanded', String(!p.small));
     if (p.small) el.dataset.ostyle = el.getAttribute('style') || '';
   }
+  // 騎士清單電腦版沒有標題列／收合鈕了，舊版面存成收合的話打開
+  const cards = panels.find((e) => e.dataset.panel === 'cards');
+  if (cards?.classList.contains('small')) { cards.classList.remove('small'); cards.setAttribute('style', cards.dataset.ostyle ?? ''); delete cards.dataset.ostyle; }
   dock();
 }
 function setEditing(on) {
