@@ -121,6 +121,8 @@ a.li{color:inherit}
 .team-row:first-child{border-top:0}
 /* 選中（鏡頭跟隨中）：使用者選的「淡灰底」，不加邊框；滑鼠點擊不顯示焦點框，只在鍵盤操作時顯示細框 */
 .team-row.on{background:var(--surface-2)}
+/* 暫離：拖了地圖，鏡頭不跟了，點一下回去（外框，跟工具鈕的 .away 一樣） */
+.team-row.away{box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent) 70%,transparent)}
 .team-row:hover:not(.on){background:color-mix(in srgb,var(--surface-2) 55%,transparent)}
 .team-row:focus{outline:none}
 .team-row:focus-visible{outline:1.5px solid var(--muted);outline-offset:-1.5px}
@@ -217,6 +219,7 @@ a.li{color:inherit}
 .tool span{max-width:100%;overflow:hidden;white-space:nowrap}
 .tool:disabled{opacity:.45;cursor:default}
 .tool.on,.tool.glass.on{background:var(--accent-fill);color:#fff;border-color:transparent;box-shadow:0 6px 20px color-mix(in srgb,var(--accent) 35%,transparent)}
+.tool.away,.tool.glass.away{color:var(--accent);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .tool.compass svg{width:24px;height:24px}
 .tools .gap{height:var(--sp-1)}
 

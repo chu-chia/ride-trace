@@ -142,8 +142,10 @@ function showMapError(container, msg) {
 // 不考慮傾斜，算出能把範圍放進留白內可視區的 zoom（cameraForBounds 算不出來時的備案）
 function flatZoom(b, padding = {}, maxZoom = 15, map) {
   const box = map ? map.getContainer() : null;
-  const W = (box?.clientWidth || innerWidth) - (padding.left || 0) - (padding.right || 0);
-  const H = (box?.clientHeight || innerHeight) - (padding.top || 0) - (padding.bottom || 0);
+  const BW = box?.clientWidth || innerWidth, BH = box?.clientHeight || innerHeight;
+  // 留白比畫面還大時（手機抽屜拉到很高）W／H 會變成 0 或負的，算出來是 zoom 0（整個世界）：至少留畫面的 1/4
+  const W = Math.max(BW * 0.25, BW - (padding.left || 0) - (padding.right || 0));
+  const H = Math.max(BH * 0.25, BH - (padding.top || 0) - (padding.bottom || 0));
   const sw = maplibregl.MercatorCoordinate.fromLngLat(b.getSouthWest()), ne = maplibregl.MercatorCoordinate.fromLngLat(b.getNorthEast());
   const dx = Math.max(1e-9, Math.abs(ne.x - sw.x)), dy = Math.max(1e-9, Math.abs(ne.y - sw.y));
   return Math.min(maxZoom, Math.log2(Math.max(1, Math.min(W / (dx * 512), H / (dy * 512)))));
@@ -273,14 +275,21 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   // 每次停下來就把畫面中心的高度校正成地形高度。
   let following = false, smoothEl = null, lastT = 0, lastKey = '';
   // 手指／滑鼠按在地圖上時，跟隨先停手：jumpTo 會中止 MapLibre 正在辨識的拖曳、縮放手勢，跟隨中就怎麼拖都拖不動
-  let held = 0;
+  let held = 0, wheelUntil = 0;  // 滾輪縮放有約 0.2 秒的緩動，而且不一定帶 originalEvent，用時間判斷
   { const box = map.getCanvasContainer();
     box.addEventListener('touchstart', (e) => { held = e.touches.length; }, { passive: true });
     for (const ev of ['touchend', 'touchcancel']) box.addEventListener(ev, (e) => { held = e.touches.length; }, { passive: true });
     // 滑鼠只看真的滑鼠（手機點一下也會補送 mousedown／mouseup，不能拿來判斷）
     box.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') held = 1; });
     addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse') held = 0; });
-    box.addEventListener('wheel', () => { lastT = performance.now(); }, { passive: true }); }
+    box.addEventListener('wheel', () => { lastT = performance.now(); wheelUntil = lastT + 250; }, { passive: true }); }
+  // 使用者自己的鏡頭動作（滾輪縮放慣性、雙指旋轉放開後的慣性）還在進行時，跟隨也讓路：jumpTo 會呼叫 map.stop() 把它中止
+  let userMove = false;
+  map.on('movestart', (e) => { if (e.originalEvent) userMove = true; });
+  map.on('moveend', () => { userMove = false; });
+  // 跟隨暫停（手勢中）或剛開始跟隨時，鏡頭從目前畫面滑到目標，不要一格跳過去
+  let resume = null, wasBusy = false;
+  const RESUME_MS = 450;
   let busyUntil = 0;  // 鏡頭動畫（指北針、2D/3D）結束前，跟隨模式不要每格重設鏡頭把動畫打斷
   const animate = (opts) => { busyUntil = performance.now() + (opts.duration ?? 500) + 80; map.easeTo(opts); };
   let grp = null, grpT = 0; // 全隊鏡頭目前的（平滑後）中心與縮放
@@ -314,10 +323,16 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     // 而是周圍取幾個點平均後再慢慢追，看起來就是平穩地沿著山坡移動。
     follow(center, extra = {}) {
       const now = performance.now();
-      if (now < busyUntil || held) { lastT = now; return; }  // 指北針、切 2D/3D 的動畫進行中，或手指按在地圖上，跟隨先讓路
+      if (now < busyUntil || now < wheelUntil || held || userMove) { lastT = now; wasBusy = true; return; }  // 指北針、切 2D/3D 的動畫、手指按在地圖上、使用者縮放的慣性還沒停，跟隨先讓路
       const dt = Math.min(0.2, (now - (lastT || now)) / 1000);
       lastT = now;
+      if (!following || wasBusy) { const c = map.getCenter(); resume = { at: now, from: [c.lng, c.lat] }; wasBusy = false; }
       if (!following) { following = true; map.setCenterClampedToGround(false); smoothEl = is3d && map.getTerrain() ? map.getCenterElevation() : null; }  // 從目前鏡頭高度開始追，不會一接手就跳
+      if (resume) {
+        const k = Math.min(1, (now - resume.at) / RESUME_MS), e = 1 - (1 - k) ** 3;
+        center = [resume.from[0] + (center[0] - resume.from[0]) * e, resume.from[1] + (center[1] - resume.from[1]) * e];
+        if (k >= 1) resume = null;
+      }
       let el = 0;
       if (is3d && map.getTerrain()) {
         const d = 0.0015, D = 0.003; // 約 150、300 公尺兩圈
@@ -370,6 +385,10 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       map.setCenterClampedToGround(true);
       fixElevation();
     },
+    // 使用者正在操作地圖（手指按著、滾輪慣性、鏡頭動畫中）：自動旋轉之類每格改鏡頭的動作要先停
+    get busy() { const n = performance.now(); return !!held || userMove || n < busyUntil || n < wheelUntil; },
+    // 以畫面中心縮放（跟隨中點兩下、雙指點一下用；MapLibre 內建的是以手指位置為中心）
+    zoomBy(d) { animate({ zoom: map.getZoom() + d, duration: 300 }); },
     resetNorth() { animate({ bearing: 0, duration: 500 }); },
     set3d(on) {
       is3d = on;

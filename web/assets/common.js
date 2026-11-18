@@ -71,7 +71,7 @@ export function toast(text, { icon = '騎', color = '#d9500f', sub = '' } = {}) 
 
 // 隊員狀態表（回放、行程頁、戰情室共用的樣式）：每列＝顏色點＋名字（下面一行狀態）＋四欄數字，點一下選那個人。
 // 列只在人員或順序改變時重建，平常只更新文字：每秒重畫整個 innerHTML 的話，點下去的按鈕會被換掉而點不到。
-// rows：[{ uid, name, color, sub, subCls, cols: [[值, 單位] ×4], on }]
+// rows：[{ uid, name, color, sub, subCls, cols: [[值, 單位] ×4], on, away }]
 export function teamTable(el, rows, onPick) {
   const key = rows.map((r) => r.uid).join(',');
   if (el.dataset.key !== key) {
@@ -89,8 +89,9 @@ export function teamTable(el, rows, onPick) {
     sub.className = `team-sub ${r.subCls || ''}`;
     row.querySelectorAll('.num').forEach((n, i) => { const [v, u] = r.cols[i] || ['–', '']; n.innerHTML = `${esc(v)}<small>${esc(u)}</small>`; });
     row.classList.toggle('on', !!r.on);
+    row.classList.toggle('away', !!r.away);  // 暫離：拖了地圖，點一下回去跟他
     row.setAttribute('aria-pressed', String(!!r.on));
-    row.setAttribute('aria-label', `${r.name}，${r.sub || ''}，點一下${r.on ? '取消跟隨' : '鏡頭跟著他'}`);
+    row.setAttribute('aria-label', `${r.name}，${r.sub || ''}，點一下${r.on ? '取消跟隨' : r.away ? '回去跟著他' : '鏡頭跟著他'}`);
   }
 }
 

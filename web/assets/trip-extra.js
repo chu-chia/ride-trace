@@ -132,7 +132,7 @@ pop.addEventListener('click', async (e) => {
   const row = e.target.closest('[data-wp]');
   if (row) {
     const w = X.wps.find((x) => x.id === row.dataset.wp);
-    if (w) { S.lastInteract = Date.now(); M.unfollow(); map.easeTo({ center: [w.lon, w.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }); }
+    if (w) { S.goAway(); map.easeTo({ center: [w.lon, w.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 }); }
   }
 });
 
@@ -140,7 +140,7 @@ map.on('click', (e) => {
   if (!X.pick) return;
   X.pick.lngLat = e.lngLat;
   X.open = X.pick.mode;
-  S.lastInteract = Date.now(); M.unfollow();
+  S.goAway();
   X.pickMarker?.remove();
   const el = document.createElement('div'); el.className = 'qx-pin pick'; el.innerHTML = '<b>＋</b>';
   X.pickMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(e.lngLat).addTo(map);
@@ -228,7 +228,7 @@ function renderCamPanel() {
 pop.addEventListener('click', (e) => {
   const row = e.target.closest('[data-cam]');
   if (!row) return;
-  S.lastInteract = Date.now(); M.unfollow();
+  S.goAway();
   map.easeTo({ center: [+row.dataset.lon, +row.dataset.lat], zoom: 15.5, duration: 900 });
 });
 
@@ -378,7 +378,7 @@ pop.addEventListener('click', async (e) => {
     return;
   }
   const g = e.target.closest('[data-goto]');
-  if (g) { S.lastInteract = Date.now(); M.unfollow(); map.easeTo({ center: [+g.dataset.lon, +g.dataset.lat], zoom: Math.max(map.getZoom(), 15.5), duration: 900 }); }
+  if (g) { S.goAway(); map.easeTo({ center: [+g.dataset.lon, +g.dataset.lat], zoom: Math.max(map.getZoom(), 15.5), duration: 900 }); }
 });
 
 /* ---------- SOS：長按 1.5 秒發出，橫幅一直顯示到本人解除 ---------- */
@@ -440,7 +440,7 @@ banner.addEventListener('click', (e) => {
   const b = e.target.closest('[data-sosgo]');
   if (!b) return;
   const [lon, lat] = b.dataset.sosgo.split(',').map(Number);
-  S.lastInteract = Date.now(); M.unfollow();
+  S.goAway();
   map.easeTo({ center: [lon, lat], zoom: 16, duration: 900 });
 });
 async function loadSos() { try { X.sos = await api(`/api/trips/${tid}/sos`); renderSos(); } catch { /* 略過 */ } }
@@ -473,7 +473,7 @@ async function loadRoute() {
 // 還沒有人有位置時，鏡頭先對準路線（沒有路線就對準全台），不要停在預設位置
 let idleFitted = false;
 function idleFit() {
-  if (idleFitted || [...S.members.values()].some((m) => m.pos) || Date.now() - (S.lastInteract || 0) < 12000) return;
+  if (idleFitted || [...S.members.values()].some((m) => m.pos) || Date.now() - (S.lastInteract || 0) < 10000) return;
   idleFitted = true;
   S.pad = S.refreshPad ? (S.refreshPad(), S.pad) : S.pad;
   const c = X.route?.coords;

@@ -2,6 +2,7 @@
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
 import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
+import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -188,18 +189,38 @@ M.onStyle(() => {
 
 /* ---------- 運鏡：手動操作後暫停跟隨 ---------- */
 let lastT = performance.now(), lastTrail = 0;
-let autoFollow = true;
+let autoFollow = true;  // false＝暫離（使用者拖了地圖）
+let awayAt = 0;
 const padRaw = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : deskPortrait() ? { top: 120, bottom: Math.round(innerHeight * .56), left: 60, right: 120 } : { top: 90, bottom: 160, left: 395, right: 365 };
-function pauseFollow(e) {
-  if (!e.originalEvent) return;
+// 手勢規則（docs/地圖手勢規則.md）：拖曳＝暫離（按鈕／列變外框，10 秒沒動自動回去）；縮放、旋轉、傾斜繼續跟隨；
+// 全隊模式下縮放也算暫離
+function goAway() {
+  awayAt = Date.now();
+  if (!autoFollow) return;
   autoFollow = false;
   M.unfollow();
   syncFollowBtn();
+  renderCards();
 }
-// 「全隊」鈕：自動框住全隊時按下；跟著某人或手動拖曳地圖時放開
-const syncFollowBtn = () => press($('#centerTeam'), autoFollow && !S.focus);
-for (const type of ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart']) map.on(type, pauseFollow);
-$('#centerTeam').addEventListener('click', () => { autoFollow = true; S.focus = null; renderCards(); M.unfollow(); syncFollowBtn(); if (S.route && !S.profile) buildProfile(); });
+function resumeFollow() {
+  autoFollow = true;
+  M.regroup();
+  GEST.sync();
+  syncFollowBtn();
+  renderCards();
+}
+// 「全隊」鈕：實心＝自動框住全隊；外框＝暫離（點了回去）；跟著某人時放開
+const syncFollowBtn = () => {
+  press($('#centerTeam'), autoFollow && !S.focus);
+  $('#centerTeam').classList.toggle('away', !autoFollow && !S.focus);
+};
+const GEST = cameraGestures(M, {
+  centered: () => autoFollow && !!S.focus,
+  onPan: goAway,
+  onZoom: () => { if (!S.focus && autoFollow) goAway(); },
+  onActivity: () => { if (!autoFollow) awayAt = Date.now(); },
+});
+$('#centerTeam').addEventListener('click', () => { S.focus = null; resumeFollow(); if (S.route && !S.profile) buildProfile(); });
 const PADS = smoothPad(padRaw);
 const pad = () => PADS.get(); // 抽屜開合後鏡頭慢慢滑到新位置
 addEventListener('resize', () => PADS.refresh());
@@ -227,8 +248,10 @@ function frame(now) {
     }
   }
   const pts = [...S.members.values()].filter((m) => m.pos && m.u.active !== false && m.state.status !== 'lost').map((m) => m.pos);
+  const back = resumeMs();
+  if (!autoFollow && back > 0 && !M.busy && Date.now() - awayAt > back) resumeFollow();
   if (S.styleReady && pts.length && !S.profiling && autoFollow) {
-    if (!LOW_POWER) map.setBearing((map.getBearing() + dt * 2) % 360); // 慢慢旋轉；省電時不轉，鏡頭不動地圖就不必重畫
+    if (!LOW_POWER && !M.busy) map.setBearing((map.getBearing() + dt * 2) % 360); // 慢慢旋轉；省電時不轉，鏡頭不動地圖就不必重畫
     const fm = S.focus && S.members.get(S.focus);
     if (fm?.pos) M.follow(fm.pos, { padding: pad() });  // 點了隊員表：鏡頭跟著他
     else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
@@ -287,12 +310,12 @@ function renderCards() {
     const avg = recentSpeed(m), eta = avg && remaining != null && Number.isFinite(remaining) ? clock(Date.now() + remaining / avg * 3600000) : null;
     const left = S.route && numeric(p?.km) ? Math.max(0, S.route.cum_km.at(-1) - +p.km) : null;
     return {
-      uid: m.u.uid, name: m.u.nickname, color: m.u.color, on: S.focus === m.u.uid,
+      uid: m.u.uid, name: m.u.nickname, color: m.u.color, on: S.focus === m.u.uid && autoFollow, away: S.focus === m.u.uid && !autoFollow,
       sub: [alert[0], eta && stop ? `${stop.name === '終點' ? '' : stop.name + ' '}預計 ${eta}` : ''].filter(Boolean).join(' · '), subCls: alert[1],
       cols: [[off ? '–' : Math.round((+s.speed || 0) * 3.6), 'km/h'], [numeric(s.alt) ? Math.round(+s.alt) : '–', 'm 海拔'],
              [(+m.u.stats?.km || 0).toFixed(1), 'km 已騎'], [left == null ? '–' : left.toFixed(1), 'km 距終點']],
     };
-  }), (uid) => { S.focus = S.focus === uid ? null : uid; autoFollow = true; M.unfollow(); renderCards(); syncFollowBtn(); });
+  }), (uid) => { S.focus = S.focus === uid && autoFollow ? null : uid; M.unfollow(); resumeFollow(); });
   if (!list.length) $('#cards').innerHTML = '<p class="empty">還沒有隊友</p>';
 }
 
