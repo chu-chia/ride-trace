@@ -79,8 +79,24 @@ async def _new_session(resp: Response, uid: str) -> str:
     return tok
 
 
+REG_LIMIT = 10           # 同一個 IP 10 分鐘內最多註冊 10 次（UX-52：避免拿註冊一直試帳號存不存在）
+REG_WINDOW = 600
+
+
+def client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    return fwd.split(",")[0].strip() or (request.client.host if request.client else "?")
+
+
 @router.post("/register")
-async def register(body: RegisterIn, resp: Response):
+async def register(body: RegisterIn, request: Request, resp: Response):
+    # INCR＋EXPIRE NX：固定視窗計數，第一次註冊開始算 10 分鐘，到期 key 自己消失
+    rl = f"rl:register:{client_ip(request)}"
+    n = await r.incr(rl)
+    if n == 1:
+        await r.expire(rl, REG_WINDOW)
+    if n > REG_LIMIT:
+        raise HTTPException(429, "註冊太頻繁，請 10 分鐘後再試")
     name = body.username.strip().lower()
     if not re.fullmatch(r"[a-z0-9_]{3,20}", name):
         raise HTTPException(400, "帳號只能用 3 到 20 個英文小寫、數字或底線")
@@ -114,8 +130,17 @@ async def login(body: LoginIn, resp: Response):
 
 @router.post("/logout")
 async def logout(request: Request, resp: Response):
+    """body 可以帶 {"endpoint": 這台裝置的推播網址}：一併刪掉這台的訂閱，登出後不會再收到這個帳號的推播（UX-06）。"""
     tok = token_from(request)
+    try:
+        endpoint = (await request.json() or {}).get("endpoint")
+    except Exception:  # noqa: BLE001  沒帶 body 也可以登出
+        endpoint = None
     if tok:
+        uid = await r.get(K.session(tok))
+        if uid and isinstance(endpoint, str) and endpoint:
+            from .push import sub_id, subs_key  # push 也 import 了 auth，放在函式裡避免循環
+            await r.hdel(subs_key(uid), sub_id(endpoint))
         await r.delete(K.session(tok))
     resp.delete_cookie(COOKIE)
     return {"ok": True}

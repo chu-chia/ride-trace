@@ -118,23 +118,35 @@
   <div class="list glass" id="trips"><div class="li"><span class="muted">載入中…</span></div></div>
 </main>
 <script type="module">
-import { api, $, esc, avatar, clock } from '/assets/common.js';
+import { api, $, esc, avatar, clock, toast } from '/assets/common.js';
 api('/api/admin/whoami').then((w) => { if (w.admin) $('#adminLink').hidden = false; }).catch(() => {});
 import { drawFootprint } from '/assets/footmini.js';
 import { swr, clearSwrCache } from '/assets/swr.js';
 import { startBg } from '/assets/homebg.js';
+import { pushEndpoint, dropLocalPush } from '/assets/push.js';
 startBg($('#bg'));
 const ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
 const d = new Date();
 $('#today').textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日 星期${'日一二三四五六'[d.getDay()]}`;
 
+// 從「你被移出行程」的通知點進來（UX-03）：說明一次，再把網址清乾淨
+{
+  const q = new URLSearchParams(location.search);
+  if (q.has('kicked')) {
+    toast(`你已被移出「${q.get('name') || '行程'}」`, { icon: '!', sub: '團主把你移出了這個行程，行程頁不能再打開' });
+    history.replaceState(null, '', '/');
+  }
+}
 const me = await api('/api/me');
 $('#hello').textContent = `${d.getHours() < 11 ? '早安' : d.getHours() < 18 ? '午安' : '晚安'}，${me.nickname}`;
 $('#me').innerHTML = avatar(me);
 $('#meName').textContent = me.nickname;
 $('#meUser').textContent = '@' + me.username;
 $('#logout').onclick = async () => {
-  await api('/api/logout', { method: 'POST' });
+  // 先把這台的推播訂閱交給後端一起刪掉，再取消瀏覽器的訂閱：登出後這台不會再收到這個帳號的通知（UX-06）
+  const endpoint = await pushEndpoint();
+  await api('/api/logout', { method: 'POST', body: { endpoint } });
+  await dropLocalPush();
   await clearSwrCache();
   try { localStorage.removeItem(`qiji-footprint-preview:${me.uid}`); } catch { /* 儲存空間不可用 */ }
   location.href = '/login';

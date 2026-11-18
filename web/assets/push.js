@@ -15,7 +15,14 @@ async function currentSub() {
   return reg ? reg.pushManager.getSubscription() : null;
 }
 
-export async function enablePush(publicKey) {
+// 訂閱有時會卡住（推播服務連不上、權限視窗被瀏覽器擋掉），15 秒還沒好就放棄，按鈕不會一直灰著（UX-50）
+const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+
+export function enablePush(publicKey) {
+  return withTimeout(doEnable(publicKey), 15000, '開啟通知逾時：推播服務沒有回應，請確認網路後再按一次');
+}
+
+async function doEnable(publicKey) {
   const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
   await navigator.serviceWorker.ready;
   const perm = await Notification.requestPermission();
@@ -25,6 +32,14 @@ export async function enablePush(publicKey) {
   await api('/api/push/subscribe', { method: 'POST', body: sub.toJSON() });
 }
 
+// 登出用：先拿這台的推播網址交給 /api/logout 一起刪，登出後再取消瀏覽器的訂閱（UX-06）
+export async function pushEndpoint() {
+  try { return (supported() ? (await currentSub())?.endpoint : null) || null; } catch { return null; }
+}
+export async function dropLocalPush() {
+  try { const sub = supported() ? await currentSub() : null; if (sub) await sub.unsubscribe(); } catch { /* 沒有訂閱 */ }
+}
+
 export async function disablePush() {
   const sub = await currentSub();
   if (!sub) return;
@@ -32,29 +47,54 @@ export async function disablePush() {
   await sub.unsubscribe();
 }
 
+const ago = (ts) => {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  return s < 60 ? `${s} 秒前` : s < 3600 ? `${Math.round(s / 60)} 分鐘前` : s < 86400 ? `${Math.round(s / 3600)} 小時前` : new Date(ts).toLocaleDateString('zh-TW');
+};
+
 export async function mountPushCard(el) {
   if (!el) return;
-  let cfg;
-  try { cfg = await api('/api/push/config'); } catch { return; }
-  const draw = async () => {
-    const sub = supported() ? await currentSub().catch(() => null) : null;
-    const on = !!sub && Notification.permission === 'granted';
+  let cfg, sub = null;
+  // 帶這台的 endpoint 去問伺服器有沒有登記：本機有訂閱、伺服器沒有（被清掉、過期）就自動重新登記一次（UX-07）
+  const load = async () => {
+    sub = supported() ? await currentSub().catch(() => null) : null;
+    cfg = await api('/api/push/config' + (sub ? '?endpoint=' + encodeURIComponent(sub.endpoint) : ''));
+    if (sub && !cfg.registered && cfg.enabled && Notification.permission === 'granted') {
+      try {
+        await api('/api/push/subscribe', { method: 'POST', body: sub.toJSON() });
+        cfg = await api('/api/push/config?endpoint=' + encodeURIComponent(sub.endpoint));
+      } catch { /* 下面會顯示「重新開啟」 */ }
+    }
+  };
+  try { await load(); } catch { return; }
+  const draw = () => {
+    const local = !!sub && Notification.permission === 'granted';
+    const on = local && cfg.registered;
     let state = '', action = '';
     if (!cfg.enabled) state = '伺服器還沒設定推播金鑰（.env 的 VAPID_*）。';
     else if (isIOS() && !standalone()) state = 'iPhone 要用「網頁 App」模式才能收通知：用 Safari 打開這個網址 →「分享 → 加入主畫面」，再從主畫面的騎跡圖示打開（上方不會有網址列），回到這裡開啟通知（iOS 16.4 以上）。';
     else if (!supported()) state = '這個瀏覽器不支援網頁推播。';
     else if (!window.isSecureContext) state = '要用 HTTPS 網址打開才能開通知。';
     else if (Notification.permission === 'denied') state = '通知被封鎖了，要到瀏覽器的網站設定裡改成允許。';
-    else action = on
+    else if (local && !cfg.registered) state = '這台裝置的通知沒有登記在伺服器上，現在收不到。請按「重新開啟」。';
+    if (!state || (local && !cfg.registered)) action = on
       ? '<button class="btn" id="pushTest">送一則測試</button><button class="btn" id="pushOff">關閉這台的通知</button>'
-      : '<button class="btn primary" id="pushOn">開啟這台裝置的通知</button>';
+      : `<button class="btn primary" id="pushOn">${local ? '重新開啟' : '開啟這台裝置的通知'}</button>`;
+    const types = (cfg.types || []).filter((t) => t.type !== 'sos_off');
+    const last = cfg.last
+      ? `最近一則：「${esc(cfg.last.title)}」，${ago(cfg.last.ts)}，送達 ${cfg.last.ok}／${cfg.last.total} 台${cfg.last.total && !cfg.last.ok ? '（都沒送到，可以按「送一則測試」檢查）' : ''}`
+      : '這個帳號還沒有收過推播。';
     el.innerHTML = `
       <div class="eyebrow">通知（Web Push）</div>
-      <div class="small muted">${on ? `這台裝置已開啟。螢幕鎖著、網頁沒開也會收到 SOS、落隊、失聯、全員到齊、前方測速、訊息。你的帳號共 ${cfg.devices} 台裝置。`
-        : '開了之後，螢幕鎖著、網頁沒開也收得到 SOS、落隊、失聯、全員到齊、前方測速和隊友訊息。'}</div>
+      <div class="small muted">${on ? `這台裝置已開啟，螢幕鎖著、網頁沒開也收得到。你的帳號共 ${cfg.devices} 台裝置。`
+        : `開了之後，螢幕鎖著、網頁沒開也收得到下面這 ${types.length} 種通知。`}</div>
       ${state ? `<div class="small" style="color:var(--warn-ink)">${esc(state)}</div>` : ''}
       ${action ? `<div class="qx-inline">${action}</div>` : ''}
-      ${on ? `<label class="push-row"><span>聊天訊息也推播</span><input type="checkbox" id="pushChat" ${cfg.chat ? 'checked' : ''}></label>` : ''}`;
+      ${on ? `<div class="small muted">${last}</div>` : ''}
+      <details class="push-types"${on ? '' : ' open'}><summary class="small">會推播哪些事（${types.filter((t) => t.on).length}／${types.length} 種開著）</summary>
+        ${types.map((t) => `<label class="push-row"><span>${esc(t.title)}<span class="small muted" style="display:block">${esc(t.desc)}${t.fixed ? '・一定會推' : ''}</span></span>`
+          + `<input type="checkbox" data-ptype="${esc(t.type)}" ${t.on ? 'checked' : ''} ${t.fixed || !on ? 'disabled' : ''}></label>`).join('')}
+      </details>`;
   };
   el.addEventListener('click', async (e) => {
     const id = e.target.id;
@@ -64,14 +104,21 @@ export async function mountPushCard(el) {
       if (id === 'pushOn') { await enablePush(cfg.public_key); toast('通知已開啟', { icon: '鈴' }); }
       if (id === 'pushOff') { await disablePush(); toast('這台裝置不會再收到通知', { icon: '鈴' }); }
       if (id === 'pushTest') { await api('/api/push/test', { method: 'POST' }); toast('測試通知已送出，幾秒內會跳出來', { icon: '鈴' }); }
-      cfg = await api('/api/push/config');
     } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
-    await draw();
+    try { await load(); } catch { /* 保留上一次的狀態 */ }
+    draw();
   });
   el.addEventListener('change', async (e) => {
-    if (e.target.id !== 'pushChat') return;
-    try { await api('/api/push/prefs', { method: 'POST', body: { chat: e.target.checked } }); cfg.chat = e.target.checked; }
-    catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+    const type = e.target.dataset?.ptype;
+    if (!type) return;
+    try {
+      await api('/api/push/prefs', { method: 'POST', body: { type, on: e.target.checked } });
+      const t = cfg.types.find((x) => x.type === type);
+      if (t) t.on = e.target.checked;
+      const sum = el.querySelector('.push-types summary');
+      const types = cfg.types.filter((x) => x.type !== 'sos_off');
+      if (sum) sum.textContent = `會推播哪些事（${types.filter((x) => x.on).length}／${types.length} 種開著）`;
+    } catch (err) { e.target.checked = !e.target.checked; toast(err.message, { icon: '!', color: '#ff3b30' }); }
   });
-  await draw();
+  draw();
 }
