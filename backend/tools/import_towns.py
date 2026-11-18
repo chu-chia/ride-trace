@@ -16,6 +16,7 @@ import time
 
 import osmium
 import redis
+import shapely
 from shapely import wkb
 from shapely.geometry import MultiPolygon, Polygon, mapping
 
@@ -70,6 +71,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pbf", default=PBF)
     ap.add_argument("--redis", default=default_redis_url())
+    ap.add_argument("--view-only", action="store_true", help="只重算畫地圖用的外框（town:{rid} 的 geojson），不動查詢用的 townpart")
     a = ap.parse_args()
     t0 = time.time()
     h = Areas()
@@ -79,6 +81,27 @@ def main():
     print(f"讀取：縣市 {len(counties)}、鄉鎮候選 {len(h.towns)}，{time.time() - t0:.0f} 秒")
 
     r = redis.Redis.from_url(a.redis, decode_responses=True)
+    keep = []
+    for rid, name, g in h.towns:
+        if not name or g.is_empty:
+            continue
+        rep = g.representative_point()
+        county = h.parent.get(rid) or next((cn for _, cn, cg in counties if cg.contains(rep)), None)
+        if not county or county == "福建省" or not ("縣" in county or county.endswith("市")):
+            continue  # 不在臺灣的縣市裡
+        keep.append((rid, name, g, rep, county))
+    # 畫地圖用的外框：整個臺灣一起做「覆蓋簡化」，相鄰鄉鎮共用同一條簡化後的邊界，
+    # 不會像各自 simplify 那樣邊界對不上（出現縫隙或重疊）。
+    views = shapely.coverage_simplify(shapely.make_valid(shapely.from_wkb([g.wkb for _, _, g, _, _ in keep])), 0.002)
+    if a.view_only:
+        p = r.pipeline(transaction=False)
+        for (rid, *_), view in zip(keep, views):
+            if r.exists(f"town:{rid}"):
+                p.hset(f"town:{rid}", "geojson", json.dumps(mapping(view), separators=(",", ":")))
+        p.delete("cache:towns:geojson")
+        p.execute()
+        print(f"已更新 {len(keep)} 個鄉鎮的地圖外框，{time.time() - t0:.0f} 秒")
+        return
     try:
         r.execute_command("FT.DROPINDEX", "idx:townshape")
     except redis.ResponseError:
@@ -89,16 +112,9 @@ def main():
 
     p = r.pipeline(transaction=False)
     kept = 0
-    for rid, name, g in h.towns:
-        if not name or g.is_empty:
-            continue
-        rep = g.representative_point()
-        county = h.parent.get(rid) or next((cn for _, cn, cg in counties if cg.contains(rep)), None)
-        if not county or county == "福建省" or not ("縣" in county or county.endswith("市")):
-            continue  # 不在臺灣的縣市裡
+    for (rid, name, g, rep, county), view in zip(keep, views):
         kept += 1
         shape = g.simplify(0.0003, preserve_topology=True)  # 約 30 m，查詢用
-        view = g.simplify(0.002, preserve_topology=True)    # 約 200 m，畫地圖用
         for n, part in enumerate(polys(shape)):
             if part.area > 0:
                 p.hset(f"townpart:{rid}:{n}", mapping={"code": rid, "shape": wkt(part)})
@@ -107,6 +123,7 @@ def main():
                                        "lon": round(rep.x, 5), "lat": round(rep.y, 5),
                                        "geojson": json.dumps(mapping(view), separators=(",", ":"))})
         p.sadd("towns:all", rid)
+    p.delete("cache:towns:geojson")
     p.execute()
     r.execute_command("FT.CREATE", "idx:townshape", "ON", "HASH", "PREFIX", "1", "townpart:",
                       "SCHEMA", "code", "TAG", "shape", "GEOSHAPE", "FLAT")

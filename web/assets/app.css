@@ -112,3 +112,10 @@ a.li{color:inherit}
 .panel .topbar,.panel .topbar.glass{position:static;max-width:none;border-radius:0;background:none;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;padding:12px 14px 10px 8px;border-bottom:1px solid var(--line);flex:none}
 .panel .topbar>div{flex:1;min-width:0}
 .panel .topbar b{max-width:none;font-size:17px}
+
+/* 地圖彈出說明：跟著深淺色走（MapLibre 預設白底，深色主題下字也是白的會看不到） */
+.maplibregl-popup-content{background:var(--surface);color:var(--fg);border-radius:12px;padding:10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:13px;line-height:1.5}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip{border-top-color:var(--surface)}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip{border-bottom-color:var(--surface)}
+.maplibregl-popup-anchor-left .maplibregl-popup-tip{border-right-color:var(--surface)}
+.maplibregl-popup-anchor-right .maplibregl-popup-tip{border-left-color:var(--surface)}

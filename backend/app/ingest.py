@@ -99,6 +99,7 @@ async def ingest(uid: str, fix: Fix) -> dict:
         if keep:
             # 全年足跡：Stream ID 直接用時間戳，之後可以用 XRANGE 依時間範圍查
             p.xadd(K.footprint(uid), {"lat": fields["lat"], "lon": fields["lon"], "ele": fields.get("alt", "0")}, id=f"{ts}-*")
+            p.geoadd(K.fp_geo(uid), [fix.lon, fix.lat, str(ts)])  # 熱力圖放大時用 GEOSEARCH 取畫面內的點
             p.incr(K.fp_ver(uid))
             p.hset(K.last(uid), mapping={"ts": ts, "lat": fix.lat, "lon": fix.lon,
                                          "ats": new_anchor[0], "alat": new_anchor[1], "alon": new_anchor[2]})

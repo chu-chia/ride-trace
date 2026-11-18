@@ -121,7 +121,9 @@ M.onStyle((style) => {
   // 軌跡畫在地名、路名底下，字才不會被黃線蓋住
   // 找「所有道路、橋、建築之後」的第一個文字層（Liberty 的單行道箭頭在橋之前，不能用它）
   const ls = map.getStyle().layers;
-  const lastShape = ls.findLastIndex((l) => l.type !== 'symbol' && !l.id.startsWith('fp-') && l.id !== 'hillshade');
+  // 自己加的圖層（鄉鎮、熱力圖、建築）不算底圖，不然找到的位置會落在最上面，軌跡就蓋住地標了
+  const ours = (id) => /^(fp-|towns-|heat|qiji-)/.test(id) || id === 'hillshade';
+  const lastShape = ls.findLastIndex((l) => l.type !== 'symbol' && !ours(l.id));
   const below = ls.slice(lastShape + 1).find((l) => l.type === 'symbol')?.id;
   if (!map.getLayer('fp-all')) map.addLayer({ id: 'fp-all', type: 'line', source: 'fp-all', layout, paint: { 'line-color': style === 'light' ? '#6e6e73' : '#c9d1f5', 'line-opacity': 0.28, 'line-width': width(0.7) } }, below);
   if (!map.getLayer('fp-glow')) map.addLayer({ id: 'fp-glow', type: 'line', source: 'fp-lines', layout, paint: { 'line-color': c, 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.22, 13, 0.1], 'line-width': width(2.6), 'line-blur': ['interpolate', ['linear'], ['zoom'], 6, 2, 14, 4] } }, below);

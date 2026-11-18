@@ -61,7 +61,7 @@ def main():
 
     if a.reset:
         n = 0
-        for key in [K.footprint(uid), K.daykm(uid), K.fog_all(uid), K.last(uid)]:
+        for key in [K.footprint(uid), K.daykm(uid), K.fog_all(uid), K.last(uid), K.fp_geo(uid)]:
             n += r.delete(key)
         for key in r.scan_iter(f"fog:{uid}:*", count=1000):
             n += r.delete(key)
@@ -94,6 +94,7 @@ def main():
         fog[(day, b)] |= cells
         daykm[day] += dist / 1000
         pipe.xadd(K.footprint(uid), {"lat": f"{lat:.7f}", "lon": f"{lon:.7f}", "ele": f"{ele:.1f}"}, id=f"{ts}-*")
+        pipe.geoadd(K.fp_geo(uid), [lon, lat, str(ts)])
         kept += 1
         prev = (ts, lat, lon)
         last_ts = ts

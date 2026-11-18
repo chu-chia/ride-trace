@@ -54,6 +54,7 @@ class K:
 
     footprint = staticmethod(lambda uid: f"footprint:{uid}")
     fp_ver = staticmethod(lambda uid: f"fp:ver:{uid}")
+    fp_geo = staticmethod(lambda uid: f"footprint:{uid}:geo")     # GEO：每個足跡點（成員＝Stream ID），熱力圖放大時 GEOSEARCH BYBOX
     fp_warm = staticmethod(lambda uid: f"fp:warm:{uid}")
     daykm = staticmethod(lambda uid: f"footprint:{uid}:daykm")
     fog = staticmethod(lambda uid, day, bucket: f"fog:{uid}:{day}:{bucket}")

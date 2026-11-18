@@ -7,9 +7,29 @@ export function initRecords(map, M, getTab, pad) {
   const empty = { type: 'FeatureCollection', features: [] };
   const townsData = () => D.geo ? { ...D.geo, features: D.geo.features.map((f) => ({ ...f, properties: { ...f.properties, lit: new Set(D.towns?.ids || []).has(f.properties.id) } })) } : empty;
   const heatData = () => ({ type: 'FeatureCollection', features: (D.heat?.cells || []).map(([lon, lat, n]) => ({ type: 'Feature', properties: { n }, geometry: { type: 'Point', coordinates: [lon, lat] } })) });
+  // 熱力圖細節：放大到 13 級以上時，用 GEOSEARCH BYBOX 取畫面內的原始足跡點（不是 160 m 的格子）
+  let detail = [], detailBox = null, detailTimer = null, detailSeq = 0;
+  const detailData = () => ({ type: 'FeatureCollection', features: detail.map((c) => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } })) });
+  async function loadDetail() {
+    if (getTab() !== 'heat' || map.getZoom() < 12.5) return;
+    const b = map.getBounds();
+    // 畫面還在上次抓的範圍內就不用再抓（上次多抓了一圈）
+    if (detailBox && b.getWest() >= detailBox.w && b.getEast() <= detailBox.e && b.getSouth() >= detailBox.s && b.getNorth() <= detailBox.n) return;
+    const dx = (b.getEast() - b.getWest()) * 0.5, dy = (b.getNorth() - b.getSouth()) * 0.5;
+    const box = { w: b.getWest() - dx, e: b.getEast() + dx, s: b.getSouth() - dy, n: b.getNorth() + dy };
+    const seq = ++detailSeq;
+    try {
+      const d = await api(`/api/me/heat/detail?west=${box.w}&south=${box.s}&east=${box.e}&north=${box.n}`);
+      if (seq !== detailSeq || d.too_wide) return;
+      detail = d.points; detailBox = d.capped ? null : box;
+      map.getSource('heat-detail')?.setData(detailData());
+    } catch { /* 下次移動再試 */ }
+  }
+  map.on('moveend', () => { clearTimeout(detailTimer); detailTimer = setTimeout(loadDetail, 250); });
   const show = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
   function applyTab() {
-    show('towns-fill', getTab() === 'towns'); show('towns-line', getTab() === 'towns'); show('heat', getTab() === 'heat');
+    show('towns-fill', getTab() === 'towns'); show('towns-line', getTab() === 'towns'); show('heat', getTab() === 'heat'); show('heat-detail', getTab() === 'heat');
+    if (getTab() === 'heat') loadDetail();
     if (getTab() === 'heat' && !D.heatLoaded && !heatTask) heatTask = loadHeat().catch(report).finally(() => { heatTask = null; });
     if (getTab() === 'stats' && !D.statsLoaded && !statsTask) statsTask = loadStats().catch(report).finally(() => { statsTask = null; });
   }
@@ -27,7 +47,15 @@ export function initRecords(map, M, getTab, pad) {
       'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 6, 0.6, 12, 2],
       'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 10, 8, 14, 20],
       'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,0,0,0)', 0.15, 'rgba(255,138,61,.35)', 0.4, '#ff8a3d', 0.7, '#ffd60a', 1, '#ffffff'],
-      'heatmap-opacity': 0.9 } });
+      // 放大到街道（13 級以上）改由 heat-detail 的原始點接手，格子版淡出
+      'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0.9, 13.5, 0] } }, first);  // 熱力圖也放在地名、地標底下
+    if (!map.getSource('heat-detail')) map.addSource('heat-detail', { type: 'geojson', data: detailData() });
+    if (!map.getLayer('heat-detail')) map.addLayer({ id: 'heat-detail', type: 'heatmap', source: 'heat-detail', minzoom: 12.5, paint: {
+      'heatmap-weight': 0.35,
+      'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 13, 0.6, 17, 1.6],
+      'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 13, 5, 15, 9, 18, 18],
+      'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,0,0,0)', 0.15, 'rgba(255,138,61,.35)', 0.4, '#ff8a3d', 0.7, '#ffd60a', 1, '#ffffff'],
+      'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.5, 0.9] } }, first);
     applyTab();
   });
   map.on('click', 'towns-fill', (e) => {

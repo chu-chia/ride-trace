@@ -6,6 +6,7 @@ Redis：
 - user:{uid}:towns      Set：點亮過的鄉鎮；SADD 回傳 1 就是「第一次點亮」
 - user:{uid}:townfirst  Hash：鄉鎮 → 第一次點亮的時間
 - heat:{uid}            Sorted Set：格子 → 經過的點數（ZINCRBY），ZREVRANGE 就是「最常去的地方」
+- footprint:{uid}:geo   GEO：每個足跡點；熱力圖放大到街道時 GEOSEARCH BYBOX 只取畫面內的原始點
 """
 import json
 import time
@@ -14,7 +15,7 @@ from fastapi import APIRouter, Depends, Query
 
 from .auth import current_uid
 from .db import K, r
-from .geo import CELL, cell_of
+from .geo import CELL, cell_of, haversine_m
 
 router = APIRouter(prefix="/api")
 
@@ -107,6 +108,22 @@ async def my_heat(limit: int = Query(30000, ge=100, le=60000), uid: str = Depend
         lat, lon = cell_center(cell)
         out.append([round(lon, 5), round(lat, 5), int(n)])
     return {"cells": out, "total_cells": await r.zcard(f"heat:{uid}")}
+
+
+@router.get("/me/heat/detail")
+async def my_heat_detail(west: float, south: float, east: float, north: float,
+                         limit: int = Query(30000, ge=100, le=60000), uid: str = Depends(current_uid)):
+    """熱力圖放大時的細節：畫面範圍內的原始足跡點。
+    GEOSEARCH … BYBOX：用中心點＋寬高（公尺）框出畫面，Redis 在 geohash 索引上直接找，不用掃全部的點；
+    SQL 沒有空間索引就得 WHERE lat BETWEEN … AND lon BETWEEN … 掃表。"""
+    if east - west > 0.6 or north - south > 0.6:
+        return {"points": [], "too_wide": True}
+    clon, clat = (west + east) / 2, (south + north) / 2
+    w = haversine_m(clat, west, clat, east) + 50
+    h = haversine_m(south, clon, north, clon) + 50
+    rows = await r.geosearch(K.fp_geo(uid), longitude=clon, latitude=clat, width=w, height=h, unit="m",
+                             count=limit, withcoord=True)
+    return {"points": [[round(c[0], 5), round(c[1], 5)] for _, c in rows], "capped": len(rows) >= limit}
 
 
 @router.get("/me/stats")

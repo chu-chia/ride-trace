@@ -78,7 +78,7 @@
     <div class="card2"><h4>各縣市完成度（點一下看位置）</h4><div id="tCounties"></div></div>
   </div>
   <div class="body" data-b="heat" hidden>
-    <div class="note">所有足跡疊在一起，越亮代表經過越多次。每個格子約 160 m，用 Sorted Set（ZINCRBY）累計，ZREVRANGE 取出前幾名就是最常走的路。</div>
+    <div class="note">所有足跡疊在一起，越亮代表經過越多次。每個格子約 160 m，用 Sorted Set（ZINCRBY）累計，ZREVRANGE 取出前幾名就是最常走的路；放大到街道時改用 GEO 的 GEOSEARCH BYBOX 只取畫面內的每一個足跡點。</div>
     <div class="legend">少<i style="background:linear-gradient(90deg,rgba(255,138,61,.15),#ff8a3d,#ffd60a,#fff)"></i>多</div>
     <div class="card2"><h4>最常去的地方</h4><div id="hPlaces"></div></div>
   </div>
