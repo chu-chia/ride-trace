@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, $, esc, initialOf, inkOn, clock, dur } from '/assets/common.js';
+import { api, $, esc, avatar, initialOf, inkOn, clock, dur, ago } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -9,20 +9,22 @@ const M = createMap($('#map'), { style: 'dark', zoom: 7, terrain: true });
 const map = M.map;
 window.qijiMap = map;
 map.setPitch(60);
-const S = { trip: null, members: new Map(), events: [], route: null, prog: {}, gaps: {}, flags: {}, sos: new Map(), profile: null, styleReady: false };
+const S = { trip: null, members: new Map(), events: [], route: null, prog: {}, gaps: {}, flags: {}, sos: new Map(), waypoints: [], weather: [], traffic: [], profile: null, styleReady: false };
 window.qijiWar = S;
-const LAYOUT_KEY = `qiji:war:layout:v1:${tid}`;
+const LAYOUT_KEY = `qiji:war:layout:v4:${tid}`;
+const FEED_FILTER_KEY = 'qiji:war:feed-filter';
 const panels = [...document.querySelectorAll('.war-panel')];
-const wideScreen = () => window.innerWidth > 760;
+const stage = $('#stage');
+const mobile = matchMedia('(max-width:1100px)');
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-let topLayer = 5;
+const snap = (v) => Math.round(v / 12) * 12;
+let editing = false, topLayer = 5;
 function saveLayout() {
-  if (!wideScreen) return;
   const layout = Object.fromEntries(panels.map((el) => {
     const r = el.getBoundingClientRect();
-    return [el.dataset.panel, { x: r.left / innerWidth, y: r.top / innerHeight, w: r.width / innerWidth, h: r.height / innerHeight }];
+    return [el.dataset.panel, { x: r.left / innerWidth, y: r.top / innerHeight, w: r.width / innerWidth, h: (el.classList.contains('small') ? +(el.dataset.openHeight || r.height) : r.height) / innerHeight, small: el.classList.contains('small') }];
   }));
-  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* 儲存空間不可用時仍可操作 */ }
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* 瀏覽器停用儲存時仍可操作 */ }
 }
 function restoreLayout() {
   let layout;
@@ -32,47 +34,96 @@ function restoreLayout() {
     const p = layout[el.dataset.panel];
     if (!p || ![p.x, p.y, p.w, p.h].every(Number.isFinite)) continue;
     const w = clamp(p.w * innerWidth, 180, innerWidth - 16);
-    const h = clamp(p.h * innerHeight, 64, innerHeight - 16);
+    const h = clamp(p.h * innerHeight, 58, innerHeight - 16);
     el.style.width = `${w}px`;
     el.style.height = `${h}px`;
+    el.dataset.openHeight = String(h);
     el.style.left = `${clamp(p.x * innerWidth, 0, innerWidth - w)}px`;
     el.style.top = `${clamp(p.y * innerHeight, 0, innerHeight - h)}px`;
+    el.classList.toggle('small', !!p.small);
+    el.querySelector('.panel-toggle')?.setAttribute('aria-expanded', String(!p.small));
   }
 }
-restoreLayout();
+function setEditing(on) {
+  editing = on && !mobile.matches;
+  stage.classList.toggle('editing', editing);
+  $('#editLayout').setAttribute('aria-pressed', String(editing));
+  $('#editLayout').textContent = editing ? '完成編輯' : '編輯版面';
+}
+function edge(v, max) { return v < 18 ? 12 : max - v < 18 ? max : snap(v); }
 for (const el of panels) {
   el.addEventListener('pointerdown', () => { el.style.zIndex = ++topLayer; });
+  el.querySelector('.panel-toggle').addEventListener('click', () => {
+    if (!el.classList.contains('small')) el.dataset.openHeight = String(el.getBoundingClientRect().height);
+    el.classList.toggle('small');
+    el.querySelector('.panel-toggle').setAttribute('aria-expanded', String(!el.classList.contains('small')));
+    saveLayout();
+  });
   for (const handle of el.querySelectorAll('.panel-grip,.panel-resize')) {
     handle.addEventListener('pointerdown', (e) => {
-      if (!wideScreen || e.button !== 0 || e.target.closest('button')) return;
+      if (!editing || mobile.matches || e.button !== 0 || e.target.closest('button,a')) return;
       e.preventDefault(); e.stopPropagation();
       const r = el.getBoundingClientRect(), resize = handle.classList.contains('panel-resize');
       const x0 = e.clientX, y0 = e.clientY;
+      el.classList.add('dragging');
       handle.setPointerCapture(e.pointerId);
       const move = (ev) => {
         if (resize) {
-          el.style.width = `${clamp(r.width + ev.clientX - x0, 180, innerWidth - r.left)}px`;
-          el.style.height = `${clamp(r.height + ev.clientY - y0, 64, innerHeight - r.top)}px`;
+          el.style.width = `${clamp(edge(r.width + ev.clientX - x0, innerWidth - r.left), 180, innerWidth - r.left)}px`;
+          if (!el.classList.contains('small')) el.style.height = `${clamp(edge(r.height + ev.clientY - y0, innerHeight - r.top), 58, innerHeight - r.top)}px`;
         } else {
-          el.style.left = `${clamp(r.left + ev.clientX - x0, 0, innerWidth - r.width)}px`;
-          el.style.top = `${clamp(r.top + ev.clientY - y0, 0, innerHeight - r.height)}px`;
+          el.style.left = `${clamp(edge(r.left + ev.clientX - x0, innerWidth - r.width), 0, innerWidth - r.width)}px`;
+          el.style.top = `${clamp(edge(r.top + ev.clientY - y0, innerHeight - r.height), 0, innerHeight - r.height)}px`;
         }
-        if (el.dataset.panel === 'map') map.resize();
       };
-      const end = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); handle.removeEventListener('pointercancel', end); saveLayout(); };
+      const end = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); handle.removeEventListener('pointercancel', end); el.classList.remove('dragging'); saveLayout(); };
       handle.addEventListener('pointermove', move);
       handle.addEventListener('pointerup', end);
       handle.addEventListener('pointercancel', end);
     });
   }
 }
-$('#resetLayout').addEventListener('click', () => {
-  for (const el of panels) { el.style.left = ''; el.style.top = ''; el.style.width = ''; el.style.height = ''; el.style.zIndex = ''; }
+$('#editLayout').onclick = () => setEditing(!editing);
+$('#resetLayout').onclick = () => {
+  for (const el of panels) { el.removeAttribute('style'); delete el.dataset.openHeight; el.classList.remove('small'); el.querySelector('.panel-toggle').setAttribute('aria-expanded', 'true'); }
   try { localStorage.removeItem(LAYOUT_KEY); } catch { /* 儲存空間不可用 */ }
+  setEditing(false);
+};
+restoreLayout();
+window.addEventListener('resize', () => { if (!mobile.matches) restoreLayout(); else setEditing(false); map.resize(); });
+$('#tripLink').href = `/trip?id=${encodeURIComponent(tid)}`;
+$('#mapStyle').onclick = () => { $('#mapStyle').textContent = `${M.nextStyle()}地圖`; };
+
+/* 手機抽屜沿用行程頁的收合概念，內容移入目前分頁避免複製資料。 */
+const sheet = $('#mobileSheet');
+let currentTab = 'cards';
+function placeMobile() {
+  if (!mobile.matches) {
+    panels.forEach((el) => stage.append(el));
+    return;
+  }
+  panels.forEach((el) => { if (el.dataset.panel === currentTab) $('#sheetContent').append(el); else stage.append(el); });
+}
+function setSheet(open) {
+  sheet.classList.toggle('small', !open);
+  $('#sheetToggle').textContent = open ? '收合' : '展開';
+  $('#sheetToggle').setAttribute('aria-expanded', String(open));
+  $('#sheetHandle').setAttribute('aria-expanded', String(open));
+  $('#sheetHandle').setAttribute('aria-label', open ? '收合戰情室資訊' : '展開戰情室資訊');
   map.resize();
+}
+$('#sheetToggle').onclick = () => setSheet(sheet.classList.contains('small'));
+$('#sheetHandle').onclick = $('#sheetToggle').onclick;
+let touchStart = null;
+$('#sheetHandle').addEventListener('touchstart', (e) => { touchStart = e.touches[0].clientY; }, { passive: true });
+$('#sheetHandle').addEventListener('touchend', (e) => { if (touchStart == null) return; const dy = e.changedTouches[0].clientY - touchStart; if (Math.abs(dy) > 35) setSheet(dy < 0); touchStart = null; });
+document.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => {
+  currentTab = b.dataset.tab;
+  document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
+  placeMobile(); setSheet(true);
 });
-window.addEventListener('resize', () => { if (wideScreen()) restoreLayout(); map.resize(); });
-new ResizeObserver(() => map.resize()).observe(document.querySelector('.mapwrap'));
+mobile.addEventListener('change', placeMobile);
+placeMobile();
 const EXAG = 1.4; // mapbase 的地形誇張倍率
 const EV = {
   lost: '#ff453a', back: '#30d158', start: '#ff8a3d', end: '#8e8e93', stop: '#8e8e93', join: '#64d2ff', kick: '#ffd60a',
@@ -89,10 +140,12 @@ function upsert(u, state = {}) {
     el.style.setProperty('--c', u.color);
     el.style.setProperty('--ink', inkOn(u.color));
     el.innerHTML = `<div class="arrow"></div><div class="dot">${esc(initialOf(u.nickname))}</div><div class="name">${esc(u.nickname)}</div>`;
-    m = { u, state: {}, el, marker: new maplibregl.Marker({ element: el, anchor: 'center' }), trail: [], pos: null, from: null, to: null, t0: 0, onMap: false };
+    m = { u, state: {}, recent: [], el, marker: new maplibregl.Marker({ element: el, anchor: 'center' }), trail: [], pos: null, from: null, to: null, t0: 0, onMap: false };
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
+  m.el.style.setProperty('--c', m.u.color);
+  m.el.style.setProperty('--ink', inkOn(m.u.color));
   m.state = { ...m.state, ...state };
   if (!m.pos && m.state.lat) m.pos = [+m.state.lon, +m.state.lat];
   return m;
@@ -111,7 +164,7 @@ M.onStyle(() => {
 /* ---------- 運鏡：手動操作後暫停跟隨 ---------- */
 let lastT = performance.now(), lastTrail = 0;
 let autoFollow = true;
-const pad = () => ({ top: 40, bottom: 40, left: 40, right: 40 });
+const pad = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : { top: 90, bottom: 160, left: 395, right: 365 };
 function pauseFollow(e) {
   if (!e.originalEvent) return;
   autoFollow = false;
@@ -136,9 +189,11 @@ function frame(now) {
       ar.style.visibility = hd == null ? 'hidden' : '';
       ar.style.transform = `rotate(${(hd ?? 0) - map.getBearing()}deg)`;
       m.el.classList.toggle('lost', m.state.status === 'lost');
+      m.el.classList.toggle('rest', status(m)[0] === '停車');
+      m.el.classList.toggle('gapflag', !!S.flags[m.u.uid] && m.state.status !== 'done');
     }
   }
-  const pts = [...S.members.values()].filter((m) => m.pos && m.u.active !== false).map((m) => m.pos);
+  const pts = [...S.members.values()].filter((m) => m.pos && m.u.active !== false && m.state.status !== 'lost').map((m) => m.pos);
   if (S.styleReady && pts.length && !S.profiling && autoFollow) {
     map.setBearing((map.getBearing() + dt * 2) % 360);
     if (pts.length === 1) M.follow(pts[0], { padding: pad() });
@@ -149,59 +204,136 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-/* ---------- 卡片牆 ---------- */
+/* ---------- 騎士資訊與下一站 ETA ---------- */
 const fmtKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`);
+const numeric = (v) => v != null && v !== '' && Number.isFinite(+v);
 function status(m) {
   const s = m.state;
   if (s.status === 'done') return ['已結束', 'muted'];
   if (s.status === 'lost') return ['失聯', 'crit'];
-  if (!s.lat) return ['尚未回報', 'muted'];
+  if (!numeric(s.lat)) return ['尚未回報', 'muted'];
   if (Date.now() - (+s.seen || +s.ts) > 30000) return ['訊號弱', 'warn'];
   return (+s.speed || 0) * 3.6 < 5 ? ['停車', 'info'] : ['騎乘中', 'ok'];
+}
+function routeKmOf(lon, lat) {
+  if (!S.route?.coords?.length) return null;
+  const coords = S.route.coords, cum = S.route.cum_km, kx = Math.cos(lat * Math.PI / 180);
+  let best = Infinity, km = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = coords[i], b = coords[i + 1], dx = (b[0] - a[0]) * kx, dy = b[1] - a[1];
+    const t = clamp((((lon - a[0]) * kx * dx) + (lat - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+    const dd = ((lon - a[0]) * kx - dx * t) ** 2 + (lat - a[1] - dy * t) ** 2;
+    if (dd < best) { best = dd; km = cum[i] + (cum[i + 1] - cum[i]) * t; }
+  }
+  return km;
+}
+function nextStop(km) {
+  if (!numeric(km) || !S.route) return null;
+  const stops = S.waypoints.filter((w) => w.kind === 'meet' && numeric(w.lon) && numeric(w.lat)).map((w) => ({ name: w.name || '集合點', km: routeKmOf(+w.lon, +w.lat) })).filter((w) => numeric(w.km) && w.km > +km + 0.15).sort((a, b) => a.km - b.km);
+  return stops[0] || { name: '終點', km: S.route.cum_km.at(-1) };
+}
+function recentSpeed(m) {
+  const fresh = m.recent.filter((x) => Date.now() - x.at < 10 * 60_000 && x.kmh >= 5);
+  if (fresh.length >= 3) return fresh.reduce((a, x) => a + x.kmh, 0) / fresh.length;
+  return +m.u.stats?.avg_kmh || null;
 }
 function renderCards() {
   const expanded = new Set([...$('#cards').querySelectorAll('.cd[open]')].map((el) => el.dataset.uid));
   const focusedUid = document.activeElement?.closest?.('.cd')?.dataset.uid;
-  const total = S.route?.cum_km.at(-1);
-  const list = [...S.members.values()].sort((a, b) => (S.prog[b.u.uid]?.km ?? -1) - (S.prog[a.u.uid]?.km ?? -1));
-  const leadKm = Math.max(...list.map((m) => S.route ? +S.prog[m.u.uid]?.km : +m.u.stats?.km).filter(Number.isFinite), 0);
+  const list = [...S.members.values()].sort((a, b) => (+S.prog[b.u.uid]?.km || 0) - (+S.prog[a.u.uid]?.km || 0));
+  const online = list.filter((m) => !['已結束', '失聯', '尚未回報'].includes(status(m)[0])).length;
+  $('#teamCount').textContent = `${list.length} 位`;
+  $('#teamOnline').textContent = `${online}/${list.length} 在線`;
+  $('#sheetBrief').textContent = `${online}/${list.length} 在線 · ${S.route ? '路線 ' + fmtKm(S.route.cum_km.at(-1)) : '尚無路線'}`;
   $('#cards').innerHTML = list.map((m) => {
-    const s = m.state, [st] = status(m), p = S.prog[m.u.uid], f = S.flags[m.u.uid];
-    const alert = S.sos.has(m.u.uid) ? ['SOS', 'crit'] : s.status === 'lost' ? ['失聯', 'crit'] : f === 'behind' ? ['落隊', 'warn'] : [st === '尚未回報' || st === '已結束' ? st : '正常', st === '尚未回報' || st === '已結束' ? 'muted' : 'ok'];
-    const speed = s.status === 'lost' || s.status === 'done' ? '–' : Math.round((+s.speed || 0) * 3.6);
-    const riderKm = S.route ? +p?.km : +m.u.stats?.km;
-    const avg = m.u.stats?.avg_kmh || 40;
-    const eta = total && p ? clock(Date.now() + ((total - p.km) / Math.max(10, avg)) * 3600000) : '–';
+    const s = m.state, [st, stClass] = status(m), p = S.prog[m.u.uid], flag = S.flags[m.u.uid];
+    const alert = S.sos.has(m.u.uid) ? ['SOS', 'crit'] : flag === 'behind' && st !== '已結束' ? ['落隊', 'warn'] : flag === 'ahead' && st !== '已結束' ? ['超前', 'warn'] : [st, stClass];
+    const speed = ['失聯', '已結束', '尚未回報'].includes(st) ? '–' : Math.round((+s.speed || 0) * 3.6);
+    const stop = nextStop(p?.km), remaining = stop ? Math.max(0, stop.km - +p.km) : null;
+    const avg = recentSpeed(m), eta = avg && remaining != null && Number.isFinite(remaining) ? clock(Date.now() + remaining / avg * 3600000) : null;
+    const nextBrief = eta ? `距 ${esc(stop.name)} ${fmtKm(remaining)} · 預計 ${eta}` : '距終點 –';
     const seen = +(s.seen || s.ts);
     return `<details class="cd${S.sos.has(m.u.uid) ? ' sos' : ''}" data-uid="${esc(m.u.uid)}"${expanded.has(String(m.u.uid)) ? ' open' : ''}>
-      <summary><i class="rider-color" style="--c:${esc(m.u.color)}"></i><b class="rider-name">${esc(m.u.nickname)}</b>
-        <span class="speed num">${speed} <small>km/h</small></span><span class="chip ${alert[1]}">${alert[0]}</span></summary>
-      <div class="kv"><span>海拔 <em class="num">${s.alt != null && s.alt !== '' ? Math.round(+s.alt) + ' m' : '–'}</em></span><span>今日里程 <em class="num">${fmtKm(m.u.stats?.km || 0)}</em></span>
-        <span>電量 <em class="num">${s.batt != null && s.batt !== '' ? Math.round(+s.batt) + '%' : '–'}</em></span><span>與領先者距離 <em class="num">${Number.isFinite(riderKm) ? fmtKm(Math.max(0, leadKm - riderKm)) : '–'}</em></span>
-        <span>最後回報 <em class="num">${seen ? clock(seen) : '–'}</em></span><span>狀態 <em>${st}${f === 'ahead' ? ' · 超前' : ''}</em></span>
-        <span>極速 <em class="num">${Math.round(m.u.stats?.max_kmh || 0)} km/h</em></span>${total ? `<span>進度 <em class="num">${p ? fmtKm(p.km) : '–'}</em></span><span>預估到 <em class="num">${eta}</em></span>` : ''}</div>
+      <summary>${avatar(m.u)}<span class="rider-summary"><b class="rider-name">${esc(m.u.nickname)}</b><small class="rider-next">${nextBrief}</small></span><span class="speed num">${speed} <small>km/h</small></span><span class="chip ${alert[1]}">${alert[0]}</span></summary>
+      <div class="kv"><span>海拔 <em class="num">${numeric(s.alt) ? Math.round(+s.alt) + ' m' : '–'}</em></span><span>已騎距離 <em class="num">${fmtKm(+m.u.stats?.km || 0)}</em></span>
+        <span>最後回報 <em class="num">${seen ? ago(seen) : '–'}</em></span><span>全隊位置 <em>${flag === 'behind' ? '落隊' : flag === 'ahead' ? '超前' : '隊伍內'}</em></span>
+        ${numeric(s.batt) ? `<span>電量 <em class="num">${Math.round(+s.batt)}%</em></span>` : ''}
+        ${stop ? `<div class="next-stop"><b>下一站 ${esc(stop.name)}</b><small>${fmtKm(remaining)} · ${eta ? `預計 ${eta} 抵達` : '速度不足，暫無 ETA'}</small></div>` : ''}</div>
     </details>`;
-  }).join('') || '<div class="empty">還沒有隊友</div>';
+  }).join('') || '<p class="empty">還沒有隊友</p>';
   if (focusedUid) [...$('#cards').querySelectorAll('.cd')].find((el) => el.dataset.uid === focusedUid)?.querySelector('summary')?.focus();
 }
 
 /* ---------- 事件流 ---------- */
 const nameOf = (uid) => S.members.get(uid)?.u.nickname || '';
 const chatEv = (m) => ({ ...m, kind: 'event', type: 'chat', text: `聊天：${m.text}` });
+const FEED_TYPES = {
+  important: new Set(['sos', 'behind', 'ahead', 'offroute', 'stuck']),
+  road: new Set(['roadevent', 'weather', 'rain']),
+  message: new Set(['msg', 'chat', 'mark']),
+};
+let feedFilter = 'important';
+try {
+  const saved = localStorage.getItem(FEED_FILTER_KEY);
+  if (saved === 'all' || Object.hasOwn(FEED_TYPES, saved)) feedFilter = saved;
+} catch { /* 儲存空間不可用時維持重要事件 */ }
+function updateFeedFilter() {
+  document.querySelectorAll('[data-feed-filter]').forEach((button) => {
+    const active = button.dataset.feedFilter === feedFilter;
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+document.querySelectorAll('[data-feed-filter]').forEach((button) => button.addEventListener('click', () => {
+  feedFilter = button.dataset.feedFilter;
+  try { localStorage.setItem(FEED_FILTER_KEY, feedFilter); } catch { /* 儲存空間不可用時仍可篩選 */ }
+  updateFeedFilter();
+  renderFeed();
+}));
+updateFeedFilter();
 function renderFeed() {
-  $('#feed').innerHTML = S.events.slice(-14).reverse().map((e) => `<div class="ev${e.type === 'sos' ? ' sos' : ''}"><time class="num">${clock(+e.ts)}</time>
-    <i style="--c:${EV[e.type] || '#8e8e93'}"></i><span>${e.uid ? `<b>${esc(nameOf(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`).join('') || '<div class="empty">還沒有事件</div>';
+  const events = S.events.filter((e) => feedFilter === 'all' || FEED_TYPES[feedFilter]?.has(e.type));
+  $('#feed').innerHTML = events.slice(-14).reverse().map((e) => `<div class="ev${e.type === 'sos' ? ' sos' : ''}"><time class="num">${clock(+e.ts)}</time>
+    <i style="--c:${EV[e.type] || '#8e8e93'}"></i><span>${e.uid ? `<b>${esc(nameOf(e.uid))}</b> ` : ''}${esc(e.text)}</span></div>`).join('') || '<div class="empty">目前沒有這類事件</div>';
 }
 function renderSos() {
   $('#sosbar').innerHTML = [...S.sos.keys()].map((uid) => `<div>SOS：${esc(nameOf(uid))} 需要幫忙</div>`).join('');
 }
 
+/* 天氣與路況使用既有本機 API；氣象署請求只有縣市代碼，騎士座標不外送。 */
+function renderConditions() {
+  const progress = [...Object.values(S.prog)].map((p) => +p.km).filter(Number.isFinite);
+  const front = progress.length ? Math.min(...progress) : 0;
+  const weather = S.weather.filter((x) => x.route_km >= front - 2).slice(0, 3);
+  const traffic = S.traffic.filter((x) => x.route_km >= front - 2).slice(0, 3);
+  $('#conditions').innerHTML = `<div class="condition-group"><h3>沿途天氣 · 中央氣象署</h3>${S.weatherError ? `<p class="empty">${esc(S.weatherError)}</p>` : weather.length ? weather.map((x) => `<div class="condition-row"><span class="condition-mark">${x.pop}%</span><span><b>${esc(x.name)}</b><small>${esc(x.area)}</small></span></div>`).join('') : '<p class="empty">前方沒有可用預報</p>'}</div>
+    <div class="condition-group"><h3>省道路況 · 交通部 TDX</h3>${S.trafficError ? `<p class="empty">${esc(S.trafficError)}</p>` : traffic.length ? traffic.map((x) => `<div class="condition-row"><span class="condition-mark">${esc(x.type)}</span><span><b>${esc(x.name)}</b><small>路線 ${x.route_km} km · ${esc(x.area)}</small></span></div>`).join('') : '<p class="empty">前方目前沒有施工、事故或管制</p>'}</div>`;
+}
+async function loadConditions() {
+  if (!S.route?.coords?.length) { $('#conditions').innerHTML = '<p class="empty">這趟沒有預定路線，無法顯示沿途預報。</p>'; return; }
+  const samples = [], c = S.route.coords, cum = S.route.cum_km;
+  let next = 0;
+  c.forEach((point, i) => { if (cum[i] >= next) { samples.push([point[0], point[1], cum[i]]); next += 4; } });
+  const last = c.length - 1;
+  if (samples.at(-1)?.[2] !== cum[last]) samples.push([c[last][0], c[last][1], cum[last]]);
+  const kmh = Math.max(5, Math.min(150, +S.route.summary?.km / (+S.route.summary?.min / 60) || 40));
+  const results = await Promise.allSettled(['weather', 'roadevent'].map((kind) => api('/api/poi/along', { method: 'POST', body: { kind, samples, radius_m: kind === 'weather' ? 800 : 500, kmh } })));
+  S.weather = results[0].status === 'fulfilled' ? results[0].value : [];
+  S.traffic = results[1].status === 'fulfilled' ? results[1].value : [];
+  S.weatherError = results[0].status === 'rejected' ? results[0].reason.message : '';
+  S.trafficError = results[1].status === 'rejected' ? results[1].reason.message : '';
+  renderConditions();
+}
+async function loadWaypoints() {
+  try { S.waypoints = await api(`/api/trips/${tid}/waypoints`); renderCards(); }
+  catch { S.waypoints = []; }
+}
+
 /* ---------- 進度條＋海拔剖面 ---------- */
 async function loadRoute() {
-  try { const r = await api(`/api/trips/${tid}/route`); S.route = r?.coords ? r : null; } catch { S.route = null; }
+  try { const r = await api(`/api/trips/${tid}/route`); S.route = r?.coords ? r : null; S.profile = null; } catch { S.route = null; }
   map.getSource('route')?.setData(routeGeo());
   if (S.route) buildProfile();
-  renderProgress();
+  renderProgress(); renderCards(); loadConditions();
 }
 // 海拔：路線整條框進畫面、地形圖磚載入完後，沿路線取 160 個點查地形高度（除掉誇張倍率）
 function buildProfile() {
@@ -242,7 +374,7 @@ function renderProgress() {
   }
   const total = S.route.cum_km.at(-1);
   if (!(total > 0)) return;
-  $('#progTitle').textContent = `行程進度 · ${fmtKm(total)}${S.profile ? ' · 海拔剖面' : ''}`;
+  $('#progTitle').textContent = `全隊進度 · ${fmtKm(total)}${S.profile ? ' · 海拔剖面' : ''}`;
   if (S.profile) {
     const ys = S.profile.filter((p) => p[1] != null).map((p) => p[1]);
     const lo = Math.min(...ys), hi = Math.max(...ys), span = Math.max(50, hi - lo);
@@ -262,7 +394,7 @@ function renderProgress() {
     let d = wrap.querySelector(`[data-u="${m.u.uid}"]`);
     if (!p || m.u.active === false) { d?.remove(); continue; }
     if (!d) { d = document.createElement('div'); d.className = 'pdot'; d.dataset.u = m.u.uid; d.style.setProperty('--c', m.u.color); wrap.append(d); }
-    d.innerHTML = `<span>${esc(m.u.nickname)}</span><b>${esc(initialOf(m.u.nickname))}</b>`;
+    d.innerHTML = `<span>${esc(m.u.nickname)}</span><b>${esc(m.el.querySelector('.dot').textContent)}</b>`;
     const km = clamp(+p.km || 0, 0, total);
     d.style.left = `${(km / total) * 100}%`;
     let y = H - 6;
@@ -293,12 +425,12 @@ function handle(msg) {
     case 'snapshot': {
       const t = msg.trip;
       S.trip = t;
-      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); m.trail = (t.trails[u.uid] || []).slice(); if (u.state?.route_km) S.prog[u.uid] = { km: +u.state.route_km }; });
+      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); m.trail = (t.trails[u.uid] || []).slice(); if (numeric(u.state?.route_km)) S.prog[u.uid] = { km: +u.state.route_km }; });
       S.events = t.events; S.gaps = t.gaps || {}; S.flags = t.flags || {};
       $('#name').textContent = t.name;
       document.title = `戰情室 · ${t.name}`;
       api(`/api/trips/${tid}/sos`).then((list) => { S.sos = new Map(list.map((e) => [e.uid, e])); renderSos(); renderCards(); }).catch(() => {});
-      loadRoute(); renderCards(); renderFeed();
+      loadRoute(); loadWaypoints(); renderCards(); renderFeed();
       // 最近的聊天併進事件流（聊天另存一條 Stream）
       api(`/api/trips/${tid}/chat?limit=20`).then((d) => {
         S.events = [...S.events, ...d.items.map(chatEv)].sort((a, b) => +a.ts - +b.ts).slice(-200);
@@ -310,6 +442,7 @@ function handle(msg) {
       const m = S.members.get(msg.uid);
       if (!m) break;
       m.state = { ...m.state, ...msg, status: 'ok', seen: Date.now() };
+      if (numeric(msg.speed)) { m.recent.push({ at: Date.now(), kmh: +msg.speed * 3.6 }); m.recent = m.recent.filter((x) => Date.now() - x.at < 10 * 60_000).slice(-180); }
       m.from = m.pos || [msg.lon, msg.lat]; m.to = [msg.lon, msg.lat]; m.t0 = performance.now();
       if (m.pos) m.trail.push(m.pos);
       if (m.trail.length > 3000) m.trail.splice(0, 500);
@@ -320,6 +453,7 @@ function handle(msg) {
     case 'gap': S.gaps = msg.gaps; S.flags = msg.flags; break;
     case 'progress': S.prog[msg.uid] = { km: msg.km, off: msg.off_m }; break;
     case 'route': loadRoute(); break;
+    case 'waypoints': S.waypoints = msg.items || []; renderCards(); break;
     case 'member': upsert(msg.user, {}); break;
     case 'trip': if (S.trip) S.trip.status = msg.status; break;
     case 'event':
@@ -345,5 +479,7 @@ setInterval(() => {
   if (t) $('#sub').textContent = `${t.status === 'live' ? '進行中' : t.status === 'ended' ? '已結束' : '等待開始'}${t.started ? ' · 已騎 ' + dur(Date.now() - +t.started) : ''} · ${S.members.size} 人`;
   renderCards();
   if (S.route || S.members.size) renderProgress();
-}, 1000);
+  if (S.route) renderConditions();
+}, 5000);
+setInterval(() => { if (S.route) loadConditions(); }, 5 * 60_000);
 connect();
