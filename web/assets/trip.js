@@ -631,7 +631,8 @@ function renderGpsInfo({ pending, sent, error, dup }) {
   if (!S.gps) { if (sent) el.textContent = `暫存的位置已全部補傳（${sent} 筆）`; return; }
   // Traccar 也在送：後端以 Traccar 為準，網頁的點只當心跳；Traccar 停了（例如停車時休眠）網頁會自動接手
   if (dup) { el.textContent = `Traccar 正在回報，網頁暫停記錄（Traccar 停了會自動接手）· ${clock(Date.now())}`; return; }
-  el.textContent = `已送出 ${sent} 筆${gpsAcc != null ? ` · 精度 ${Math.round(gpsAcc)} m` : ''} · ${clock(Date.now())}`;
+  el.textContent = `已送出 ${sent} 筆${gpsAcc != null ? ` · 精度 ${Math.round(gpsAcc)} m` : ''} · ${clock(Date.now())}`
+    + (S.trip?.status === 'planned' ? '（行程還沒開始：只有你看得到自己，開始後才記進行程）' : '');
 }
 async function onFix(p) {
   if (!S.gps) return;
@@ -643,6 +644,20 @@ async function onFix(p) {
   const q = ensureQueue();
   if (!q) return;   // 行程資料還沒載入（不知道是誰），下一點再送
   q.push({ lat: c.latitude, lon: c.longitude, alt: c.altitude, speed: c.speed, heading: c.heading, acc: c.accuracy, batt: await battery(), ts: Math.round(p.timestamp), src: 'web' });
+  showMeLocally(c, Math.round(p.timestamp));
+}
+// 行程還沒開始：後端照設計只記個人足跡，不寫進行程、也不廣播給隊友（開始後才記錄），
+// 所以 WebSocket 不會送回自己的位置。自己的地圖直接用手機定位畫出「我」，面板也算「正在回報」（使用者回報 11-19）
+function showMeLocally(c, ts) {
+  if (S.trip?.status !== 'planned') return;
+  const me = S.members.get(S.me);
+  if (!me) return;
+  me.state = { ...me.state, lat: c.latitude, lon: c.longitude, alt: c.altitude ?? '', speed: c.speed ?? '', heading: c.heading ?? '', acc: c.accuracy, ts, seen: Date.now(), status: 'ok', local: 1 };
+  moveTo(me, c.longitude, c.latitude);
+  me.trail = [];  // 開始前不記軌跡，地圖上也不要畫出一條線
+  placeMarker(me);
+  S.trailDirty = true;
+  renderTeam();
 }
 
 async function endMine() {
