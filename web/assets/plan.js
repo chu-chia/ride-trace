@@ -57,16 +57,28 @@ function drawMarkers() {
     el.textContent = label(i);
     el.title = p.name || '';
     const mk = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([p.lon, p.lat]).addTo(map);
-    mk.on('dragend', () => { const ll = mk.getLngLat(); P.pts[i] = { ...P.pts[i], lat: +ll.lat.toFixed(6), lon: +ll.lng.toFixed(6) }; changed(); });
+    mk.on('dragend', () => { const g = mk.getLngLat(); P.pts[i] = { ...P.pts[i], lat: +g.lat.toFixed(6), lon: +g.lng.toFixed(6), loc: '', renamed: false }; changed(); });
     return mk;
   });
 }
+// 每個點下面一行寫「位置在哪」：名稱只是標籤，真正決定路線的是座標（使用者回報 11-19：改了名稱以為路線會換）
+// 搜尋結果的地點描述（名稱・行政區），之後改名稱也看得出點其實在哪
+const placeOf = (x) => [x.name, x.area].filter(Boolean).join('・');
+const ll = (p) => `${(+p.lat).toFixed(4)}, ${(+p.lon).toFixed(4)}`;
+const locText = (p) => (p.renamed
+  ? `只改了名稱，位置沒變：${p.loc || ll(p)}`
+  : `位置：${p.loc || ll(p)}`);
 function renderPts() {
   const n = P.pts.length;
+  closePtRes();
   $('#pts').innerHTML = n ? P.pts.map((p, i) => `
     <div class="pt${i === 0 ? ' s' : i === n - 1 && n > 1 ? ' e' : ''}">
       <span class="drag no-drag" data-drag="${i}" title="按住拖曳調整順序"><span class="no">${label(i)}</span></span>
-      <input value="${esc(p.name)}" placeholder="${i === 0 ? '起點' : i === n - 1 ? '終點' : '停靠點'}（可命名）" maxlength="30" data-name="${i}">
+      <div class="nm">
+        <input value="${esc(p.name)}" placeholder="${i === 0 ? '起點' : i === n - 1 ? '終點' : '停靠點'}：打字搜尋換地點" maxlength="30" data-name="${i}"
+          autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ptres" aria-describedby="ptloc${i}">
+        <span class="loc${p.renamed ? ' renamed' : ''}" id="ptloc${i}">${esc(locText(p))}</span>
+      </div>
       <button data-up="${i}" title="往前" aria-label="${label(i)} 往前" ${i ? '' : 'disabled'}>↑</button>
       <button data-down="${i}" title="往後" aria-label="${label(i)} 往後" ${i < n - 1 ? '' : 'disabled'}>↓</button>
       <button data-del="${i}" title="移除" aria-label="移除 ${label(i)}">✕</button>
@@ -132,12 +144,110 @@ $('#pts').addEventListener('pointerdown', (e) => {
   };
   h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
 });
-$('#pts').addEventListener('change', (e) => { const i = e.target.dataset.name; if (i != null) { P.pts[+i].name = e.target.value.trim(); drawMarkers(); } });
+/* ---------- 點的名稱欄＝搜尋框：打字跳地點建議，選了換座標並重算路線；不選就只改名稱（位置不變） ---------- */
+let pTimer = 0, pSeq = 0, pItems = [], pOn = -1, pIdx = -1;
+function closePtRes() {
+  clearTimeout(pTimer); pSeq++;
+  const box = $('#ptres');
+  if (box) box.hidden = true;
+  document.querySelectorAll('#pts input[data-name]').forEach((x) => x.setAttribute('aria-expanded', 'false'));
+  pIdx = -1; pItems = []; pOn = -1;
+}
+// 只改名稱：座標不動，畫面上標成「只改了名稱，位置沒變」
+function renamePt(i, v) {
+  const p = P.pts[i];
+  if (!p) return;
+  v = v.trim().slice(0, 30);
+  if (v === (p.name || '')) return;
+  P.pts[i] = { ...p, name: v, renamed: true };
+  const loc = document.getElementById('ptloc' + i);
+  if (loc) { loc.textContent = locText(P.pts[i]); loc.classList.add('renamed'); }
+  drawMarkers();
+}
+// 選了建議：換掉這個點的座標，重算路線
+function replacePt(i, x) {
+  P.pts[i] = { lat: +(+x.lat).toFixed(6), lon: +(+x.lon).toFixed(6), name: (x.name || '').slice(0, 30), loc: placeOf(x) };
+  // 輸入框重畫時（還在焦點上）瀏覽器會補送 change：先把欄位換成新名稱，才不會被當成「只改名稱」
+  const inp = $(`#pts input[data-name="${i}"]`);
+  if (inp) inp.value = P.pts[i].name;
+  closePtRes();
+  toast(`${label(i)}點改成「${P.pts[i].name}」，重新計算路線`, { icon: '↻', color: '#0a84ff' });
+  changed();
+}
+async function ptSearch(i, full) {
+  const inp = $(`#pts input[data-name="${i}"]`), p = P.pts[i];
+  const q = inp?.value.trim();
+  if (!inp || !p) return;
+  const box = $('#ptres');
+  const seq = ++pSeq;
+  pIdx = i;
+  if (!q) { box.hidden = true; return; }
+  let items = [];
+  try {
+    // 距離以這個點原本的位置為基準：改名字通常是想換附近的地方
+    items = await api(`/api/poi/${full || /\s/.test(q) ? 'search' : 'suggest'}?q=${encodeURIComponent(q)}${center(p)}`);
+    // 自動完成沒有東西（例如打了完整名稱「公館國小」）就直接全文搜尋，不用再按 Enter
+    if (!items.length && !full && seq === pSeq) { items = await api(`/api/poi/search?q=${encodeURIComponent(q)}${center(p)}`); full = true; }
+  } catch { /* 搜尋失敗就只剩「只改名稱」 */ }
+  if (seq !== pSeq) return;
+  // 換地點通常是換附近的地方：離原位置近的排前面
+  items = [...items].sort((a, b) => (a.dist_km ?? 1e9) - (b.dist_km ?? 1e9));
+  pItems = items; pOn = -1;
+  const keep = q !== (p.name || '');
+  box.innerHTML = (items.length ? items.map((x, k) => `<div class="sr" role="option" data-k="${k}"><span class="k">${esc(x.kind_name)}</span>
+      <div class="n"><b>${esc(x.name)}</b><span>${esc(x.area || '')}</span></div>${x.dist_km != null ? `<span class="d">離原位置<br>${x.dist_km} km</span>` : ''}</div>`).join('')
+      : `<div class="empty">找不到「${esc(q)}」這個地點<br>試試只打地名（例如「公館」），或直接在地圖上拖曳這個點</div>`)
+    + (keep ? `<div class="sr keep" role="option" data-keep="1"><span class="k">名稱</span><div class="n"><b>只改名稱為「${esc(q)}」</b><span>位置不變，路線不會改</span></div></div>` : '');
+  const row = inp.closest('.pt');
+  box.style.top = `${row.offsetTop + row.offsetHeight + 4}px`;
+  box.hidden = false;
+  inp.setAttribute('aria-expanded', 'true');
+  box.scrollIntoView({ block: 'nearest' });  // 終點在清單最下面時，建議不要被底部按鈕擋住
+}
+$('#pts').addEventListener('input', (e) => {
+  const i = e.target.dataset.name;
+  if (i == null) return;
+  clearTimeout(pTimer);
+  pTimer = setTimeout(() => ptSearch(+i, false), 180);
+});
+$('#pts').addEventListener('keydown', (e) => {
+  const i = e.target.dataset.name;
+  if (i == null) return;
+  const rows = [...document.querySelectorAll('#ptres .sr')];
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !$('#ptres').hidden && rows.length) {
+    e.preventDefault();
+    pOn = Math.max(0, Math.min(rows.length - 1, pOn + (e.key === 'ArrowDown' ? 1 : -1)));
+    rows.forEach((r, k) => r.classList.toggle('on', k === pOn));
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    clearTimeout(pTimer);
+    const r = rows[pOn];
+    if (r && !$('#ptres').hidden) { r.dataset.keep ? (renamePt(+i, e.target.value), closePtRes(), e.target.blur()) : replacePt(+i, pItems[+r.dataset.k]); }
+    else ptSearch(+i, true);
+  } else if (e.key === 'Escape') {
+    e.target.value = P.pts[+i]?.name || '';
+    closePtRes(); e.target.blur();
+  }
+});
+// 離開欄位、沒有選建議＝只改名稱
+$('#pts').addEventListener('change', (e) => { const i = e.target.dataset.name; if (i != null) renamePt(+i, e.target.value); });
+// 離開欄位（Tab、點別處）就收起建議
+$('#pts').addEventListener('focusout', (e) => { if (e.target.dataset.name != null) closePtRes(); });
+// 點建議時不要讓輸入框先失焦（不然會先存成「只改名稱」）
+$('#ptres').addEventListener('pointerdown', (e) => e.preventDefault());
+$('#ptres').addEventListener('click', (e) => {
+  const r = e.target.closest('.sr');
+  if (!r || pIdx < 0) return;
+  const i = pIdx, inp = $(`#pts input[data-name="${i}"]`);
+  if (r.dataset.keep) { renamePt(i, inp?.value || ''); closePtRes(); inp?.blur(); }
+  else replacePt(i, pItems[+r.dataset.k]);
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('.ptsbox')) closePtRes(); });
 
 // 加一個點：0 個→起點，1 個→終點，之後→插在「繞路最少」的兩點之間（不會改掉終點）
 function addPoint(p, { asStart = false } = {}) {
   if (P.pts.length >= 25) { toast('停靠點最多 25 個', { icon: '!', color: '#ff9f0a' }); return; }
-  const pt = { lat: +(+p.lat).toFixed(6), lon: +(+p.lon).toFixed(6), name: (p.name || '').slice(0, 30) };
+  const pt = { lat: +(+p.lat).toFixed(6), lon: +(+p.lon).toFixed(6), name: (p.name || '').slice(0, 30), loc: p.kind ? placeOf(p) : '' };
   if (asStart) { P.pts.unshift(pt); changed(); return; }
   if (P.pts.length < 2) { P.pts.push(pt); changed(); return; }
   let best = 1, cost = Infinity;
@@ -218,6 +328,8 @@ $('#veh').addEventListener('click', (e) => { const b = e.target.closest('button'
 setVehicle('scooter');
 
 /* ---------- 預覽（點有變動就自動重算） ---------- */
+// 後端只要座標和名稱（loc／renamed 是畫面用的）
+const cleanPts = () => P.pts.map(({ lat, lon, name }) => ({ lat, lon, name: name || '' }));
 let timer = 0;
 function changed() {
   renderPts(); drawMarkers();
@@ -230,7 +342,7 @@ async function preview() {
   if (P.pts.length < 2) { P.routes = []; showRoutes(); return; }
   $('#msg').innerHTML = '<div class="note">計算路線中…</div>';
   try {
-    const res = await api('/api/routes/preview', { method: 'POST', body: { points: P.pts, vehicle: P.vehicle } });
+    const res = await api('/api/routes/preview', { method: 'POST', body: { points: cleanPts(), vehicle: P.vehicle } });
     if (seq !== P.seq) return; // 已經有更新的請求
     P.routes = res.routes; P.sel = 0; resetChipCounts();
     showRoutes(true);
@@ -363,7 +475,7 @@ $('#gForm').addEventListener('submit', async (e) => {
 $('#apply').onclick = async () => {
   $('#apply').disabled = true;
   try {
-    const r = await api(`/api/trips/${tid}/route`, { method: 'PUT', body: { points: P.pts, vehicle: P.vehicle, source_url: P.sourceUrl, alt: P.sel } });
+    const r = await api(`/api/trips/${tid}/route`, { method: 'PUT', body: { points: cleanPts(), vehicle: P.vehicle, source_url: P.sourceUrl, alt: P.sel } });
     if ($('#asRest').checked) {
       for (const [i, p] of P.pts.slice(1, -1).entries()) {
         await api(`/api/trips/${tid}/waypoints`, { method: 'POST', body: { name: p.name || `停靠點 ${i + 1}`, lat: p.lat, lon: p.lon, kind: 'rest' } }).catch(() => {});
