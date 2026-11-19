@@ -212,7 +212,7 @@ function upsert(u, state = {}) {
     el.style.setProperty('--c', u.color);
     el.style.setProperty('--ink', inkOn(u.color));
     el.innerHTML = `<div class="arrow"></div><div class="dot">${esc(initialOf(u.nickname))}</div><div class="name">${esc(u.nickname)}</div>`;
-    m = { u, state: {}, recent: [], el, marker: new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1' }), trail: [], pos: null, from: null, to: null, t0: 0, onMap: false };
+    m = { u, state: {}, recent: [], el, marker: new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1', subpixelPositioning: true }), trail: [], pos: null, from: null, to: null, t0: 0, onMap: false };
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
@@ -253,6 +253,7 @@ let lastT = performance.now(), lastTrail = 0;
 let autoFollow = true;  // false＝暫離（使用者拖了地圖）
 let awayAt = 0;
 let lastFit = '';  // fitLast() 上次框的那組位置
+let lastTarget = '';  // 上一格鏡頭在追什麼（換了就平滑接過去）
 const padRaw = () => mobile.matches ? { top: 85, bottom: sheet.classList.contains('small') ? 185 : Math.round(innerHeight * .77), left: 35, right: 35 } : deskPortrait() ? { top: 120, bottom: Math.round(innerHeight * .56), left: 60, right: 120 } : { top: 90, bottom: 160, left: 395, right: 365 };
 // 手勢規則（docs/地圖手勢規則.md）：拖曳＝暫離（按鈕／列變外框，10 秒沒動自動回去）；縮放、旋轉、傾斜繼續跟隨；
 // 全隊模式下縮放也算暫離
@@ -310,12 +311,17 @@ function frame(now) {
       gapGlow(m.el, !!S.flags[m.u.uid] && m.state.status !== 'done', S.gaps[m.u.uid], S.lagKm || S.trip?.lag_km);
     }
   }
-  const pts = [...S.members.values()].filter((m) => m.pos && m.u.active !== false && m.state.status !== 'lost').map((m) => m.pos);
+  const live = [...S.members.values()].filter((m) => m.pos && m.u.active !== false && m.state.status !== 'lost');
+  const pts = live.map((m) => m.pos);
   const back = resumeMs();
   if (!autoFollow && back > 0 && !M.busy && Date.now() - awayAt > back) resumeFollow();
+  // 鏡頭目標的種類：跟某人／只有一人在線／全隊／沒人在線。種類一換（有人失聯或恢復、點了隊員）就讓鏡頭
+  // 從目前畫面滑過去：以前 2 人→1 人時中心一格跳到那個人（約 150 px），恢復時又跳回舊的全隊位置，看起來就是來回抖
+  const fm = S.focus && S.members.get(S.focus);
+  const target = !autoFollow || S.profiling ? '' : fm?.pos ? `f${S.focus}` : pts.length === 1 ? `o${live[0].u.uid}` : pts.length ? 'g' : 'last';
+  if (target !== lastTarget) { if (target && lastTarget) M.retarget(); lastTarget = target; }
   if (S.styleReady && pts.length && !S.profiling && autoFollow) {
     if (!LOW_POWER && !M.busy) map.setBearing((map.getBearing() + dt * 2) % 360); // 慢慢旋轉；省電時不轉，鏡頭不動地圖就不必重畫
-    const fm = S.focus && S.members.get(S.focus);
     if (fm?.pos) M.follow(fm.pos, { padding: pad() });  // 點了隊員表：鏡頭跟著他
     else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
     else M.followGroup(pts, { padding: pad(), maxZoom: 14 });
@@ -333,6 +339,7 @@ function fitLast() {
   const key = pts.map((p) => p.map((v) => v.toFixed(3)).join(',')).join(';') || 'tw';
   if (key === lastFit) return;
   lastFit = key;
+  M.unfollow();
   if (!pts.length) { map.easeTo({ center: [120.95, 23.7], zoom: 6.6, padding: pad(), duration: 800 }); return; }
   if (pts.length === 1) { map.easeTo({ center: pts[0], zoom: 13.5, padding: pad(), duration: 800 }); return; }
   const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
@@ -453,9 +460,15 @@ async function loadWaypoints() {
 
 /* ---------- 進度條＋海拔剖面 ---------- */
 async function loadRoute() {
-  try { const r = await api(`/api/trips/${tid}/route`); S.route = r?.coords ? r : null; S.profile = null; } catch { S.route = null; }
+  let r = null;
+  try { r = await api(`/api/trips/${tid}/route`); } catch { /* 沒路線或暫時讀不到 */ }
+  // 同一條路線（WebSocket 重連時 snapshot 會再叫一次）不要重算海拔：重算要把鏡頭拉到整條路線再拉回來，每次重連畫面就跳一次
+  const sig = (x) => (x?.coords?.length ? `${x.id ?? ''}:${x.coords.length}:${x.coords[0]}:${x.coords.at(-1)}` : '');
+  const same = sig(r) && sig(r) === sig(S.route);
+  S.route = r?.coords ? r : null;
+  if (!same) S.profile = null;
   map.getSource('route')?.setData(routeGeo());
-  if (S.route) buildProfile();
+  if (S.route && !S.profiling && S.profileSig !== sig(S.route)) { S.profileSig = sig(S.route); buildProfile(); }
   renderProgress(); renderCards(); loadConditions();
 }
 // 海拔：路線整條框進畫面、地形圖磚載入完後，沿路線取 160 個點查地形高度（除掉誇張倍率）
@@ -465,8 +478,10 @@ function buildProfile() {
   if (!c.length) return;
   const b = c.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(c[0], c[0]));
   S.profiling = true;
-  if (autoFollow) { map.setPitch(0); map.setBearing(0); }
-  map.fitBounds(b, { padding: pad(), duration: 0 });
+  // 用動畫滑到整條路線（以前 setPitch／setBearing／fitBounds 都是瞬間跳過去）
+  M.unfollow();
+  const cam = map.cameraForBounds(b, { padding: pad(), bearing: 0, pitch: 0 });
+  M.ease({ ...(cam || {}), bearing: 0, pitch: 0, duration: 700 });
   // 等地圖 idle（地形圖磚到齊）再取高度；但軌跡每 0.5 秒更新、手機省電重畫時地圖可能一直不 idle，
   // 最多等 4 秒，不然 S.profiling 一直是 true，鏡頭永遠停在整條路線、不會框住全隊
   let done = false;
@@ -482,12 +497,15 @@ function buildProfile() {
       out.push([km, e == null ? null : e / EXAG]);
     }
     S.profile = out.filter((x) => x[1] != null).length > 20 ? out : null;
-    if (autoFollow) map.setPitch(60);
+    // 傾斜慢慢回到 60°；動畫期間跟隨讓路，結束後從目前畫面平滑接回全隊／沒人在線的框
+    if (autoFollow) M.ease({ pitch: 60, duration: 900 });
     S.profiling = false;
     renderProgress();
   };
-  map.once('idle', finish);
-  setTimeout(finish, 4000);
+  // 等滑到位（moveend）、地形圖磚到齊（idle）再取高度
+  const settle = () => (map.isMoving() ? map.once('moveend', settle) : map.once('idle', finish));
+  requestAnimationFrame(settle);
+  setTimeout(finish, 4700);
 }
 function renderProgress() {
   const svg = $('#profile');

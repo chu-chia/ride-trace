@@ -62,7 +62,7 @@ function upsertMember(u, state) {
     el.style.setProperty('--ink', inkOn(u.color));
     el.innerHTML = `<div class="arrow"></div><div class="dot">${esc(initialOf(u.nickname))}</div><div class="name">${esc(u.nickname)}</div>`;
     el.onclick = () => pick(u.uid);
-    m = { u, state: {}, el, marker: new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1' }), trail: [], onMap: false, pos: null, anim: null, lastAt: 0, lastTarget: null };
+    m = { u, state: {}, el, marker: new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1', subpixelPositioning: true }), trail: [], onMap: false, pos: null, anim: null, lastAt: 0, lastTarget: null };
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };

@@ -303,6 +303,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   // 跟隨暫停（手勢中）或剛開始跟隨時，鏡頭從目前畫面滑到目標，不要一格跳過去
   let resume = null, wasBusy = false;
   const RESUME_MS = 450;
+  let retargetMs = 0;  // retarget() 指定的滑動時間
   let busyUntil = 0;  // 鏡頭動畫（指北針、2D/3D）結束前，跟隨模式不要每格重設鏡頭把動畫打斷
   const animate = (opts) => { busyUntil = performance.now() + (opts.duration ?? 500) + 80; map.easeTo(opts); };
   let grp = null, grpT = 0; // 全隊鏡頭目前的（平滑後）中心與縮放
@@ -339,10 +340,11 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       if (now < busyUntil || now < wheelUntil || held || userMove) { lastT = now; wasBusy = true; return; }  // 指北針、切 2D/3D 的動畫、手指按在地圖上、使用者縮放的慣性還沒停，跟隨先讓路
       const dt = Math.min(0.2, (now - (lastT || now)) / 1000);
       lastT = now;
-      if (!following || wasBusy) { const c = map.getCenter(); resume = { at: now, from: [c.lng, c.lat] }; wasBusy = false; }
+      if (!following || wasBusy) { const c = map.getCenter(); resume = { at: now, from: [c.lng, c.lat], ms: retargetMs || RESUME_MS, io: !!retargetMs }; wasBusy = false; retargetMs = 0; }
       if (!following) { following = true; map.setCenterClampedToGround(false); smoothEl = is3d && map.getTerrain() ? map.getCenterElevation() : null; }  // 從目前鏡頭高度開始追，不會一接手就跳
       if (resume) {
-        const k = Math.min(1, (now - resume.at) / RESUME_MS), e = 1 - (1 - k) ** 3;
+        // 換對象用前後都慢的曲線（每格位移小、沒有一開始的猛衝）；手勢後接回用先快後慢
+        const k = Math.min(1, (now - resume.at) / resume.ms), e = resume.io ? k * k * (3 - 2 * k) : 1 - (1 - k) ** 3;
         center = [resume.from[0] + (center[0] - resume.from[0]) * e, resume.from[1] + (center[1] - resume.from[1]) * e];
         if (k >= 1) resume = null;
       }
@@ -391,6 +393,10 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     },
     // 換回全隊時呼叫：全隊鏡頭從「目前畫面」重新開始追，不會跳回上次全隊時的舊位置
     regroup() { grp = null; grpT = 0; },
+    // 跟隨的對象換了（全隊 ↔ 單人、有人失聯／恢復）：下一格從目前畫面用 0.45 秒滑過去，不要一格跳到新目標
+    retarget(ms = 1000) { grp = null; grpT = 0; wasBusy = true; retargetMs = ms; },
+    // 程式自己的鏡頭動畫（例如恢復傾斜）：動畫期間跟隨讓路，結束後平滑接回
+    ease(opts) { animate(opts); },
     unfollow() {
       grp = null; grpT = 0;
       if (!following) return;
