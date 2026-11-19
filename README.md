@@ -115,7 +115,7 @@ Traccar Client 的 **SOS 按鈕**（送出 `alarm=sos`）會走跟網頁 SOS 一
 | 功能 | 用在哪 |
 |---|---|
 | GEO | `trip:{id}:geo` 即時位置，`GEOSEARCH` 算隊友距離；`tdx:roadev:geo` 省道事件（前方路況、沿途路況）；`trip:{id}:waypoints` 集合點、`trip:{id}:marks` 標註、`poi:speedcam` 測速、`poi:geo:{種類}` 加油站等；`footprint:{uid}:geo` 每個足跡點，熱力圖放大時 `GEOSEARCH … BYBOX` 只取畫面內的點（`tools.build_fpgeo` 補舊資料） |
-| Pub/Sub | `trip:{id}:live` 位置與事件即時推到 WebSocket（行程頁、戰情室） |
+| Pub/Sub | `trip:{id}:live` 位置與事件即時推到 WebSocket（行程頁、戰情室）。行程**開始前**的點也會更新 `trip:{id}:geo` 與狀態 Hash（`EXPIRE` 10 分鐘、不設心跳）並廣播，集合時隊友、戰情室就互相看得到；但不寫軌跡、TimeSeries、統計，也不交給 worker 判斷警示，按開始那一刻才開始記錄（10 分鐘內有回報的人位置留著並開始算心跳） |
 | Streams | `track:{trip}:{uid}` 軌跡、`trip:{id}:events` 事件、`trip:{id}:chat` 聊天（`XREVRANGE` 往回翻頁）、`footprint:{uid}` 全年足跡（ID 就是時間戳，`XRANGE` 依時間查） |
 | Streams Consumer Group | 每筆回報 `XADD stream:ingest`；獨立 worker 容器 `XREADGROUP`：group `stats`（里程、極速、熱力圖、點亮鄉鎮）、group `alerts`（落隊、抵達、測速、路況、沿路線進度、偏離路線、異常久停）；要推播的事件另外 `XADD stream:notify`，group `push` 送 Web Push。處理完才 `XACK`，worker 當掉時 `XAUTOCLAIM` 接手閒置 60 秒的訊息；`docker compose up -d --scale worker=2` 自動分攤 |
 | TTL＋Keyspace Notification | `hb:{trip}:{uid}` 心跳 90 秒過期 → 失聯警示；`session:` 登入、`invite:` 邀請碼 24 小時 |
