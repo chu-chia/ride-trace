@@ -311,7 +311,10 @@ function frame(now) {
       gapGlow(m.el, !!S.flags[m.u.uid] && m.state.status !== 'done', S.gaps[m.u.uid], S.lagKm || S.trip?.lag_km);
     }
   }
-  const live = [...S.members.values()].filter((m) => m.pos && m.u.active !== false && m.state.status !== 'lost');
+  // 等待開始時還沒有人 active：開始前正在回報（後端廣播的即時位置，10 分鐘內）的人都算
+  const pre = S.trip?.status === 'planned';
+  const live = [...S.members.values()].filter((m) => m.pos && m.state.status !== 'lost'
+    && (pre ? !isOff(status(m)[0]) : m.u.active !== false));
   const pts = live.map((m) => m.pos);
   const back = resumeMs();
   if (!autoFollow && back > 0 && !M.busy && Date.now() - awayAt > back) resumeFollow();
@@ -572,7 +575,7 @@ function handle(msg) {
     case 'snapshot': {
       const t = msg.trip;
       S.trip = t;
-      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); m.trail = (t.trails[u.uid] || []).slice(); if (numeric(u.state?.route_km)) S.prog[u.uid] = { km: +u.state.route_km }; });
+      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); m.trail = (t.trails[u.uid] || []).slice(); if (u.state?.pre) m.lastRough = true; if (numeric(u.state?.route_km)) S.prog[u.uid] = { km: +u.state.route_km }; });
       S.events = t.events; S.gaps = t.gaps || {}; S.flags = t.flags || {};
       $('#name').textContent = t.name;
       document.title = `戰情室 · ${t.name}`;
@@ -595,7 +598,7 @@ function handle(msg) {
       m.lastAt = tnow;
       m.from = m.pos || [msg.lon, msg.lat]; m.to = [msg.lon, msg.lat]; m.t0 = tnow; m.dur = Math.min(3000, Math.max(250, gap * 1.1));
       if (m.pos && !m.lastRough) m.trail.push(m.pos);
-      m.lastRough = !!msg.rough;  // 精度太差的點只移動圖釘，不接進軌跡線
+      m.lastRough = !!msg.rough || !!msg.pre;  // 精度太差的點、行程開始前的即時位置只移動圖釘，不接進軌跡線
       if (m.trail.length > 3000) m.trail.splice(0, 500);
       break;
     }

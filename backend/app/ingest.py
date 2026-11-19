@@ -24,6 +24,21 @@ def heartbeat_s(speed_ms: float | None) -> int:
     """心跳 TTL：最後一點是停著的就放寬。沒有速度的點當成移動中（保守）。"""
     return HEARTBEAT_REST_S if speed_ms is not None and speed_ms * 3.6 < REST_KMH else HEARTBEAT_S
 TS_RETENTION_MS = 0  # 0 = 永久保存
+PRE_TTL_S = HEARTBEAT_REST_S  # 開始前的即時位置：10 分鐘沒新點就自己消失（不設心跳，不會觸發失聯）
+PRE_SCAN = 20                 # 開始前分享位置：只看最近加入的 20 個行程裡「等待開始」的
+
+
+async def planned_trips(uid: str) -> list[str]:
+    """這個人參加、還在等待開始的行程（集合時隊友先互相看得到）。Demo 行程不算。"""
+    ids = await r.zrevrange(K.user_trips(uid), 0, PRE_SCAN - 1)
+    if not ids:
+        return []
+    async with r.pipeline(transaction=False) as p:
+        for t in ids:
+            p.hmget(K.trip(t), "status", "demo")
+            p.sismember(K.members(t), uid)
+        res = await p.execute()
+    return [t for t, (st, demo), mem in zip(ids, res[::2], res[1::2]) if st == "planned" and not demo and mem]
 
 
 class Fix(BaseModel):
@@ -103,6 +118,9 @@ async def ingest(uid: str, fix: Fix) -> dict:
     if fix.src == "sim-self" and not (demo and live):
         return {"ok": True, "trip": None, "footprint": False, "rough": False, "errors": [], "stale": False, "ignored": True}
     personal = fix.src != "sim-self"
+    # 行程開始前：位置只更新「即時位置」（GEO＋狀態 Hash，10 分鐘 TTL）並廣播給隊友與戰情室，
+    # 不寫軌跡、速度曲線、統計，也不交給 worker 判斷警示（stream:ingest 的 trip 欄位留空），開始那一刻才開始記錄
+    pre = await planned_trips(uid) if not live and not sim else []
 
     prev = (int(last[0]), float(last[1]), float(last[2])) if last[0] else None
     # 里程從「錨點」算（geo.step）：位移不到 3 m 錨點不動。舊資料沒有錨點就用上一點
@@ -119,6 +137,9 @@ async def ingest(uid: str, fix: Fix) -> dict:
             if live:
                 p.hset(K.state(tid, uid), mapping={"seen": now, "status": "ok", "hbs": hb})
                 p.set(K.hb(tid, uid), now, ex=hb)
+            for t in pre:
+                p.hset(K.state(t, uid), mapping={"seen": now, "status": "ok", "pre": 1})
+                p.expire(K.state(t, uid), PRE_TTL_S)
             p.zadd("online:report", {uid: now})
             await p.execute()
         return {"ok": True, "trip": tid if live else None, "footprint": False, "rough": rough, "errors": [], "stale": False, "dup": True}
@@ -165,6 +186,15 @@ async def ingest(uid: str, fix: Fix) -> dict:
             p.publish(K.live(tid), json.dumps(pos))
             p.execute_command("TS.INCRBY", "ts:sys:pubsub", 1, "TIMESTAMP", now // 1000 * 1000, "RETENTION", 7 * 86400_000,
                               "LABELS", "metric", "sys", "kind", "pubsub")
+        if fresh:
+            pos = {"kind": "pos", "uid": uid, "pre": 1, **{k: _num(v) if k != "src" else v for k, v in fields.items()}}
+            if rough:
+                pos["rough"] = 1
+            for t in pre:
+                p.geoadd(K.geo(t), [fix.lon, fix.lat, uid])
+                p.hset(K.state(t, uid), mapping={**fields, "status": "ok", "seen": now, "pre": 1})
+                p.expire(K.state(t, uid), PRE_TTL_S)
+                p.publish(K.live(t), json.dumps(pos))
         if live:
             hb = heartbeat_s(fix.speed)
             p.hset(K.state(tid, uid), mapping={**(fields if fresh or not personal else {}), "status": "ok", "seen": now, "hbs": hb})
@@ -184,7 +214,8 @@ async def ingest(uid: str, fix: Fix) -> dict:
     if live and prev_status == "lost":
         await events.emit(tid, "back", uid, "恢復連線", ts=ts)
         await events.publish(tid, {"kind": "status", "uid": uid, "status": "ok"})
-    return {"ok": True, "trip": tid if live else None, "footprint": keep, "rough": rough, "errors": errors[:3], "stale": not fresh}
+    return {"ok": True, "trip": tid if live else None, "footprint": keep, "rough": rough, "errors": errors[:3], "stale": not fresh,
+            "pre": pre}
 
 
 @router.post("/api/track")

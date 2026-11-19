@@ -206,9 +206,32 @@ async def start_trip(tid: str, uid: str = Depends(current_uid)):
                 continue
     for m, old in olds.items():
         await leave_old_active(m, old, tid)
+    await adopt_pre_positions(tid, members)
     await events.emit(tid, "start", uid, "行程開始")
     await events.publish(tid, {"kind": "trip", "status": "live"})
     return await trip_detail(tid, uid)
+
+
+async def adopt_pre_positions(tid: str, members: set[str]):
+    """開始那一刻：開始前 10 分鐘內有回報的人，即時位置留著（圖釘不會消失），改成正式狀態並開始算心跳；
+    太久沒回報（狀態 Hash 已過期）的人從 GEO 移除，免得舊位置被拿去算落隊。軌跡、統計從這一刻才開始。"""
+    from .ingest import heartbeat_s
+    now = now_ms()
+    async with r.pipeline(transaction=False) as p:
+        for m in members:
+            p.hmget(K.state(tid, m), "pre", "seen", "speed")
+        rows = await p.execute()
+    async with r.pipeline(transaction=False) as p:
+        for m, (pre, seen, speed) in zip(members, rows):
+            if pre and seen:
+                hb = heartbeat_s(float(speed) if speed else None)
+                p.persist(K.state(tid, m))
+                p.hdel(K.state(tid, m), "pre")
+                p.hset(K.state(tid, m), "hbs", hb)
+                p.set(K.hb(tid, m), now, ex=max(5, hb - (now - int(seen)) // 1000))
+            else:
+                p.zrem(K.geo(tid), m)
+        await p.execute()
 
 
 @router.post("/{tid}/end")

@@ -44,11 +44,14 @@ const S = { trip: null, me: null, members: new Map(), events: [], follow: 'all',
 window.qijiState = S; // 除錯用
 
 /* ---------- 成員與標記 ---------- */
+const PRE_STALE_MS = 10 * 60_000;
 function statusOf(m) {
   const s = m.state || {};
   if (s.status === 'done') return 'done';
   if (s.status === 'lost') return 'lost';
   if (s.lat == null || s.lat === '') return 'none';
+  // 開始前的即時位置（後端 10 分鐘 TTL）：太久沒新點就不算正在回報
+  if (S.trip?.status === 'planned' && s.seen && Date.now() - +s.seen > PRE_STALE_MS) return 'none';
   if (isWeak(s)) return 'weak';
   return (+s.speed || 0) * 3.6 < 5 ? 'rest' : 'ride';
 }
@@ -170,8 +173,10 @@ const setCollapsed = (v) => PANEL.set(v);
 S.panel = PANEL; // trip-extra.js：在地圖上點選位置時先收起抽屜（UX-34）
 
 // 「全隊」框哪些人：有位置、這趟有出發（active，或已騎完 done）、沒有失聯。
-// 沒出發的成員（例如建立者自己在家）位置在別處，算進來鏡頭會先拉到全台灣
-const inGroup = (m) => m.pos && (m.u.active !== false || m.state?.status === 'done') && m.state?.status !== 'lost';
+// 沒出發的成員（例如建立者自己在家）位置在別處，算進來鏡頭會先拉到全台灣。
+// 等待開始時還沒有人 active：開始前正在回報（後端廣播的即時位置）的人都算
+const inGroup = (m) => m.pos && (S.trip?.status === 'planned' ? statusOf(m) !== 'none'
+  : (m.u.active !== false || m.state?.status === 'done') && m.state?.status !== 'lost');
 // 要跟著誰：選了某個人就跟他；「全隊」但地圖上只有一個人時，也跟著那個人
 function followTarget() {
   if (S.follow !== 'all') { const m = S.members.get(S.follow); return m?.pos ? m : null; }
@@ -512,6 +517,7 @@ function handle(msg) {
         const m = upsertMember(u, { ...u.state });
         m.trail = t.trails[u.uid] || [];
         if (m.pos) m.trail = m.trail.slice(0, -1); // 最後一點就是目前位置，由 m.pos 接上
+        if (u.state?.pre) m.lastRough = true;  // 開始前的即時位置不接進軌跡（開始後第一點從這裡另起）
       });
       S.events = t.events;
       renderAll();
@@ -523,7 +529,8 @@ function handle(msg) {
       const m = S.members.get(msg.uid);
       if (!m) break;
       m.state = { ...m.state, ...msg, status: 'ok', seen: Date.now() };
-      moveTo(m, msg.lon, msg.lat, !!msg.rough);
+      // pre：行程開始前廣播的即時位置，跟精度差的點一樣只移動圖釘、不畫軌跡
+      moveTo(m, msg.lon, msg.lat, !!msg.rough || !!msg.pre);
       placeMarker(m);
       break;
     }
@@ -632,7 +639,7 @@ function renderGpsInfo({ pending, sent, error, dup }) {
   // Traccar 也在送：後端以 Traccar 為準，網頁的點只當心跳；Traccar 停了（例如停車時休眠）網頁會自動接手
   if (dup) { el.textContent = `Traccar 正在回報，網頁暫停記錄（Traccar 停了會自動接手）· ${clock(Date.now())}`; return; }
   el.textContent = `已送出 ${sent} 筆${gpsAcc != null ? ` · 精度 ${Math.round(gpsAcc)} m` : ''} · ${clock(Date.now())}`
-    + (S.trip?.status === 'planned' ? '（行程還沒開始：只有你看得到自己，開始後才記進行程）' : '');
+    + (S.trip?.status === 'planned' ? '（行程還沒開始：隊友和戰情室看得到你的位置，開始後才記進軌跡）' : '');
 }
 async function onFix(p) {
   if (!S.gps) return;
@@ -644,20 +651,6 @@ async function onFix(p) {
   const q = ensureQueue();
   if (!q) return;   // 行程資料還沒載入（不知道是誰），下一點再送
   q.push({ lat: c.latitude, lon: c.longitude, alt: c.altitude, speed: c.speed, heading: c.heading, acc: c.accuracy, batt: await battery(), ts: Math.round(p.timestamp), src: 'web' });
-  showMeLocally(c, Math.round(p.timestamp));
-}
-// 行程還沒開始：後端照設計只記個人足跡，不寫進行程、也不廣播給隊友（開始後才記錄），
-// 所以 WebSocket 不會送回自己的位置。自己的地圖直接用手機定位畫出「我」，面板也算「正在回報」（使用者回報 11-19）
-function showMeLocally(c, ts) {
-  if (S.trip?.status !== 'planned') return;
-  const me = S.members.get(S.me);
-  if (!me) return;
-  me.state = { ...me.state, lat: c.latitude, lon: c.longitude, alt: c.altitude ?? '', speed: c.speed ?? '', heading: c.heading ?? '', acc: c.accuracy, ts, seen: Date.now(), status: 'ok', local: 1 };
-  moveTo(me, c.longitude, c.latitude);
-  me.trail = [];  // 開始前不記軌跡，地圖上也不要畫出一條線
-  placeMarker(me);
-  S.trailDirty = true;
-  renderTeam();
 }
 
 async function endMine() {
