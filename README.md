@@ -139,7 +139,7 @@ Traccar Client 的 **SOS 按鈕**（送出 `alarm=sos`）會走跟網頁 SOS 一
 | 功能 | 用在哪 |
 |---|---|
 | RediSearch：測速 | `idx:speedcam`：縣市 TAG＋速限 NUMERIC＋地址中文全文＋位置 GEO，「南投縣、速限 40～60、地址含臺14、我附近 20 km」一個查詢 |
-| RediSearch：地點搜尋 | `idx:poi`：本機 OSM 的 10.5 萬筆地名與 POI，中文斷詞＋前綴；`FT.SUGADD／FT.SUGGET`（含 FUZZY）打字自動完成 |
+| RediSearch：地點搜尋 | `idx:poi`：本機 OSM 的 15.6 萬筆地名與 POI（地名、車站、景點、學校、醫院、公所、機車行、公廁、充電站、廟宇、湖泊、橋、老街、超市、銀行…共 40 類），中文斷詞＋前綴；`FT.SUGADD／FT.SUGGET`（含 FUZZY，6.1 萬個名稱）打字自動完成；直接打種類名稱（「機車行」「公廁」）＝`@kind:{moto} @loc:[經度 緯度 30 km]` 找附近這一類 |
 | RediSearch：GEOSHAPE | `idx:townshape`：全台 368 個鄉鎮市區多邊形，`FT.SEARCH "@shape:[CONTAINS $pt]"` 查一個點在哪個鄉鎮 → 點亮鄉鎮（SQL 通常得裝 PostGIS） |
 | RedisJSON | `route:{id}` 整條路線（途經點、幾千個座標、累計里程、轉彎指示）；`JSON.GET … $.summary` 只取需要的部分 |
 | TimeSeries | `ts:{trip}:{uid}:speed／alt`（回放 `TS.MRANGE … FILTER trip=… AGGREGATION avg`）；`ts:pace:{uid}:{類別}:m／s` 個人在各種路的距離與時間（`TS.MRANGE … GROUPBY cat REDUCE sum`）；`ts:sys:writes`、`ts:sys:pubsub`、`ts:sys:push` 後台每秒寫入、訊息量、推播數 |

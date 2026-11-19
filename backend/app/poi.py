@@ -17,8 +17,19 @@ from .geo import haversine_m
 
 router = APIRouter(prefix="/api/poi")
 KIND_NAME = {"place": "地名", "station": "車站", "peak": "山", "sight": "景點", "school": "學校", "rest": "休息站",
-             "fuel": "加油站", "convenience": "便利商店", "food": "餐廳", "lodging": "住宿", "parking": "停車場"}
-ALONG_KINDS = {"fuel", "convenience", "food", "sight", "lodging", "rest", "parking"}
+             "fuel": "加油站", "convenience": "便利商店", "food": "餐廳", "lodging": "住宿", "parking": "停車場",
+             "kindergarten": "幼兒園", "hospital": "醫院", "clinic": "診所", "police": "警察局", "fire": "消防隊",
+             "townhall": "公所", "post": "郵局", "moto": "機車行", "carrepair": "汽車修理", "charging": "充電站",
+             "toilet": "公廁", "water": "飲水機", "pharmacy": "藥局", "temple": "廟宇", "church": "教堂",
+             "museum": "博物館", "beach": "海灘", "waterfall": "瀑布", "lake": "湖泊", "bridge": "橋",
+             "market": "市場", "oldstreet": "老街", "busstation": "客運站", "ferry": "碼頭", "supermarket": "超市",
+             "mall": "購物中心", "department": "百貨公司", "bank": "銀行", "atm": "ATM"}
+ALONG_KINDS = {"fuel", "convenience", "food", "sight", "lodging", "rest", "parking", "moto", "toilet", "charging"}
+# 直接打種類名稱（「機車行」「公廁」「廟」）＝找附近這一類；店名裡不一定有這幾個字
+KIND_WORDS = {v: k for k, v in KIND_NAME.items() if k != "place"}
+KIND_WORDS.update({"廟": "temple", "寺廟": "temple", "宮廟": "temple", "廁所": "toilet", "機車": "moto",
+                   "機車修理": "moto", "修車": "moto", "便利店": "convenience", "超商": "convenience",
+                   "飲水": "water", "飲水站": "water", "百貨": "department", "警局": "police", "派出所": "police"})
 
 
 def norm(s: str) -> str:
@@ -82,6 +93,12 @@ async def search(q: str = Query(min_length=1, max_length=40), lon: float | None 
                 seen.add(it["id"])
                 out.append(it)
 
+    # 打的是種類名稱：先列附近這一類（依距離），再接名稱比對的結果
+    wk = KIND_WORDS.get(norm(q.strip()))
+    if wk and not kind and lon is not None and lat is not None:
+        res = await r.execute_command("FT.SEARCH", "idx:poi", f"@kind:{{{wk}}} @loc:[{lon} {lat} 30 km]",
+                                      "LIMIT", 0, 60, "DIALECT", 2)
+        add(sorted((poi_dict(pid, h, lon, lat) for pid, h in _parse(res)), key=lambda x: x["dist_km"])[:8])
     # 自動完成字典裡的名稱（地名、車站、景點）放最前面
     if not kind:
         qn = norm(q.strip())
