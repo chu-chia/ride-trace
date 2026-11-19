@@ -30,7 +30,8 @@
   .sbox{position:relative}
   .sbox .input{padding-left:36px}
   .sbox::before{content:"⌕";position:absolute;left:12px;top:50%;transform:translateY(-52%);font-size:18px;color:var(--muted)}
-  .sres{position:absolute;z-index:3;left:0;right:0;top:calc(100% + 6px);background:var(--surface);border-radius:14px;box-shadow:var(--shadow);max-height:340px;overflow-y:auto}
+  /* 下拉框要完全遮住底下的內容：面板是 .glass，裡面的 --surface 是半透明，所以用 --solid */
+  .sres{position:absolute;z-index:5;left:0;right:0;top:calc(100% + 6px);background:var(--solid);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);max-height:340px;overflow-y:auto}
   .sr{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer}
   .sr:last-child{border-bottom:0}
   .sr:hover,.sr.on{background:var(--surface-2)}
