@@ -190,8 +190,7 @@ async function ptSearch(i, full) {
     if (!items.length && !full && seq === pSeq) { items = await api(`/api/poi/search?q=${encodeURIComponent(q)}${center(p)}`); full = true; }
   } catch { /* 搜尋失敗就只剩「只改名稱」 */ }
   if (seq !== pSeq) return;
-  // 換地點通常是換附近的地方：離原位置近的排前面
-  items = [...items].sort((a, b) => (a.dist_km ?? 1e9) - (b.dist_km ?? 1e9));
+  // 順序照後端（名稱比對＋離原位置的距離＋重要度）；這裡再按距離重排會讓 120 km 外的「九份」輸給 66 km 的「九份二山」
   pItems = items; pOn = -1;
   const keep = q !== (p.name || '');
   box.innerHTML = (items.length ? items.map((x, k) => `<div class="sr" role="option" data-k="${k}"><span class="k">${esc(x.kind_name)}</span>
