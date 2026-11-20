@@ -325,100 +325,110 @@ addEventListener('focusout', unscroll);
 window.visualViewport?.addEventListener('resize', unscroll);
 addEventListener('orientationchange', unscroll);
 
-// 手機底部抽屜拖曳（參考美食地圖 useSheetDrag）：
-// 抽屜整塊都能拖（頂列、摘要、把手，按鈕上也行），抽屜跟著手指走；放開時看速度（快速一甩）或距離決定開合。
-// 展開時在清單裡往下拉：清單已在最頂端就改成拖抽屜收合，否則照常捲動。
-// 用 touch 事件是因為原生捲動會搶走 pointer 事件；接手拖曳後才 preventDefault。
-// 抽屜每一格的實際高度都寫進 --sheet-h（px）與 --sheet-t（0 收合～1 展開），
-// 進度條、時間軸、比例尺用它貼在抽屜上方，拖曳和動畫中都會順順跟著走，不會在兩個位置之間跳。
+// 手機底部抽屜：直接照改版原型 ride-trace-redesign/proto.js 的 Sheet() 搬過來（使用者覺得原型的手感比較好）。
+// 抽屜高度固定，用 transform 整塊上下推；pointer 事件＋CSS touch-action（抽屜 none、清單 pan-y）決定手勢歸誰。
+// 拖曳：超過 7px 才開始、跟著手指走、拉過頭有 1/3 阻力；放開時速度 > 0.4 px/ms 看方向，不然看有沒有過一半。
+// 展開時清單已經往下捲（scrollTop > 0）就不接手，讓清單自己捲。收合時點空白處（不是按鈕）就展開。
+// 正式版另外補的：收合時露出 peek 元素（把手、頂列、摘要），keep 元素（行程頁的 SOS 那一排）一直貼在畫面最下面；
+// 頁面自己切 .small（點把手、點分頁）時用 MutationObserver 跟著滑；抽屜露出的高度寫進 --sheet-h／--sheet-t（每一格最多一次）。
 const SHEET_MQ = matchMedia('(max-width: 760px)');
 const NO_DRAG = 'input, select, textarea, [contenteditable], .no-drag';
-const TAP_SLOP = 6, FLICK = 0.45, ANIM = 280; // px、px/ms、ms
-export function sheetDrag(sheet, { isOpen, setOpen, scroll }) {
+let safeProbe = null;
+const safeBottom = () => {
+  if (!safeProbe) { safeProbe = document.createElement('div'); safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;visibility:hidden;pointer-events:none;height:env(safe-area-inset-bottom,0px)'; document.body.append(safeProbe); }
+  return safeProbe.offsetHeight;
+};
+export function sheetDrag(sheet, { isOpen, setOpen, scroll, peek = '.handle, .panel-head, .panel-mini, .peek', keep = '.keep', mq = SHEET_MQ }) {
   const root = document.documentElement.style;
-  let st = 'idle', scroller = null, x0 = 0, y0 = 0, h0 = 0, minH = 0, maxH = 0, h = 0, trail = [], endAt = 0, timer = 0, busy = false;
+  sheet.classList.add('sheetx');
+  const mark = () => { for (const el of sheet.children) el.classList.toggle('sx-rest', !el.matches(peek) && !el.matches(keep)); sheet.classList.toggle('sx-on', mq.matches); };
+  mark();
+  // 收合時露出的高度：最後一個 peek 元素的下緣＋keep 元素的高度（沒有 keep 時留安全區）
+  const peekH = () => {
+    let b = 0, k = 0;
+    for (const el of sheet.children) {
+      if (el.offsetParent === null) continue;
+      if (el.matches(keep)) k += el.offsetHeight;
+      else if (el.matches(peek)) b = Math.max(b, el.offsetTop + el.offsetHeight);
+    }
+    return Math.round(b + (k || Math.max(10, safeBottom() + 6)));
+  };
+  const closedOff = () => Math.max(0, sheet.offsetHeight - peekH());
+  let off = 0, max = 0, H = 0, open = isOpen(), raf = 0, until = 0, endAt = 0;
+  const setOff = (px) => { off = px; sheet.style.setProperty('--sheet-off', px + 'px'); };
+  // --sheet-h／--sheet-t：每一格最多寫一次（拖曳中、轉場中都跟著抽屜上緣走）
   const publish = () => {
-    const cur = sheet.offsetHeight;
-    if (!busy) { if (isOpen()) maxH = cur; else minH = cur; } // 平常就順便記下兩端的高度
-    if (!busy && !isOpen()) sheet.dataset.minH = cur;
-    root.setProperty('--sheet-h', `${cur}px`);
-    const t = maxH > minH ? (cur - minH) / (maxH - minH) : (isOpen() ? 1 : 0);
-    root.setProperty('--sheet-t', Math.min(1, Math.max(0, t)).toFixed(3));
+    if (!mq.matches) return;
+    const vis = Math.max(0, Math.min(H, innerHeight - sheet.getBoundingClientRect().top));
+    const t = (max ? Math.min(1, Math.max(0, 1 - (H - vis) / max)) : (open ? 1 : 0)).toFixed(3);
+    root.setProperty('--sheet-h', `${Math.round(vis)}px`);
+    root.setProperty('--sheet-t', t);
+    sheet.style.setProperty('--sx-t', t);
   };
-  if ('ResizeObserver' in window) new ResizeObserver(publish).observe(sheet); // 轉場動畫中每一格都會觸發
-  const measure = () => {
-    busy = true;
-    sheet.style.transition = 'none'; sheet.style.height = '';
-    sheet.classList.add('small'); minH = sheet.offsetHeight;
-    sheet.classList.remove('small'); maxH = sheet.offsetHeight;
-    sheet.dataset.minH = minH;
-  };
-  // 從目前高度動畫到開或關，結束後才交回 CSS（點把手和放開拖曳都走這裡）
-  const settle = (open) => {
-    sheet.style.transition = '';
-    sheet.style.height = `${open ? maxH : minH}px`;
-    if (!open) sheet.classList.add('small'); // 收合時內容先藏，只動高度
-    clearTimeout(timer);
-    timer = setTimeout(() => { sheet.style.height = ''; busy = false; setOpen(open); publish(); }, ANIM);
-  };
-  const toggle = (open = !isOpen()) => {
-    if (!SHEET_MQ.matches) { setOpen(open); return; }
-    clearTimeout(timer);
-    const from = sheet.offsetHeight;
+  const tick = () => { raf = 0; publish(); if (performance.now() < until) raf = requestAnimationFrame(tick); };
+  const publishFor = (ms) => { until = Math.max(until, performance.now() + ms); if (!raf) raf = requestAnimationFrame(tick); };
+  const measure = () => { H = sheet.offsetHeight; max = closedOff(); sheet.dataset.minH = H - max; };
+  const set = (o, { animate = true } = {}) => {
+    open = o;
+    if (o !== isOpen()) setOpen(o);  // 先切狀態（摘要列只在收合時顯示），再量收合高度
+    if (!mq.matches) { sheet.style.removeProperty('--sheet-off'); return; }
     measure();
-    sheet.style.height = `${from}px`;
-    void sheet.offsetHeight; // 先套用起點，下一步的高度變化才會有轉場
-    settle(open);
+    if (!animate) sheet.classList.add('dragging');
+    setOff(o ? 0 : max);
+    if (!animate) { void sheet.offsetHeight; sheet.classList.remove('dragging'); }
+    if (!o) { const b = scroll && sheet.querySelector(scroll); if (b) b.scrollTop = 0; }
+    publishFor(animate ? 360 : 0);
   };
-  sheet.addEventListener('touchstart', (e) => {
-    st = 'idle';
-    if (!SHEET_MQ.matches || e.touches.length !== 1 || e.target.closest(NO_DRAG)) return;
-    scroller = isOpen() && scroll ? e.target.closest(scroll) : null;
-    st = 'pending';
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; trail = [];
-  }, { passive: true });
-  sheet.addEventListener('touchmove', (e) => {
-    if (st === 'idle') return;
-    const t = e.touches[0], dy = t.clientY - y0;
-    if (st === 'pending') {
-      // 清單裡：只有往下拉而且已在頂端才接手，其他交給原生捲動
-      if (scroller && (dy < 0 || scroller.scrollTop > 0)) { st = 'idle'; return; }
-      if (scroller) e.preventDefault();
-      if (Math.abs(dy) < TAP_SLOP && Math.abs(t.clientX - x0) < TAP_SLOP) return;
-      if (Math.abs(t.clientX - x0) > Math.abs(dy)) { st = 'idle'; return; } // 橫向滑動不搶
-      clearTimeout(timer);
-      const from = sheet.offsetHeight;
-      measure();
-      h0 = from;
-      sheet.style.height = `${h0}px`;
-      y0 = t.clientY; // 從接手的位置開始算，抽屜不會突然跳一段
-      st = 'dragging';
-    }
-    e.preventDefault();
-    const now = performance.now();
-    trail.push([now, t.clientY]);
-    while (trail.length > 2 && now - trail[0][0] > 100) trail.shift(); // 速度看最後 0.1 秒，避免單格抖動
-    h = Math.min(maxH, Math.max(minH, h0 - (t.clientY - y0)));
-    sheet.style.height = `${h}px`;
-  }, { passive: false });
+  const toggle = (o = !open) => set(o);
+
+  let y0 = null, off0 = 0, last = 0, lastT = 0, vel = 0, moved = false, pid = null, inBody = false;
+  sheet.addEventListener('pointerdown', (e) => {
+    if (!mq.matches || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const body = scroll && e.target.closest(scroll);
+    if (body && open && body.scrollTop > 0) return;
+    if (e.target.closest(NO_DRAG)) return;
+    measure();
+    inBody = !!body;
+    y0 = e.clientY; off0 = off; last = y0; lastT = performance.now(); vel = 0; moved = false; pid = e.pointerId;
+  });
+  // 移動、放開聽在 window：滑鼠一下子移出抽屜（還沒 setPointerCapture）也收得到
+  addEventListener('pointermove', (e) => {
+    if (y0 == null || e.pointerId !== pid) return;
+    const dy = e.clientY - y0;
+    if (!moved && Math.abs(dy) < 7) return;
+    if (!moved && inBody && open && dy < 0) { y0 = null; return; }  // 展開時在清單裡往上滑＝捲清單，抽屜放手
+    if (!moved) { moved = true; sheet.classList.add('dragging'); try { sheet.setPointerCapture(e.pointerId); } catch { /* ignore */ } }
+    const t = performance.now(); vel = (e.clientY - last) / Math.max(1, t - lastT); last = e.clientY; lastT = t;
+    let o = off0 + dy;
+    if (o < 0) o /= 3;
+    if (o > max) o = max + (o - max) / 3;
+    setOff(o); publishFor(0);
+  });
   const end = (e) => {
-    if (st === 'pending' && e?.type === 'touchend' && !isOpen() && !e.target.closest('a, button, input, select, textarea, label')) {
-      st = 'idle'; endAt = performance.now(); toggle(true); return; // 收合時點摘要空白處也能展開
-    }
-    if (st !== 'dragging') { st = 'idle'; return; }
-    st = 'idle'; endAt = performance.now();
-    const [ta, ya] = trail[0] || [0, 0], [tb, yb] = trail.at(-1) || [1, 0];
-    const speed = (yb - ya) / Math.max(1, tb - ta), moved = h - h0, need = Math.min(90, (maxH - minH) / 4);
-    const wasOpen = h0 > (minH + maxH) / 2;
-    // 快速一甩看方向；慢慢拉則要拉超過一段距離（90px 或全程四分之一）才換狀態，否則彈回
-    settle(speed < -FLICK ? true : speed > FLICK ? false : Math.abs(moved) > need ? moved > 0 : wasOpen);
+    if (y0 == null || e.pointerId !== pid) return;
+    y0 = null; sheet.classList.remove('dragging');
+    if (!moved) { if (e.type === 'pointerup' && !open && !e.target.closest('button,a,input,select,label')) { endAt = performance.now(); set(true); } return; }
+    endAt = performance.now();
+    set(Math.abs(vel) > 0.4 ? vel < 0 : off < max / 2);
   };
-  sheet.addEventListener('touchend', end);
-  sheet.addEventListener('touchcancel', end);
+  addEventListener('pointerup', end);
+  addEventListener('pointercancel', end);
   // 拖曳或點摘要展開後，瀏覽器補送的 click 不要再觸發按鈕（例如把手又切回去）
   sheet.addEventListener('click', (e) => {
     if (performance.now() - endAt < 400) { e.preventDefault(); e.stopPropagation(); }
   }, true);
+  // 頁面自己切開合（.small）：滑到對的位置
+  new MutationObserver(() => { if (y0 == null && isOpen() !== open) set(isOpen()); })
+    .observe(sheet, { attributes: true, attributeFilter: ['class'] });
+  // 收合時露出的內容變高變矮（摘要換行、轉向）：跟著調整
+  if ('ResizeObserver' in window) {
+    const ro = new ResizeObserver(() => { if (y0 == null && mq.matches) { const was = max; measure(); if (!open && Math.abs(max - was) > 1) setOff(max); publishFor(0); } });
+    for (const el of sheet.children) if (el.matches(peek) || el.matches(keep)) ro.observe(el);
+    ro.observe(sheet);
+  }
+  mq.addEventListener('change', () => { mark(); set(isOpen(), { animate: false }); });
+  addEventListener('resize', () => { if (y0 == null) set(open, { animate: false }); });
+  requestAnimationFrame(() => set(isOpen(), { animate: false }));
   return { toggle };
 }
 
@@ -447,6 +457,5 @@ export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 7
   set(small, false);
   const drag = sheetDrag(panel, { isOpen: () => !small, setOpen: (open) => set(!open), scroll: '.panel-body' });
   if (handle) handle.onclick = () => drag.toggle();
-  liquidGlass(panel);
   return { set, get small() { return small; } };
 }

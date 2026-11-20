@@ -96,14 +96,16 @@ html,body{width:100%;height:100%;overflow:hidden}
 .mobile-sheet{display:none}
 @media(max-width:1100px){
   .war-stage{display:none}
-      .mobile-sheet{display:flex;position:fixed;z-index:5;left:0;right:0;bottom:0;height:min(76dvh,650px);border-radius:20px 20px 0 0;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);transition:height .25s ease}
-  .mobile-sheet.small{height:168px}
+      .mobile-sheet{display:flex;position:fixed;z-index:5;left:0;right:0;bottom:0;height:min(76dvh,650px);border-radius:20px 20px 0 0;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);
+    transform:translateY(var(--sheet-off,0px));transition:transform .28s cubic-bezier(.2,.8,.2,1);will-change:transform;
+    --surface:var(--solid);--surface-2:var(--solid-2);--surface-3:var(--solid-3);background:var(--solid);border:0;box-shadow:0 -2px 16px rgba(0,0,0,.35);-webkit-backdrop-filter:none;backdrop-filter:none}
+  /* 抽屜高度固定，開合用 transform 整塊推（common.js sheetDrag），收合時內容照樣在，只是推到畫面外 */
+  .mobile-sheet.dragging{transition:none}
   .sheet-handle{border:0;background:none;min-height:44px;cursor:pointer;touch-action:none;flex:none}
   .sheet-handle::before{content:"";display:block;width:40px;height:5px;border-radius:4px;background:var(--muted);margin:0 auto}
   .sheet-summary{display:flex;align-items:center;gap:9px;padding:2px 14px 10px;min-height:45px;flex:none}
   .sheet-summary b{font-size:15px;white-space:nowrap}.sheet-summary span{font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .sheet-tabs{margin:0 12px 8px;flex:none}.sheet-tabs button{padding:8px 3px;min-height:44px;font-size:12px}
-  .mobile-sheet.small .sheet-content{display:none}
   .sheet-content{padding:0 12px 12px;overflow:auto;flex:1;min-height:0}
   .sheet-content .war-panel{position:static!important;width:100%!important;height:auto!important;max-height:none;border:0;box-shadow:none;background:none;backdrop-filter:none;overflow:visible}
   .sheet-content .war-panel .panel-top{padding:5px 2px 10px}.sheet-content .panel-toggle,.sheet-content .panel-resize{display:none}
@@ -113,8 +115,7 @@ html,body{width:100%;height:100%;overflow:hidden}
   .sheet-content .progress-body{height:225px;padding:0 2px 12px}.sheet-content .profile-wrap{min-height:165px;margin:12px 8px 0}
   .sheet-content .head{display:none}
   .sosbar{top:58px;max-width:calc(100vw - 24px)}.sosbar div{font-size:15px}
-  .maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{bottom:172px}
-  body:has(.mobile-sheet:not(.small)) .maplibregl-ctrl-bottom-left,body:has(.mobile-sheet:not(.small)) .maplibregl-ctrl-bottom-right{bottom:76dvh}
+  .maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{bottom:calc(var(--sheet-h,172px) + 4px)}
 }
 @media(prefers-reduced-motion:reduce){.pdot,.mobile-sheet{transition:none}}
 .card-list.team-rows{gap:0;padding:2px 8px 10px}
