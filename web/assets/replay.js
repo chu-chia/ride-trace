@@ -1,10 +1,28 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, tripGate, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate, markFocus } from '/assets/common.js';
-import { createMap, declutter, addCompass } from '/assets/mapbase.js';
+import { api, tripGate, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate, markFocus, avatar } from '/assets/common.js';
+import { createMap, declutter, addCompass, flatZoom } from '/assets/mapbase.js';
 import { cameraGestures } from '/assets/gestures.js';
 
 // 側欄收合（電腦收合鈕／手機拉把手）與其他地圖頁一致
 let PADS = null;
+// 版面照改版原型：手機直向＝上方浮動標題列＋抽屜裡的播放列／時間軸／鏡頭跟誰；
+// 橫向與電腦＝標題列在左欄最上面，播放鍵、時間、時間軸、倍速搬到右下長條。搬 DOM，按鈕的事件跟著走
+const NARROW = matchMedia('(max-width: 760px)');
+function placeControls() {
+  const head = $('#head'), panel = $('#panel');
+  if (NARROW.matches) {
+    $('#rtop').append(head);
+    $('#player').append($('#play'), $('#clk'), $('#rate'));
+    $('#peek').insertBefore($('#tl'), $('#fol'));
+  } else {
+    panel.insertBefore(head, $('#peek'));
+    $('#pbar').append($('#play'), $('#clk'), $('#tl'), $('#rate'));
+  }
+  requestAnimationFrame(() => { drawScrub?.(); PADS?.refresh(); });
+}
+let drawScrub = null;
+placeControls();
+NARROW.addEventListener('change', placeControls);
 const PANEL = initPanel($('#panel'), 'replay', { onChange: () => setTimeout(() => PADS?.refresh(), innerWidth <= 760 ? 0 : 300) });
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -13,15 +31,20 @@ await tripGate(tid);  // 錯誤 id／非成員／被移出：和行程頁、戰�
 $('#back').href = '/';
 
 const EV = { lost: 'var(--crit)', back: 'var(--ok)', start: 'var(--accent)', end: 'var(--muted)', stop: 'var(--muted)', join: 'var(--accent)', kick: 'var(--warn)', behind: 'var(--warn)', ahead: 'var(--warn)', regroup: 'var(--ok)', arrive: 'var(--ok)', allin: 'var(--ok)', speedcam: 'var(--warn)', roadevent: 'var(--warn)', weather: 'var(--accent)', msg: 'var(--accent)', chat: 'var(--accent)', mark: 'var(--warn)', sos: 'var(--crit)', sos_off: 'var(--ok)', route: 'var(--accent)', offroute: 'var(--warn)', onroute: 'var(--ok)', reroute: 'var(--accent)', stuck: 'var(--warn)', moving: 'var(--ok)', town: 'var(--accent)' };
+// 時間軸事件點裡的小圖示（照原型：彩色小圓＋白色符號）
+const GLYPH = { start: '▶', moving: '▶', end: '■', stop: '‖', lost: '!', back: '✓', join: '+', kick: '✕', behind: '!', ahead: '»', regroup: '⚑', arrive: '★', allin: '★', speedcam: '◉', roadevent: '⚠', weather: '☂', msg: '✉', chat: '✉', mark: '⚑', sos: 'S', sos_off: '✓', route: '↺', offroute: '!', onroute: '✓', reroute: '↺', stuck: '!' };
 const SPEED_STOPS = [0, '#5e60ce', 20, '#4ea8de', 40, '#56cfe1', 60, '#ffd166', 90, '#ef476f'];
 const ALT_STOPS = [0, '#2a9d8f', 800, '#8ab17d', 1600, '#e9c46a', 2400, '#f4a261', 3300, '#e76f51'];
-const PLAY = '<svg width="16" height="16" viewBox="0 0 12 12"><path d="M3 1.5v9l7.5-4.5z" fill="currentColor"/></svg>';
-const PAUSE = '<svg width="16" height="16" viewBox="0 0 12 12"><rect x="2.5" y="1.5" width="2.6" height="9" fill="currentColor"/><rect x="7" y="1.5" width="2.6" height="9" fill="currentColor"/></svg>';
+const PLAY = '<svg viewBox="0 0 12 12"><path d="M3 1.5v9l7.5-4.5z" fill="currentColor"/></svg>';
+const PAUSE = '<svg viewBox="0 0 12 12"><rect x="2.5" y="1.5" width="2.6" height="9" fill="currentColor"/><rect x="7" y="1.5" width="2.6" height="9" fill="currentColor"/></svg>';
 
 const M = createMap($('#map'), { style: 'dark', zoom: 7, terrain: true });
 addCompass(M, document.querySelector('.tools'));  // 指北針：點一下北方朝上
 const map = M.map;
 window.qijiMap = map;
+// 地圖可能在等回放資料的時候就載完了：先記下來，最後才不會等一個已經發生過的 load
+let mapLoaded = false;
+map.once('load', () => { mapLoaded = true; });
 
 let data;
 try { data = await api(`/api/trips/${tid}/replay`); }
@@ -163,8 +186,12 @@ addEventListener('resize', () => PADS.refresh());
 function fitAll(dur = 900) {
   const pts = riders.flatMap((m) => m.track.filter((_, i) => i % 10 === 0).map((p) => [p[2], p[1]]));
   const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
-  const cam = map.cameraForBounds(b, { padding: pad(), maxZoom: 15 });
-  if (cam) { R.easeUntil = performance.now() + dur + 50; map.easeTo({ ...cam, pitch: M.is3d ? 50 : 0, bearing: 0, duration: dur }); }
+  // 縮放用平面換算、留白只交給 easeTo 一次：地圖已經記著跟拍用的 padding，cameraForBounds 會再疊一次，
+  // 加上 3D 傾斜和手機直向的高畫面，算出來會拉到整個北台灣（UX：一進回放看不到軌跡）
+  PADS.refresh();
+  const padding = padRaw();
+  R.easeUntil = performance.now() + dur + 50;
+  map.easeTo({ center: b.getCenter(), zoom: flatZoom(b, padding, 15, map), padding, pitch: M.is3d ? 50 : 0, bearing: 0, duration: dur });
 }
 function syncFollowUi() {
   press($('#bAll'), R.follow === 'all' && !R.away);
@@ -189,7 +216,9 @@ function setFollow(uid, { keepZoom = false } = {}) {
   applyLayerState();
   renderRiders();
   renderSummary();
+  renderNow();
   drawCharts();
+  drawScrub();
 }
 // 跟隨方式和行程頁一樣：右上「全隊」看全部人，點隊員（列表或地圖上的標記）就跟著他，再點一次回到全隊
 $('#bAll').onclick = () => setFollow('all');
@@ -198,6 +227,7 @@ $('#bAll').onclick = () => setFollow('all');
 // 全隊狀態的每一列就是選人：點了鏡頭跟拍那個人，摘要／曲線也換成他
 function renderRiders() {
   renderTeam();
+  renderFol();
   markFocus(riders.map((m) => [m.uid, m.el]), R.follow === 'all' ? null : R.follow, R.away);
 }
 
@@ -213,6 +243,7 @@ function renderSummary() {
 }
 function renderNow() {
   const m = riders.find((x) => x.uid === R.sel) || riders[0], st = stateAt(m, R.t);
+  $('#nowTitle').textContent = `目前位置 · ${m.nickname} · ${clock(R.t)}`;
   $('#now').innerHTML = [[st.kmh == null ? '–' : Math.round(st.kmh), 'km/h'], [st.alt == null ? '–' : Math.round(st.alt), 'm 海拔'], [st.km.toFixed(1), 'km 已騎']]
     .map(([a, b]) => `<div><b class="num">${a}</b><span>${b}</span></div>`).join('');
 }
@@ -233,7 +264,6 @@ function renderTeam() {
              [started ? st.km.toFixed(1) : '–', 'km 已騎'], [started && lead != null ? Math.max(0, lead - st.km).toFixed(1) : '–', 'km 距領先']],
     };
   }), pick);
-  $('#miniTeam').textContent = `${riders.length} 人 · ${active.length} 人已出發`;
 }
 
 // people：事件裡出現、但已經被移出的人（後端補的暱稱和顏色，UX-54）
@@ -255,7 +285,7 @@ function drawTicks() {
   const groups = [...bins.values()].sort((a, c) => a.k - c.k);
   box.innerHTML = groups.map((g, i) => {
     const x = (g.k + 0.5) * GAP, e = g.items[0];
-    if (g.items.length === 1) return `<button type="button" class="tick" style="left:${x}px;--c:${EV[e.type] || 'var(--muted)'}" data-t="${e.ts}" title="${esc(evLabel(e))}" aria-label="${esc(evLabel(e))}"></button>`;
+    if (g.items.length === 1) return `<button type="button" class="tick" style="left:${x}px;--c:${EV[e.type] || 'var(--muted)'}" data-t="${e.ts}" title="${esc(evLabel(e))}" aria-label="${esc(evLabel(e))}"><span aria-hidden="true">${GLYPH[e.type] || '•'}</span></button>`;
     const sos = g.items.some((x2) => x2.type === 'sos');
     return `<button type="button" class="tick group${sos ? ' sos' : ''}" style="left:${x}px" data-g="${i}" aria-haspopup="true" aria-label="${clock(g.items[0].ts)}～${clock(g.items.at(-1).ts)} 共 ${g.items.length} 個事件，點一下展開">${g.items.length}</button>`;
   }).join('');
@@ -282,7 +312,7 @@ function openTickPop(btn, items) {
 drawTicks();
 // 時間軸寬度會跟著視窗、側欄收合改變：寬度變了才重排（重排時順便關掉展開的清單）
 let ticksW = 0;
-new ResizeObserver(() => { const w = $('#ticks').clientWidth; if (w !== ticksW) { ticksW = w; closeTickPop(); drawTicks(); } }).observe($('#ticks'));
+new ResizeObserver(() => { const w = $('#ticks').clientWidth; if (w !== ticksW) { ticksW = w; closeTickPop(); drawTicks(); drawScrub?.(); } }).observe($('#ticks'));
 $('#ticks').onclick = (e) => {
   const b = e.target.closest('.tick');
   if (!b) return;
@@ -336,13 +366,107 @@ function chart(cv, seriesByUid, unit) {
   cv.onclick = (e) => { const r = cv.getBoundingClientRect(); seek(t0 + ((e.clientX - r.left - pl) / (w - pl - pr)) * (t1 - t0)); };
 }
 const ALT = Object.fromEntries(riders.map((m) => { const step = Math.max(1, Math.floor(m.track.length / 500)); return [m.uid, m.track.filter((_, i) => i % step === 0).map((p) => [p[0], p[3]])]; }));
-function drawCharts() { chart($('#altChart'), ALT, 'm'); chart($('#spdChart'), SPD, 'km/h'); }
+function drawCharts() {
+  if (tab === 'chart') { chart($('#altChart'), ALT, 'm'); chart($('#spdChart'), SPD, 'km/h'); }
+  $('#lgSpd').innerHTML = riders.map((m) => `<span class="${R.sel === m.uid ? '' : 'dim'}"><i style="--c:${esc(m.color)}"></i>${esc(m.nickname)}</span>`).join('');
+}
 
-/* ---------- 時間軸 ---------- */
-$('#range').min = t0; $('#range').max = t1; $('#range').step = 1000;
+/* ---------- 時間軸（照原型：整條都能點、按住拖；背景畫鏡頭跟著的人的海拔） ---------- */
+$('#legS').textContent = clock(t0);
+$('#legE').textContent = clock(t1);
+drawScrub = () => {
+  const cv = $('#sc'), dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const top = 24, base = h - 3;
+  g.fillStyle = 'rgba(128,128,140,.18)'; g.fillRect(0, base, w, 3);
+  const m = riders.find((x) => x.uid === R.sel) || riders[0], s = ALT[m.uid] || [];
+  const vals = s.map(([, v]) => v).filter((v) => v != null);
+  if (!vals.length) return;
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 50) hi = lo + 50;
+  const X = (t) => (w * (t - t0)) / Math.max(1, t1 - t0), Y = (v) => base - (base - top) * ((v - lo) / (hi - lo));
+  g.beginPath(); g.moveTo(X(s[0][0]), base);
+  for (const [t, v] of s) if (v != null) g.lineTo(X(t), Y(v));
+  g.lineTo(X(s.at(-1)[0]), base); g.closePath();
+  g.fillStyle = 'rgba(255,138,61,.24)'; g.fill();
+};
+const knob = () => { $('#knob').style.left = `${((R.t - t0) / Math.max(1, t1 - t0)) * 100}%`; };
+{
+  // 拖曳：手指在時間軸上就鎖住（setPointerCapture），抽屜和地圖都不會搶；每一格最多更新一次
+  const el = $('#scrub');
+  let down = false, pendX = null;
+  const tAt = (x) => { const r = el.getBoundingClientRect(); return t0 + Math.max(0, Math.min(1, (x - r.left) / r.width)) * (t1 - t0); };
+  const flush = () => { if (pendX != null) { const x = pendX; pendX = null; seek(tAt(x)); } };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.tick')) return;  // 事件點：交給下面的 click
+    e.stopPropagation();
+    down = true; R.scrubbing = true; closeTickPop();
+    try { el.setPointerCapture(e.pointerId); } catch { /* 略過 */ }
+    seek(tAt(e.clientX));
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!down) return;
+    e.stopPropagation();
+    if (pendX == null) requestAnimationFrame(flush);
+    pendX = e.clientX;
+  });
+  // 拖曳中鏡頭先不動（每一格瞬間跳到新位置，圖磚來不及載入，地圖會整片變黑）；放開後再一次滑過去
+  const end = () => {
+    if (!down) return;
+    down = false; R.scrubbing = false;
+    flush();
+    R.seekAt = performance.now() + 1500;  // 全隊鏡頭多追 1.5 秒（共 3 秒），拖了一大段也追得到
+    if (R.follow !== 'all') { R.zoomed = false; R.keepZoom = true; }
+  };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); el.addEventListener('lostpointercapture', end);
+  // 抽屜的拖曳用 touch 事件：時間軸上的手指不能變成拉抽屜
+  el.addEventListener('touchstart', (e) => { if (!e.target.closest('.tick')) e.stopPropagation(); }, { passive: true });
+  el.addEventListener('touchmove', (e) => { e.stopPropagation(); }, { passive: true });
+  el.addEventListener('keydown', (e) => {
+    const step = (t1 - t0) / 100;
+    const k = { ArrowRight: step, ArrowUp: step, ArrowLeft: -step, ArrowDown: -step, PageUp: step * 10, PageDown: -step * 10 }[e.key];
+    if (k) { e.preventDefault(); seek(R.t + k); } else if (e.key === 'Home') { e.preventDefault(); seek(t0); } else if (e.key === 'End') { e.preventDefault(); seek(t1); }
+  });
+}
 function seek(t) { R.seekAt = performance.now(); R.t = Math.max(t0, Math.min(t1, t)); if (R.follow !== 'all') { R.zoomed = false; R.keepZoom = true; } update(true); }  // 拖時間軸：鏡頭飛到那人在該時間的位置，縮放維持
-$('#range').oninput = (e) => seek(+e.target.value);
-$('#rate').onchange = (e) => { R.rate = +e.target.value; };
+$('#rate').onclick = (e) => {
+  const b = e.target.closest('[data-x]'); if (!b) return;
+  R.rate = +b.dataset.x;
+  $$('#rate button').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+};
+
+/* ---------- 分頁：全隊／圖表／事件／摘要 ---------- */
+let tab = 'team';
+$('#tabs').onclick = (e) => {
+  const b = e.target.closest('[data-t]'); if (!b) return;
+  tab = b.dataset.t;
+  $$('#tabs button').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+  $$('.tabsec').forEach((x) => { x.hidden = x.dataset.tab !== tab; });
+  $('#panel .panel-body').scrollTop = 0;
+  if (PANEL.small) PANEL.set(false);  // 抽屜收著時點分頁＝打開
+  requestAnimationFrame(drawCharts);
+};
+// 從事件分頁跳到某個時間：手機上順便把抽屜收起來，地圖才看得到
+$('#events').addEventListener('click', () => { if (NARROW.matches) PANEL.set(true); });
+
+/* ---------- 鏡頭跟誰（抽屜裡的一排；橫向和電腦用左欄的全隊狀態） ---------- */
+const TEAM_ICO = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 19c.6-3.4 3.3-5.3 6.5-5.3s5.9 1.9 6.5 5.3z"/><circle cx="17" cy="9" r="2.5" opacity=".7"/><path d="M16 13.8c2.9 0 4.9 1.6 5.5 4.6h-4.2c-.3-1.8-1.1-3.4-2.4-4.5z" opacity=".7"/></svg>';
+$('#fol').innerHTML = `<button type="button" data-f="all">${TEAM_ICO}全隊</button>` + riders.map((m) => `<button type="button" data-f="${esc(m.uid)}">${avatar(m)}${esc(m.nickname)}</button>`).join('');
+$('#fol').onclick = (e) => { const b = e.target.closest('[data-f]'); if (!b) return; if (b.dataset.f === 'all') setFollow('all'); else pick(b.dataset.f); };
+function renderFol() {
+  $$('#fol [data-f]').forEach((b) => {
+    const mine = b.dataset.f === R.follow;
+    b.classList.toggle('on', mine && !R.away);
+    b.classList.toggle('away', mine && R.away);
+    b.setAttribute('aria-pressed', String(mine && !R.away));
+  });
+  const m = riders.find((x) => x.uid === R.follow);
+  $('#legT').textContent = R.away ? '鏡頭：自由（點一下回去）' : m ? `鏡頭：${m.nickname}` : '鏡頭：全隊';
+}
 function syncPlay() { $('#play').innerHTML = R.playing ? PAUSE : PLAY; $('#play').setAttribute('aria-label', R.playing ? '暫停' : '播放'); }
 $('#play').onclick = () => { if (R.t >= t1) R.t = t0; R.playing = !R.playing; syncPlay(); };
 $('#colorBy').onclick = (e) => {
@@ -382,7 +506,8 @@ function update(force) {
   if (force || now - lastFilter > 100) { lastFilter = now; if (map.getLayer('rp-seg')) map.setFilter('rp-seg', ['<=', ['get', 't'], R.t]); }
   if (force || now - lastUi > 250) {
     lastUi = now;
-    $('#range').value = R.t;
+    knob();
+    $('#scrub').setAttribute('aria-valuetext', `${clock(R.t)}，出發後 ${dur(R.t - t0)}`);
     $('#clock').textContent = clock(R.t);
     $('#elapsed').textContent = '+' + dur(R.t - t0);
     renderNow();
@@ -401,7 +526,7 @@ function frame(now) {
     update(false);
   }
   // 跟拍：人在正中間、車頭朝上（方向平滑轉）、鏡頭高度平滑跟著地形
-  if (R.follow !== 'all' && !R.away && R.styleReady && now > (R.easeUntil || 0)) {
+  if (R.follow !== 'all' && !R.away && R.styleReady && !R.scrubbing && now > (R.easeUntil || 0)) {
     const m = riders.find((x) => x.uid === R.follow);
     const st = stateAt(m, R.t);
     // 切換跟拍對象：不用 easeTo 飛到「按下那一刻」的位置（播放中人早就往前走了，動畫結束會再跳一次），
@@ -428,7 +553,7 @@ function frame(now) {
       R.bearing += d * (1 - Math.exp(-dt / 1.2));
     }
     M.follow(center, { padding: pad(), ...extra, ...(R.bearing != null ? { bearing: R.bearing } : {}) });
-  } else if (R.follow === 'all' && !R.away && R.styleReady && (R.playing || now - (R.seekAt || 0) < 1500)
+  } else if (R.follow === 'all' && !R.away && R.styleReady && !R.scrubbing && (R.playing || now - (R.seekAt || 0) < 1500)
              && now > (R.easeUntil || 0)) {
     // 全隊：每一格平滑地框住所有人（暫停時不動，保留整趟總覽或使用者自己調的視角）
     M.followGroup(riders.map((m) => stateAt(m, R.t).pos), { padding: pad(), maxZoom: 14.5 });
@@ -446,7 +571,10 @@ let lastDeclutter = 0;
 renderRiders();
 renderSummary();
 syncPlay();
-map.once('load', () => { fitAll(0); update(true); });
+{
+  const first = () => { fitAll(0); update(true); };
+  if (mapLoaded) first(); else map.once('load', first);
+}
 update(true);
 requestAnimationFrame(frame);
 addEventListener('resize', drawCharts);
