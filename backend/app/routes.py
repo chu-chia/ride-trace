@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from . import events
 from .auth import current_uid
 from .db import K, r
-from .geo import haversine_m
+from .geo import haversine_m, project_on_route
 from .pace import category, curvy_flags, get_pace, kmh_for
 from .trips import require_member, trip_or_404
 
@@ -305,7 +305,9 @@ def build_route(trip: dict, edges: list[dict] | None, vehicle: str, pace: dict) 
 async def valhalla_routes(points: list[dict], vehicle: str, uid: str | None = None) -> list[dict]:
     """回傳 1～3 條路線（只有起終點時，Valhalla 會另外給替代路線；有停靠點就只有一條）。"""
     v = VEHICLES[vehicle]
-    locs = [{"lat": p["lat"], "lon": p["lon"], "type": "break" if i in (0, len(points) - 1) else "through"}
+    # heading：重算個人路線時帶上目前車頭方向，Valhalla 才不會叫人原地迴轉
+    locs = [{"lat": p["lat"], "lon": p["lon"], "type": "break" if i in (0, len(points) - 1) else "through",
+             **({"heading": round(p["heading"]) % 360, "heading_tolerance": 60} if p.get("heading") is not None else {})}
             for i, p in enumerate(points)]
 
     def body(opts, alternates=0):
@@ -407,6 +409,7 @@ async def set_route(tid: str, body: PlanIn, uid: str = Depends(current_uid)):
     if old:
         await r.delete(K.route(old))
     await r.delete(K.progress(tid))
+    await drop_navroutes(tid)  # 全隊路線換了，每個人的個人路線都作廢
     s = route["summary"]
     await events.emit(tid, "route", uid, f"設定路線（{VEHICLES[vehicle]['name']}）：{s['km']:.1f} km，"
                                           f"預估 {s['min'] // 60} 小時 {s['min'] % 60} 分")
@@ -423,5 +426,98 @@ async def clear_route(tid: str, uid: str = Depends(current_uid)):
     if rid:
         await r.hdel(K.trip(tid), "route")
         await r.delete(K.route(rid), K.progress(tid))
+        await drop_navroutes(tid)
         await events.publish(tid, {"kind": "route", "id": None})
+    return {"ok": True}
+
+
+# ---------- 偏離後的個人路線 ----------
+# 偏離全隊路線時，從目前位置（含車頭方向）重算到「下一個停靠點」，沒有停靠點才到終點（使用者 11-20 決定）。
+# 只有這個人用；騎到停靠點、或自己騎回全隊路線時，worker 會把它刪掉，接回全隊路線。
+# 存 trip:{tid}:navroute:{uid}（RedisJSON）。team_from_km／team_to_km 是個人路線兩端在全隊路線上的里程：
+# worker 用「個人路線走了幾成」換算成全隊路線上的里程，落隊／超前的距離才不會因為走別條路而亂跳。
+NAVROUTE_TTL = 6 * 3600
+NEXT_STOP_MIN_KM = 0.3      # 太近的停靠點（300 m 內）跳過，直接找下一個
+STOP_ON_ROUTE_M = 300       # 集合點／休息點離全隊路線 300 m 內才算「在路線上」
+
+
+class RerouteIn(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    heading: float | None = Field(None, ge=0, le=360)
+
+
+async def drop_navroutes(tid: str):
+    keys = [k async for k in r.scan_iter(match=K.navroute(tid, "*"), count=200)]
+    if keys:
+        await r.delete(*keys)
+
+
+async def next_stop(tid: str, route: dict, from_km: float) -> dict:
+    """全隊路線上、from_km 之後的第一個停靠點：規劃時的途經點，或成員設的集合點／休息點（要在路線附近）。"""
+    from .waypoints import list_waypoints  # 避免循環匯入
+    coords, cum = route["coords"], route["cum_km"]
+    cands = []
+    for p in route.get("points", [])[1:-1]:
+        km, off, _ = project_on_route(coords, cum, p["lat"], p["lon"])
+        cands.append({"name": p.get("name") or "途經點", "lat": p["lat"], "lon": p["lon"], "km": km})
+    for w in await list_waypoints(tid):
+        km, off, _ = project_on_route(coords, cum, float(w["lat"]), float(w["lon"]))
+        if off <= STOP_ON_ROUTE_M:
+            cands.append({"name": w["name"], "lat": float(w["lat"]), "lon": float(w["lon"]), "km": km})
+    ahead = sorted((c for c in cands if c["km"] > from_km + NEXT_STOP_MIN_KM), key=lambda c: c["km"])
+    if ahead:
+        return {**ahead[0], "kind": "stop"}
+    end = route["points"][-1] if route.get("points") else {"lat": coords[-1][1], "lon": coords[-1][0], "name": ""}
+    return {"name": end.get("name") or "終點", "lat": end["lat"], "lon": end["lon"], "km": cum[-1], "kind": "end"}
+
+
+@router.post("/trips/{tid}/reroute")
+async def reroute(tid: str, body: RerouteIn, uid: str = Depends(current_uid)):
+    await require_member(tid, uid)
+    t = await trip_or_404(tid)
+    if t.get("status") != "live":
+        raise HTTPException(409, "行程進行中才能重新規劃")
+    team = await get_route_doc(tid)
+    if not team:
+        raise HTTPException(409, "這趟沒有規劃路線")
+    # 我在全隊路線上的里程：偏離當下記下的那個值（offroute），沒有就用最新進度
+    from_km = await r.hget(K.offroute(tid), uid) or await r.hget(K.progress(tid), uid)
+    from_km = float(from_km) if from_km is not None else project_on_route(team["coords"], team["cum_km"], body.lat, body.lon)[0]
+    stop = await next_stop(tid, team, from_km)
+    vehicle = team.get("vehicle") or ("scooter" if team.get("avoid_highways", True) else "heavy")
+    end = {"lat": stop["lat"], "lon": stop["lon"]}
+    try:
+        route = (await valhalla_routes([{"lat": body.lat, "lon": body.lon, "heading": body.heading}, end], vehicle))[0]
+    except HTTPException:
+        # 附近沒有和車頭方向相符的路（GPS 飄、在停車場裡繞）：不限方向再算一次
+        if body.heading is None:
+            raise
+        route = (await valhalla_routes([{"lat": body.lat, "lon": body.lon}, end], vehicle))[0]
+    doc = {"by": uid, "created": int(time.time() * 1000), "team_route": t.get("route"), "target": stop,
+           "team_from_km": round(from_km, 3), "team_to_km": round(stop["km"], 3), "vehicle": vehicle, **route}
+    key = K.navroute(tid, uid)
+    await r.json().set(key, "$", doc)
+    await r.expire(key, NAVROUTE_TTL)
+    await r.hdel(K.offroute(tid), uid)  # 換成新路線了：之後再偏離這條才會重新通知
+    s = route["summary"]
+    extra = s["km"] - (stop["km"] - from_km)
+    await events.emit(tid, "reroute", uid, f"重新規劃：到「{stop['name']}」{s['km']:.1f} km"
+                                            f"（{'多' if extra >= 0 else '少'} {abs(extra):.1f} km）")
+    await events.publish(tid, {"kind": "navroute", "uid": uid})
+    return doc
+
+
+@router.get("/trips/{tid}/navroute")
+async def my_navroute(tid: str, uid: str = Depends(current_uid)):
+    await require_member(tid, uid)
+    return await r.json().get(K.navroute(tid, uid)) or {}
+
+
+@router.delete("/trips/{tid}/navroute")
+async def drop_my_navroute(tid: str, uid: str = Depends(current_uid)):
+    """不要個人路線了（想自己騎回原路線）：刪掉，回到全隊路線。"""
+    await require_member(tid, uid)
+    if await r.delete(K.navroute(tid, uid)):
+        await events.publish(tid, {"kind": "navroute", "uid": uid})
     return {"ok": True}

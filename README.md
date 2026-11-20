@@ -142,6 +142,7 @@ Traccar Client 的 **SOS 按鈕**（送出 `alarm=sos`）會走跟網頁 SOS 一
 | RediSearch：地點搜尋 | `idx:poi`：本機 OSM 的 15.6 萬筆地名與 POI（地名、車站、景點、學校、醫院、公所、機車行、公廁、充電站、廟宇、湖泊、橋、老街、超市、銀行…共 40 類），中文斷詞＋前綴；`FT.SUGADD／FT.SUGGET`（含 FUZZY，6.1 萬個名稱）打字自動完成；直接打種類名稱（「機車行」「公廁」）＝`@kind:{moto} @loc:[經度 緯度 30 km]` 找附近這一類 |
 | RediSearch：GEOSHAPE | `idx:townshape`：全台 368 個鄉鎮市區多邊形，`FT.SEARCH "@shape:[CONTAINS $pt]"` 查一個點在哪個鄉鎮 → 點亮鄉鎮（SQL 通常得裝 PostGIS） |
 | RedisJSON | `route:{id}` 整條路線（途經點、幾千個座標、累計里程、轉彎指示）；`JSON.GET … $.summary` 只取需要的部分 |
+| RedisJSON＋TTL：個人路線 | 偏離全隊路線 10 秒，前端呼叫 `POST /api/trips/{id}/reroute`，從目前位置（含車頭方向）用本機 Valhalla 重算到下一個停靠點，存 `trip:{id}:navroute:{uid}`（6 小時自動過期）；worker 每點只用 `JSON.GET … $.created` 確認還在不在，換新的才讀 `$.coords $.cum_km`。走個人路線時全隊里程用「個人路線走了幾成」換算到 `team_from_km～team_to_km`，落隊／超前不會因為走別條路亂跳；騎到停靠點或騎回原路就 `DEL` 接回全隊路線；全隊路線改了用 `SCAN MATCH trip:{id}:navroute:*` 一次作廢 |
 | TimeSeries | `ts:{trip}:{uid}:speed／alt`（回放 `TS.MRANGE … FILTER trip=… AGGREGATION avg`）；`ts:pace:{uid}:{類別}:m／s` 個人在各種路的距離與時間（`TS.MRANGE … GROUPBY cat REDUCE sum`）；`ts:sys:writes`、`ts:sys:pubsub`、`ts:sys:push` 後台每秒寫入、訊息量、推播數 |
 | Sorted Set | `heat:{uid}` 熱力圖格子計數（`ZINCRBY`，`ZREVRANGE` 就是最常去的地方）；`online:report` 線上人數（`ZCOUNT` 最近 2 分鐘） |
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時 `SUNION`；`user:{uid}:towns` 點亮的鄉鎮（`SADD` 回傳 1 = 第一次點亮）；`SDIFF` 算誰還沒到集合點 |
@@ -155,7 +156,7 @@ Traccar Client 的 **SOS 按鈕**（送出 `alarm=sos`）會走跟網頁 SOS 一
 - [x] **M1 核心**：帳號、開團／邀請碼／開始／結束、位置回報（網頁＋Traccar）、即時地圖（深色／衛星／淺色、3D 地形）、失聯偵測、GPX 匯入、模擬器、全年迷霧足跡
 - [x] **M2 回放**：全隊同步、時間軸＋倍速（1～300×）、事件標記可跳轉、跟拍鏡頭、依隊員／速度／海拔上色、海拔與速度曲線（TS.MRANGE）、整趟摘要
 - [x] **M3 警示與互動**：Worker（consumer group）、落隊、抵達與全員到齊、前方測速（RediSearch）、快速訊息、地圖標註與前方路況、SOS、異常久停；**Web Push 推播**（SOS、落隊、失聯、全員到齊、前方測速、偏離路線、訊息，鎖螢幕也收得到）、**文字聊天室**（未讀數、往回翻頁、回放看得到）、**前方路況**（交通部 TDX 省道即時事件：有路線時沿路線前方 5 km、沒路線時行進方向 3 km，全隊通知一次）、**前方降雨**（氣象署鄉鎮預報：前方 0～50 km 預計經過時降雨機率 ≥ 60% 就通知）
-- [x] **M4 導航**：規劃頁（地點搜尋、聰明插入停靠點、沿路線找）、Valhalla 路線（機車不走國道與快速道路／重機不走國道但國道3甲例外、可走快速道路／汽車）、1～3 條方案、依個人速度估時間、Google Maps 匯入（選用）、全隊進度條、轉彎提示、偏離路線、路線版落隊
+- [x] **M4 導航**：規劃頁（地點搜尋、聰明插入停靠點、沿路線找）、Valhalla 路線（機車不走國道與快速道路／重機不走國道但國道3甲例外、可走快速道路／汽車）、1～3 條方案、依個人速度估時間、Google Maps 匯入（選用）、全隊進度條、轉彎提示、偏離路線（偏離 10 秒自動重算到下一個停靠點）、路線版落隊
 - [x] **M5 長期紀錄與大螢幕**：點亮全台鄉鎮（GEOSHAPE）、熱力圖、累計統計、戰情室、管理後台
 - [ ] **M6 繳交**：架構圖與 UML、部署說明、簡報大綱、影片腳本、繳交清單與 Redis 匯出工具已備好（`docs/`）；實際部署、簡報、錄影、上傳 GitHub 由使用者進行
 

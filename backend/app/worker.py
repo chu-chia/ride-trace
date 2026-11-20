@@ -25,7 +25,7 @@ from . import events, footprint, traffic, weather
 from .db import STATS_RULE_ARGS, K, advance_alert_ts, arrive, check_lag, r, update_stats
 from .longterm import record_point
 from .push import NOTIFY, flush_loop, handle_push
-from .geo import bearing_deg
+from .geo import bearing_deg, project_on_route as project
 
 log = logging.getLogger("qiji.worker")
 
@@ -361,30 +361,36 @@ async def load_route(tid: str):
     return ROUTES[tid]
 
 
-def project(coords, cum, lat, lon, hint=None):
-    """把點投影到路線（折線）上，回傳 (沿路線 km, 離路線 m, 線段 index)。先在上次位置附近找，找不到才全段掃。"""
-    kx, ky = 111320 * math.cos(math.radians(lat)), 110540
+NAV_CHECK_S = 3        # 個人路線多久重新確認一次還在不在（被刪掉／換新的）
+NAVS: dict[tuple, tuple] = {}  # (tid, uid) → (created, coords, cum, team_from, team_to, target 名稱, 上次確認時間)
+NAV_ARRIVE_KM = 0.05   # 個人路線剩 50 m 內算到了停靠點
 
-    def scan(lo, hi):
-        best = (float("inf"), 0, 0.0)
-        for i in range(max(0, lo), min(len(coords) - 1, hi)):
-            ax, ay = (coords[i][0] - lon) * kx, (coords[i][1] - lat) * ky
-            bx, by = (coords[i + 1][0] - lon) * kx, (coords[i + 1][1] - lat) * ky
-            dx, dy = bx - ax, by - ay
-            L2 = dx * dx + dy * dy
-            t = 0.0 if L2 == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / L2))
-            px, py = ax + t * dx, ay + t * dy
-            d = px * px + py * py
-            if d < best[0]:
-                best = (d, i, t)
-        return best
 
-    best = scan(hint - 150, hint + 400) if hint is not None else (float("inf"), 0, 0.0)
-    if best[0] > 300 ** 2:
-        best = scan(0, len(coords))
-    d2, i, t = best
-    km = cum[i] + (cum[i + 1] - cum[i]) * t
-    return km, math.sqrt(d2), i
+async def load_navroute(tid: str, uid: str):
+    """偏離後重算的個人路線（沒有就回傳 None）。只取用得到的欄位，3 秒內不重讀。"""
+    key = (tid, uid)
+    c = NAVS.get(key)
+    if c and time.time() - c[6] < NAV_CHECK_S:
+        return c
+    created = await r.json().get(K.navroute(tid, uid), "$.created")
+    if not created:
+        NAVS.pop(key, None)
+        return None
+    if c and c[0] == created[0]:
+        NAVS[key] = (*c[:6], time.time())
+        return NAVS[key]
+    res = await r.json().get(K.navroute(tid, uid), "$.coords", "$.cum_km", "$.team_from_km", "$.team_to_km", "$.target.name")
+    NAVS[key] = (created[0], res["$.coords"][0], res["$.cum_km"][0], res["$.team_from_km"][0], res["$.team_to_km"][0],
+                 res["$.target.name"][0], time.time())
+    LAST_IDX.pop((tid, uid, "nav"), None)
+    return NAVS[key]
+
+
+async def drop_navroute(tid: str, uid: str, text: str, ts: int):
+    await r.delete(K.navroute(tid, uid))
+    NAVS.pop((tid, uid), None)
+    await events.emit(tid, "onroute", uid, text, ts=ts)
+    await events.publish(tid, {"kind": "navroute", "uid": uid})
 
 
 async def check_progress(tid: str, uid: str, f: dict):
@@ -393,22 +399,43 @@ async def check_progress(tid: str, uid: str, f: dict):
         return
     _, coords, cum, _ = rt
     key = (tid, uid)
-    km, off, i = project(coords, cum, float(f["lat"]), float(f["lon"]), LAST_IDX.get(key))
+    lat, lon, ts = float(f["lat"]), float(f["lon"]), int(f["ts"])
+    km, off, i = project(coords, cum, lat, lon, LAST_IDX.get(key))
     LAST_IDX[key] = i
+    nkm = None
+    nav = await load_navroute(tid, uid)
+    if nav:
+        # 走個人路線：偏離與否看個人路線；全隊里程用「個人路線走了幾成」換算到 team_from～team_to 之間，
+        # 不直接投影（別條路投影到全隊路線上會跳來跳去，落隊／超前就會亂報）
+        _, ncoords, ncum, t_from, t_to, target, _ = nav
+        nkm, noff, ni = project(ncoords, ncum, lat, lon, LAST_IDX.get((tid, uid, "nav")))
+        LAST_IDX[(tid, uid, "nav")] = ni
+        total = ncum[-1] or 1
+        if total - nkm <= NAV_ARRIVE_KM:
+            await drop_navroute(tid, uid, f"到「{target}」，接回車隊路線", ts)
+            nkm = None
+        elif noff > OFF_ROUTE_M and off < BACK_ROUTE_M:
+            await drop_navroute(tid, uid, "騎回車隊路線", ts)  # 自己騎回原本的路
+            nkm = None
+        else:
+            km, off = t_from + (t_to - t_from) * min(1.0, nkm / total), noff
     async with r.pipeline(transaction=False) as p:
         p.hset(K.progress(tid), uid, round(km, 3))
         p.hset(K.state(tid, uid), mapping={"route_km": round(km, 3), "off_m": round(off)})
         await p.execute()
-    # 偏離／回到路線：HSETNX／HDEL 的回傳值保證多個 worker 也只通知一次
+    # 偏離／回到路線：HSETNX／HDEL 的回傳值保證多個 worker 也只通知一次（走個人路線時，判斷的是個人路線）
     if off > OFF_ROUTE_M:
         if await r.hsetnx(K.offroute(tid), uid, round(km, 2)):
-            await events.emit(tid, "offroute", uid, f"偏離路線 {round(off)} m", ts=int(f["ts"]))
+            await events.emit(tid, "offroute", uid, f"偏離路線 {round(off)} m", ts=ts)
     elif off < BACK_ROUTE_M and await r.hdel(K.offroute(tid), uid):
-        await events.emit(tid, "onroute", uid, "回到路線", ts=int(f["ts"]))
+        await events.emit(tid, "onroute", uid, "回到路線", ts=ts)
     now = time.time()
     if now - LAST_PUB.get(key, 0) >= PROGRESS_PUB_S:
         LAST_PUB[key] = now
-        await events.publish(tid, {"kind": "progress", "uid": uid, "km": round(km, 3), "off_m": round(off)})
+        msg = {"kind": "progress", "uid": uid, "km": round(km, 3), "off_m": round(off)}
+        if nkm is not None:
+            msg["nkm"] = round(nkm, 3)  # 個人路線上的里程（轉彎提示用）
+        await events.publish(tid, msg)
 
 
 STUCK_MIN = 10          # 規格 4.4：不在集合點或休息點，卻靜止超過 N 分鐘
