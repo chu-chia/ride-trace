@@ -114,3 +114,29 @@ def segment_cells(prev, cur):
             f = i / (n + 1)
             cells.add(cell_of(plat + (lat - plat) * f, plon + (lon - plon) * f))
     return cells
+
+
+def project_on_route(coords, cum, lat, lon, hint=None):
+    """把點投影到路線（折線）上，回傳 (沿路線 km, 離路線 m, 線段 index)。先在上次位置附近找，找不到才全段掃。"""
+    kx, ky = 111320 * math.cos(math.radians(lat)), 110540
+
+    def scan(lo, hi):
+        best = (float("inf"), 0, 0.0)
+        for i in range(max(0, lo), min(len(coords) - 1, hi)):
+            ax, ay = (coords[i][0] - lon) * kx, (coords[i][1] - lat) * ky
+            bx, by = (coords[i + 1][0] - lon) * kx, (coords[i + 1][1] - lat) * ky
+            dx, dy = bx - ax, by - ay
+            L2 = dx * dx + dy * dy
+            t = 0.0 if L2 == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / L2))
+            px, py = ax + t * dx, ay + t * dy
+            d = px * px + py * py
+            if d < best[0]:
+                best = (d, i, t)
+        return best
+
+    best = scan(hint - 150, hint + 400) if hint is not None else (float("inf"), 0, 0.0)
+    if best[0] > 300 ** 2:
+        best = scan(0, len(coords))
+    d2, i, t = best
+    km = cum[i] + (cum[i + 1] - cum[i]) * t
+    return km, math.sqrt(d2), i

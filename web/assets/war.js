@@ -200,7 +200,7 @@ const EXAG = 1.4; // mapbase 的地形誇張倍率
 const EV = {
   lost: '#ff453a', back: '#30d158', start: '#ff8a3d', end: '#8e8e93', stop: '#8e8e93', join: '#64d2ff', kick: '#ffd60a',
   behind: '#ffd60a', ahead: '#ffd60a', regroup: '#30d158', arrive: '#30d158', allin: '#30d158', speedcam: '#ffd60a', roadevent: '#ff9f0a', weather: '#64d2ff', chat: '#64d2ff',
-  msg: '#64d2ff', mark: '#ffd60a', sos: '#ff453a', sos_off: '#30d158', route: '#ff8a3d', offroute: '#ffd60a', onroute: '#30d158', town: '#ff8a3d', stuck: '#ffd60a', moving: '#30d158',
+  msg: '#64d2ff', mark: '#ffd60a', sos: '#ff453a', sos_off: '#30d158', route: '#ff8a3d', offroute: '#ffd60a', onroute: '#30d158', reroute: '#64d2ff', town: '#ff8a3d', stuck: '#ffd60a', moving: '#30d158',
 };
 
 /* ---------- 標記與軌跡 ---------- */

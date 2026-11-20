@@ -586,16 +586,60 @@ async function loadSos() { try { X.sos = await api(`/api/trips/${tid}/sos`); ren
 setInterval(() => { if (X.sos.length) renderSos(); }, 5000); // 距離會變
 
 /* ---------- 路線（M4）：路線線條、全隊進度條、我的下一個轉彎 ---------- */
-X.route = null; X.prog = {}; // uid → { km, off }
+X.route = null; X.prog = {}; // uid → { km（全隊路線上的里程）, off, nkm（走個人路線時，個人路線上的里程） }
+X.nav = null; // 偏離後幫我重算的個人路線（到下一個停靠點）；有它時轉彎提示照它，全隊路線改畫虛線
+X.offSince = 0; X.rerouting = false; X.lastReroute = 0;
+const REROUTE_AFTER_MS = 10000;   // 偏離持續 10 秒才重算（剛好經過路口、GPS 飄一下不會亂算）
+const REROUTE_COOLDOWN_MS = 30000; // 兩次重算至少隔 30 秒
 const turnCard = $('#qxTurn');
 
 const routeGeo = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: X.route?.coords || [] } });
+const navGeo = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: X.nav?.coords || [] } });
 M.onStyle(() => {
   if (!map.getSource('qx-route')) map.addSource('qx-route', { type: 'geojson', data: routeGeo() });
   const before = map.getLayer('trails-casing') ? 'trails-casing' : undefined; // 路線畫在大家的軌跡下面
   if (!map.getLayer('qx-route-casing')) map.addLayer({ id: 'qx-route-casing', type: 'line', source: 'qx-route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#04204a', 'line-width': 11, 'line-opacity': 0.75 } }, before);
   if (!map.getLayer('qx-route')) map.addLayer({ id: 'qx-route', type: 'line', source: 'qx-route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3d9bff', 'line-width': 6, 'line-opacity': 0.9 } }, before);
+  // 個人路線：畫在全隊路線上面
+  if (!map.getSource('qx-nav')) map.addSource('qx-nav', { type: 'geojson', data: navGeo() });
+  if (!map.getLayer('qx-nav-casing')) map.addLayer({ id: 'qx-nav-casing', type: 'line', source: 'qx-nav', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#04204a', 'line-width': 11, 'line-opacity': 0.75 } }, before);
+  if (!map.getLayer('qx-nav')) map.addLayer({ id: 'qx-nav', type: 'line', source: 'qx-nav', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3d9bff', 'line-width': 6, 'line-opacity': 0.95 } }, before);
+  styleNav();
 });
+// 走個人路線時，全隊路線改成灰色虛線：看得出車隊在哪條路，又不會跟自己要走的藍線搞混
+function styleNav() {
+  if (!map.getLayer('qx-route')) return;
+  const on = !!X.nav;
+  map.setPaintProperty('qx-route', 'line-color', on ? '#9aa0a6' : '#3d9bff');
+  map.setPaintProperty('qx-route', 'line-dasharray', on ? [1.5, 1.5] : [1, 0]);
+  map.setPaintProperty('qx-route', 'line-width', on ? 4 : 6);
+  map.setPaintProperty('qx-route-casing', 'line-opacity', on ? 0 : 0.75);
+}
+async function loadNav() {
+  const had = !!X.nav;
+  try { const r = await api(`/api/trips/${tid}/navroute`); X.nav = r?.coords ? r : null; } catch { X.nav = null; }
+  map.getSource('qx-nav')?.setData(navGeo());
+  styleNav();
+  if (had && !X.nav && S.trip?.status === 'live') toast('已接回車隊路線', { icon: '回', color: '#30a46c' });
+  renderTurn();
+}
+// 偏離 10 秒就從我目前的位置（含車頭方向）重算到下一個停靠點
+async function autoReroute() {
+  const me = S.members.get(S.me), st = me?.state || {};
+  if (X.rerouting || Date.now() - X.lastReroute < REROUTE_COOLDOWN_MS || st.lat == null || st.lat === '') return;
+  X.rerouting = true; X.lastReroute = Date.now(); renderTurn();
+  const hd = st.heading !== '' && st.heading != null && +st.speed > 1 ? +st.heading : null;
+  try {
+    const r = await api(`/api/trips/${tid}/reroute`, { method: 'POST', body: { lat: +st.lat, lon: +st.lon, heading: hd } }); // api() 會自己轉 JSON
+    X.nav = r?.coords ? r : null;
+    map.getSource('qx-nav')?.setData(navGeo()); styleNav();
+    if (X.nav) {
+      const extra = X.nav.summary.km - (X.nav.team_to_km - X.nav.team_from_km);
+      toast(`已重新規劃：到「${X.nav.target.name}」`, { icon: '算', color: '#0a84ff', sub: `${fmtKm(X.nav.summary.km)}・${extra >= 0 ? '多' : '少'} ${fmtKm(Math.abs(extra))}，到了就接回車隊路線` });
+    }
+  } catch (err) { toast(`重新規劃失敗：${err.message}`, { icon: '!', color: '#ff9f0a', sub: '30 秒後會再試' }); }
+  X.rerouting = false; X.offSince = 0; renderTurn();
+}
 
 async function loadRoute() {
   try { const r = await api(`/api/trips/${tid}/route`); X.route = r?.coords ? r : null; } catch { X.route = null; }
@@ -657,14 +701,24 @@ function renderTurn() {
   if (!X.route || !me || S.trip?.status !== 'live' || !S.members.get(S.me)?.u.active || !S.isLive?.(S.me)) { turnCard.hidden = true; return; }
   turnCard.hidden = false;
   if (me.off > 150) {
+    // 偏離：持續 10 秒就自動重算（後端判斷偏離的門檻也是 150 m）
+    if (!X.offSince) X.offSince = Date.now();
+    if (Date.now() - X.offSince > REROUTE_AFTER_MS) autoReroute();
     turnCard.className = 'qx-turn glass off';
-    turnCard.innerHTML = `<b>!</b><div><div class="d">偏離路線 ${fmtKm(me.off / 1000)}</div><div class="s">回到藍色路線上就會繼續提示</div></div>`;
+    turnCard.innerHTML = X.rerouting
+      ? '<b>…</b><div><div class="d">重新規劃中…</div><div class="s">從你現在的位置算到下一個停靠點</div></div>'
+      : `<b>!</b><div><div class="d">偏離路線 ${fmtKm(me.off / 1000)}</div><div class="s">${Date.now() - X.lastReroute < REROUTE_COOLDOWN_MS ? '回到藍色路線上就會繼續提示' : '再偏離一下就幫你重新規劃'}</div></div>`;
     return;
   }
-  const next = X.route.maneuvers.find((m) => m.km > me.km + 0.02 && ![1, 2, 3].includes(m.type));
+  X.offSince = 0;
+  // 走個人路線：照個人路線的轉彎提示；沒有就照全隊路線
+  const useNav = X.nav && me.nkm != null;
+  const R = useNav ? X.nav : X.route, at = useNav ? me.nkm : me.km;
+  const next = R.maneuvers.find((m) => m.km > at + 0.02 && ![1, 2, 3].includes(m.type));
   turnCard.className = 'qx-turn glass';
-  if (!next) { turnCard.innerHTML = `<b>⚑</b><div><div class="d">快到終點了</div></div>`; return; }
-  turnCard.innerHTML = `<b>${ARROW[next.type] || '↑'}</b><div><div class="d">${fmtKm(next.km - me.km)} 後 ${esc(next.act)}</div><div class="s">${esc(next.street || '')}</div></div>`;
+  const tag = useNav ? `<div class="s">個人路線・到「${esc(X.nav.target.name)}」接回車隊</div>` : '';
+  if (!next) { turnCard.innerHTML = `<b>⚑</b><div><div class="d">${useNav ? '快到停靠點了' : '快到終點了'}</div>${tag}</div>`; return; }
+  turnCard.innerHTML = `<b>${ARROW[next.type] || '↑'}</b><div><div class="d">${fmtKm(next.km - at)} 後 ${esc(next.act)}</div><div class="s">${esc(next.street || '')}</div>${tag}</div>`;
 }
 
 function renderRoutePanel() {
@@ -698,9 +752,10 @@ addEventListener('qiji:msg', (e) => {
     toast(`前方 ${msg.dist_m} m 有${msg.label}${msg.note ? '：' + msg.note : ''}`, { icon: '!', color: '#ff9f0a', sub: `${nameOf(msg.by)} 標註的` });
   }
   if ((msg.kind === 'event' && (msg.type === 'sos' || msg.type === 'sos_off')) || msg.kind === 'sos_refresh') loadSos();
-  if (msg.kind === 'snapshot') { loadWps(); loadMarks(); loadSos(); loadRoute(); }
-  if (msg.kind === 'route') { X.prog = {}; loadRoute(); }
-  if (msg.kind === 'progress') { X.prog[msg.uid] = { km: msg.km, off: msg.off_m }; if (msg.uid === S.me) renderTurn(); }
+  if (msg.kind === 'snapshot') { loadWps(); loadMarks(); loadSos(); loadRoute(); loadNav(); }
+  if (msg.kind === 'route') { X.prog = {}; X.nav = null; loadRoute(); loadNav(); } // 全隊路線換了，後端也刪了個人路線
+  if (msg.kind === 'navroute' && msg.uid === S.me) loadNav();
+  if (msg.kind === 'progress') { X.prog[msg.uid] = { km: msg.km, off: msg.off_m, nkm: msg.nkm }; if (msg.uid === S.me) renderTurn(); }
   if (msg.kind === 'speedcam' && msg.uid === S.me) camAlert(msg);
 });
 
@@ -708,6 +763,7 @@ loadWps();
 loadMarks();
 loadSos();
 loadRoute();
+loadNav();
 window.qijiExtra = X; // 除錯用
 
 /* ---------- 推播通知（更多 → 裝置與通知） ---------- */
