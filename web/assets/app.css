@@ -180,16 +180,20 @@ a.li{color:inherit}
   --lg-blur:8px; --lg-sat:190%; --lg-shadow:0 10px 36px rgba(0,0,0,.22);
   /* 玻璃裡的卡片、分段按鈕：半透明，整片看起來是同一塊玻璃 */
   --lg-surface:rgba(255,255,255,.5); --lg-surface-2:rgba(118,118,128,.14);
+  /* 面板（改版原型）：不透明的三階灰 */
+  --solid-2:#ececf0; --solid-3:#e1e1e6;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --lg-tint:rgba(22,22,28,.9); --lg-float:rgba(30,30,36,.9);
   --lg-edge:rgba(255,255,255,.2); --lg-inner:rgba(255,255,255,.22); --lg-sat:170%; --lg-shadow:0 10px 36px rgba(0,0,0,.4);
   --lg-surface:rgba(255,255,255,.07); --lg-surface-2:rgba(255,255,255,.1);
+  --solid-2:#2c2c2e; --solid-3:#3a3a3c;
 }}
 :root[data-theme="dark"]{
   --lg-tint:rgba(22,22,28,.9); --lg-float:rgba(30,30,36,.9);
   --lg-edge:rgba(255,255,255,.2); --lg-inner:rgba(255,255,255,.22); --lg-sat:170%; --lg-shadow:0 10px 36px rgba(0,0,0,.4);
   --lg-surface:rgba(255,255,255,.07); --lg-surface-2:rgba(255,255,255,.1);
+  --solid-2:#2c2c2e; --solid-3:#3a3a3c;
 }
 
 /* 邊緣折射由 common.js liquidGlass() 依面板尺寸產生，寫進 --liquid-filter；沒有時（Safari、手機）就是一般毛玻璃 */
@@ -220,6 +224,10 @@ a.li{color:inherit}
 .panel{position:fixed;z-index:9;left:max(var(--edge),env(safe-area-inset-left,0px));top:max(var(--edge),env(safe-area-inset-top,0px));bottom:var(--edge);width:var(--panel-w);border-radius:var(--r-panel);display:flex;flex-direction:column;overflow:hidden;transition:width .25s ease}
 .panel>*{flex:none}
 .panel .handle{display:none}
+/* 外觀照改版原型：面板不用玻璃，改成不透明的深灰（淺色是白）底、圓角 20；裡面的卡片用第二階灰 */
+.panel.glass,.panel.solid{--surface:var(--solid);--surface-2:var(--solid-2);--surface-3:var(--solid-3);background:var(--solid);border:0;border-radius:20px;box-shadow:var(--shadow);-webkit-backdrop-filter:none;backdrop-filter:none}
+.panel .card{background:var(--surface-2);border-radius:16px}
+.panel .team-row.on{background:var(--surface-3)}
 .panel-head{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-3) var(--sp-3) var(--sp-2) var(--sp-2)}
 .panel-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .panel-title b{font-size:var(--fs-l);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -233,7 +241,7 @@ a.li{color:inherit}
 .panel-mini b{color:var(--fg)}
 /* 收合：只留頂列＋一行摘要（.panel-mini），寬度一致 */
 .panel.small{width:var(--panel-mini-w);bottom:auto}
-.panel.small>:not(.panel-head):not(.panel-mini):not(.handle):not(.keep){display:none!important}
+@media (min-width:761px){.panel.small>:not(.panel-head):not(.panel-mini):not(.handle):not(.keep){display:none!important}}
 .panel.small .panel-mini{display:flex}
 .panel.small .panel-collapse{background:var(--surface-2)}
 .panel-sec{font-size:var(--fs-s);font-weight:600;color:var(--muted);margin:var(--sp-2) 0 calc(var(--sp-1) * -1)}
@@ -256,23 +264,33 @@ a.li{color:inherit}
 body:has(.panel) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-w) + var(--edge) * 2)}
 body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-mini-w) + var(--edge) * 2)}
 
+/* 底部抽屜（common.js sheetDrag）：不是 peek 的內容跟著開合程度淡入，收合時看不到露出的半截 */
+.sheetx.sx-on>.sx-rest{opacity:clamp(0,calc(var(--sx-t,1) * 4 - .4),1)}
+/* 照原型：抽屜本身不讓瀏覽器處理觸控（拖曳交給 sheetDrag），清單可以上下捲 */
+.sheetx.sx-on{touch-action:none}
+.sheetx.sx-on .panel-body,.sheetx.sx-on .sheet-content{touch-action:pan-y;overscroll-behavior:contain}
 /* ---------- 手機：側欄變成底部抽屜 ---------- */
 @media (max-width:760px){
   :root{--tool:44px;--panel-h:min(72dvh,620px)}
-  .panel,.panel.small{left:0;right:0;top:auto;bottom:0;width:auto;height:var(--panel-h);border-radius:var(--r-panel) var(--r-panel) 0 0;border-bottom:0;transition:height .28s ease}
-  .panel.small{height:auto}
+  /* 抽屜高度固定，開合用 transform 整塊推（common.js sheetDrag 寫 --sheet-off）；收合時內容照樣在，只是推到畫面外 */
+  .panel,.panel.small{left:0;right:0;top:auto;bottom:0;width:auto;height:var(--panel-h);border-radius:20px 20px 0 0;border-bottom:0;box-shadow:0 -2px 16px rgba(0,0,0,.35);
+    transform:translateY(var(--sheet-off,0px));transition:transform .28s cubic-bezier(.2,.8,.2,1);will-change:transform}
+  .panel.dragging{transition:none}
+  /* 一直貼在畫面最下面的列（行程頁的 SOS）：抽屜往下推多少，它就往上推回多少 */
+  .panel>.keep{position:relative;z-index:1;background:var(--solid);transform:translateY(calc(-1 * var(--sheet-off,0px)))}
+  .panel.dragging>.keep{transition:none}
+  .panel>.keep{transition:transform .28s cubic-bezier(.2,.8,.2,1)}
   /* 把手可點範圍 44px 高（UX-14），下面的頂列不再留上邊距，抽屜總高度只多約 19px */
   .panel .handle{display:grid;place-items:center;border:0;background:none;padding:0;min-height:44px;cursor:grab;touch-action:none}
   .panel .handle::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--muted);opacity:.65}
   .panel-head{padding:0 var(--sp-3) var(--sp-2) var(--sp-2)}
   .panel-collapse{display:none}
-  .panel.small .panel-mini{padding-bottom:max(var(--sp-3),env(safe-area-inset-bottom,0px))}
   .tools{gap:6px}
   body:has(.panel) .maplibregl-ctrl-bottom-left,body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:0}
   /* --sheet-h 是抽屜每一格的實際高度（common.js sheetDrag），拖曳時比例尺跟著走 */
   body:has(.panel) .maplibregl-ctrl-bottom-left,body:has(.panel) .maplibregl-ctrl-bottom-right{bottom:calc(var(--sheet-h,120px) + 4px)}
 }
-@media (prefers-reduced-motion:reduce){.panel{transition:none}}
+@media (prefers-reduced-motion:reduce){.panel,.panel>.keep{transition:none}}
 
 /* 行程頁／戰情室的整頁錯誤畫面（common.js fatal()）：不透明底，地圖不會透上來 */
 .qx-fatal{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px 16px;background:var(--bg);color:var(--fg)}

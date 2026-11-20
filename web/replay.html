@@ -96,13 +96,9 @@
     .maplibregl-ctrl-bottom-right{bottom:96px}
   }
   /* ---------- 外觀照原型：不透明的深灰底（不用玻璃）、圓角 20、元件小一號 ---------- */
-  :root{--surface-3:#e1e1e6}
-  :root[data-theme="dark"]{--surface-3:#3a3a3c}
-  .panel.solid{background:var(--surface);border:0;border-radius:20px;box-shadow:var(--shadow);-webkit-backdrop-filter:none;backdrop-filter:none}
   .pbar{background:var(--surface);border-radius:20px;box-shadow:var(--shadow)}
-  #panel .card{background:var(--surface-2);border-radius:16px;padding:12px 14px}
+  #panel .card{padding:12px 14px}
   #panel .team-row{border-top-color:var(--line)}
-  #panel .team-row.on{background:var(--surface-3)}
   #peek,#pbar,.panel-head,#tabs{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
   #tabs{border-radius:12px;padding:3px;gap:4px}
   #tabs button{min-height:38px;padding:0 6px;border-radius:9px;font-size:14px;font-weight:600;color:var(--muted)}
@@ -139,10 +135,6 @@
   .rtop .panel-title b{font-size:15px}
   .rtop .panel-title .sub{font-size:12px}
   @media (max-width:760px){
-    .panel.solid,.panel.solid.small{border-radius:20px 20px 0 0;box-shadow:0 -2px 16px rgba(0,0,0,.35)}
-    .panel.small>#peek,.panel.small>#tabs{display:flex!important}
-    .panel.small>#peek{flex-direction:column}
-    .panel.small>#tabs{margin-bottom:max(var(--sp-3),env(safe-area-inset-bottom,0px))}
     #peek{display:flex;flex-direction:column}
     .maplibregl-ctrl-bottom-right{bottom:calc(var(--sheet-h,120px) + 4px)}
   }
@@ -163,7 +155,7 @@
 <aside class="panel solid" id="panel">
   <button class="handle" aria-expanded="true"></button>
   <div class="panel-head" id="head"><a class="icon-btn" id="back" href="/" data-icon="back" aria-label="回首頁"></a><div class="panel-title"><b id="tName">回放</b><div class="sub" id="tSub">載入中…</div></div><button class="icon-btn panel-collapse" data-icon="collapse" aria-expanded="true"></button></div>
-  <div id="peek">
+  <div id="peek" class="peek">
     <div class="player" id="player">
       <button class="play" id="play" aria-label="播放"></button>
       <div class="clk" id="clk"><b class="num" id="clock">--:--</b><span class="num" id="elapsed">+0:00</span></div>
@@ -175,7 +167,7 @@
     </div>
     <div class="fol" id="fol" aria-label="鏡頭跟誰"></div>
   </div>
-  <nav class="seg" id="tabs" aria-label="回放資訊"><button class="on" data-t="team">全隊</button><button data-t="chart">圖表</button><button data-t="ev">事件</button><button data-t="sum">摘要</button></nav>
+  <nav class="seg peek" id="tabs" aria-label="回放資訊"><button class="on" data-t="team">全隊</button><button data-t="chart">圖表</button><button data-t="ev">事件</button><button data-t="sum">摘要</button></nav>
   <div class="panel-body">
     <div class="tabsec" data-tab="team">
       <section class="card" id="teamStatus">

@@ -188,7 +188,7 @@ function setSheet(open) {
   setTimeout(() => PADS.refresh(), 0); // PADS 在檔案後段才建立
 }
 $('#sheetHandle').onclick = () => setSheet(sheet.classList.contains('small'));
-sheetDrag(sheet, { isOpen: () => !sheet.classList.contains('small'), setOpen: setSheet, scroll: '.sheet-content' });
+sheetDrag(sheet, { isOpen: () => !sheet.classList.contains('small'), setOpen: setSheet, scroll: '.sheet-content', peek: '.sheet-handle, .sheet-summary, .sheet-tabs', mq: mobile });
 document.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => {
   currentTab = b.dataset.tab;
   document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
