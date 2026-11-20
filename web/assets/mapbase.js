@@ -141,7 +141,7 @@ function showMapError(container, msg) {
 }
 
 // 不考慮傾斜，算出能把範圍放進留白內可視區的 zoom（cameraForBounds 算不出來時的備案）
-function flatZoom(b, padding = {}, maxZoom = 15, map) {
+export function flatZoom(b, padding = {}, maxZoom = 15, map) {
   const box = map ? map.getContainer() : null;
   const BW = box?.clientWidth || innerWidth, BH = box?.clientHeight || innerHeight;
   // 留白比畫面還大時（手機抽屜拉到很高）W／H 會變成 0 或負的，算出來是 zoom 0（整個世界）：至少留畫面的 1/4
