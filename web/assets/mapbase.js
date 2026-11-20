@@ -170,7 +170,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       // 省電模式（common.js 在 <html> 加 .low-power）：手機 3 倍螢幕只畫 2 倍，像素少一半以上
       pixelRatio: document.documentElement.classList.contains('low-power') ? Math.min(devicePixelRatio, 2) : devicePixelRatio,
       fadeDuration: document.documentElement.classList.contains('low-power') ? 0 : 300, // 省電：文字不做淡入（淡入期間會一直重畫）
-      maxPitch: 80, attributionControl: false,  // 來源標示統一放在「關於網頁」（頭像選單），地圖右下角不放 ⓘ
+      maxPitch: 80, attributionControl: false,  // 來源標示統一放在「關於網頁」（設定頁最下面），地圖右下角不放 ⓘ
       dragRotate: interactive3d, pitchWithRotate: interactive3d, touchPitch: interactive3d,
     });
   } catch (e) {

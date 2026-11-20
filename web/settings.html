@@ -33,6 +33,10 @@
   .row{flex-wrap:wrap}
   .row>span{flex:1 1 auto}
   .page{overflow-wrap:anywhere}
+  .links .lk{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:48px;padding:0 2px;border:0;border-top:1px solid var(--line);background:none;color:var(--fg);font:inherit;font-size:15px;text-decoration:none;cursor:pointer;text-align:left}
+  .links h2+.lk{border-top:0}
+  .links .lk span{color:var(--muted);font-size:18px}
+  .links .lk.out{color:var(--crit-ink);font-weight:600}
 </style>
 </head>
 <body>
@@ -97,11 +101,20 @@
     <div class="row" style="margin-top:8px"><span>裝置 ID</span><code id="trId">…</code></div>
     <p class="small muted" style="margin:10px 0 0">iPhone 背景定位要用 Traccar Client，把上面兩個值填進去；裝置 ID 是你專屬的，不要給別人。</p>
   </section>
+
+  <!-- 首頁沒有帳號選單了（頭像直接進設定），關於、管理後台、登出都放這裡 -->
+  <section class="card links">
+    <h2>其他</h2>
+    <a href="/about" class="lk">關於騎跡<span aria-hidden="true">›</span></a>
+    <a href="/admin" class="lk" id="adminLink" hidden>管理後台<span aria-hidden="true">›</span></a>
+    <button type="button" class="lk out" id="logout">登出</button>
+  </section>
 </main>
 <script type="module">
 import { api, $, esc, avatar, LOW_POWER } from '/assets/common.js';
 import { resumeMs } from '/assets/gestures.js';
-import { mountPushCard } from '/assets/push.js';
+import { mountPushCard, pushEndpoint, dropLocalPush } from '/assets/push.js';
+import { clearSwrCache } from '/assets/swr.js';
 mountPushCard($('#pushCard'));  // 和行程頁同一張推播卡（UX-08）
 $('#lowPower').checked = LOW_POWER;
 $('#resume').value = String(resumeMs() / 1000);
@@ -136,6 +149,17 @@ $('#pwF').onsubmit = async (e) => {
     await api('/api/me/password', { method: 'POST', body: { old: $('#pwOld').value, new: $('#pwNew').value } });
     m.className = 'msg ok'; m.textContent = '密碼已變更'; e.target.reset();
   } catch (err) { m.className = 'msg err'; m.textContent = err.message; }
+};
+api('/api/admin/whoami').then((w) => { if (w.admin) $('#adminLink').hidden = false; }).catch(() => {});
+$('#logout').onclick = async () => {
+  // 先把這台的推播訂閱交給後端一起刪掉，再取消瀏覽器的訂閱：登出後這台不會再收到這個帳號的通知（UX-06）
+  $('#logout').disabled = true;
+  const endpoint = await pushEndpoint();
+  await api('/api/logout', { method: 'POST', body: { endpoint } });
+  await dropLocalPush();
+  await clearSwrCache();
+  try { localStorage.removeItem(`qiji-footprint-preview:${me.uid}`); } catch { /* 儲存空間不可用 */ }
+  location.href = '/login';
 };
 $('#trUrl').textContent = `${location.origin}/osmand`;
 api('/api/me/device').then((d) => ($('#trId').textContent = d.device_id)).catch(() => {});
