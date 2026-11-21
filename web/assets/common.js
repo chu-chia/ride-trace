@@ -154,15 +154,24 @@ export function swipeAway(el, onGone) {
   };
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
 }
-export function toast(text, { icon = '騎', color = '#d9500f', sub = '' } = {}) {
+// action：{ label, onClick } 在右邊放一顆按鈕（例如「改用傾斜」），按了就收掉；ms：幾毫秒後自動消失
+export function toast(text, { icon = '騎', color = '#d9500f', sub = '', action = null, ms = 5000 } = {}) {
   const el = document.createElement('div');
   el.className = 'toast';
-  el.innerHTML = `<div class="ic" style="--c:${color};--ink:${inkOn(color)}">${esc(icon)}</div><div style="min-width:0"><div class="tx">${esc(text)}</div>${sub ? `<div class="tt">${esc(sub)}</div>` : ''}</div>`;
+  el.innerHTML = `<div class="ic" style="--c:${color};--ink:${inkOn(color)}">${esc(icon)}</div><div style="min-width:0;flex:1"><div class="tx">${esc(text)}</div>${sub ? `<div class="tt">${esc(sub)}</div>` : ''}</div>`;
+  if (action) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'toast-act'; b.textContent = action.label;
+    b.addEventListener('pointerdown', (e) => e.stopPropagation());  // 不要被滑掉手勢吃掉
+    b.onclick = () => { el.remove(); action.onClick(); };
+    el.append(b);
+  }
   const z = zone();
   z.prepend(el);
   while (z.children.length > 3) z.lastChild.remove();
-  setTimeout(() => el.remove(), 5000);
+  setTimeout(() => el.remove(), ms);
   swipeAway(el, () => el.remove());
+  return el;
 }
 
 // 訊號弱：移動中 30 秒沒新點；停著（< 5 km/h）3 分鐘（停著時手機本來就少送，甚至休眠不送；10 分鐘才算失聯）
@@ -339,9 +348,12 @@ export const PERF = (() => {
 if (PERF) { window.__qijiMaps ||= []; import('/assets/perf.js'); }
 // 動畫迴圈用：回傳 false 表示這一格跳過（省電時約 30 fps）
 export function frameGate() {
-  const ms = LOW_POWER ? 1000 / 30 - 2 : 0;
   let last = 0;
-  return (now) => { if (now - last < ms) return false; last = now; return true; };
+  return (now) => {
+    // 效能量測 A/B「3D 20fps」：地圖和頁面迴圈要一起降，不然標記和底圖會錯開一格、看起來在抖
+    const ms = !LOW_POWER ? 0 : window.__qiji3d && window.__qijiPerfFlags?.has('fps20') ? 1000 / 20 - 2 : 1000 / 30 - 2;
+    if (now - last < ms) return false; last = now; return true;
+  };
 }
 
 // 地圖留白平滑過渡：抽屜或側欄開合後，鏡頭用 0.45 秒滑到新的置中位置，不會一下子閃過去

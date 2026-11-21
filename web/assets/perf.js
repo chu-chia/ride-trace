@@ -26,15 +26,31 @@ const tileHits = [];           // [時間, 來源]
 // ---------- A/B 開關（存在 localStorage，換頁、重開都保留） ----------
 // nohs：關山影　nofollow：鏡頭不跟隨（地圖不動）　noel：跟隨時不取地形高度　notrail：戰情室不更新軌跡
 // （11-22 也試過山影改用粗圖磚 z10／z9：fps 沒有改善，山影的負擔在逐像素計算，不在圖磚數量，所以拿掉了）
-const FLAG_LIST = [['nohs', '關山影'], ['nofollow', '不跟隨'], ['noel', '不取高度'], ['notrail', '不更新軌跡']];
+// lod：傾斜時遠處少畫細節（MapLibre setSourceTileLodParams，預設 9.314／3 → 3.5／2）　p45：最大傾斜 45°（Apple Maps 拉近會放平）
+// fps20：3D 時地圖和頁面迴圈都降到 20 fps（Google 導航 SDK 省電時降到 10 fps）　tilt：只傾斜、不畫地形（2D 傾斜）
+const FLAG_LIST = [['lod', '遠處減細節'], ['p45', '傾斜45°'], ['dpr125', '解析度1.25'], ['fps20', '3D 20fps'], ['tilt', '只傾斜不地形'],
+  ['blur', '毛玻璃'], ['nohs', '關山影'], ['nofollow', '不跟隨'], ['noel', '不取高度'], ['notrail', '不更新軌跡']];
 const flags = new Set();
 try { for (const f of JSON.parse(localStorage.getItem('qiji:perf-flags') || '[]')) flags.add(f); } catch { /* 私密模式 */ }
 window.__qijiPerfFlags = flags;
 const maps = [];
 function applyFlags() {
+  // blur：省電模式本來不做背景模糊（.low-power .glass），強制打開，量 glass 按鈕的負擔
+  document.documentElement.classList.toggle('perf-blur', flags.has('blur'));
   for (const m of maps) {
     try {
       if (m.getLayer('hillshade')) m.setLayoutProperty('hillshade', 'visibility', flags.has('nohs') ? 'none' : 'visible');
+      // dpr125：地圖解析度 1.25 倍；關掉時回到 mapbase 的預設（省電 3D 1.5、省電 2D 2、一般模式原生）
+      const dpr = flags.has('dpr125') ? 1.25 : !LOW ? devicePixelRatio : Math.min(devicePixelRatio, m.getTerrain() || m._qijiTilt ? 1.5 : 2);
+      if (m.getPixelRatio() !== dpr) m.setPixelRatio(dpr);
+      if (flags.has('lod') !== !!m._qijiLod) { m._qijiLod = flags.has('lod'); m.setSourceTileLodParams(m._qijiLod ? 3.5 : 9.314, m._qijiLod ? 2 : 3); }
+      if (m.getMaxPitch() > 0) {
+        const mp = flags.has('p45') ? 45 : 80;
+        if (m.getMaxPitch() !== mp) { m.setMaxPitch(mp); if (mp === 80 && window.__qiji3d) m.easeTo({ pitch: 60, duration: 400 }); }
+      }
+      // 只傾斜：拿掉地形但保留傾斜；關掉時如果是我們拿掉的就裝回去
+      if (flags.has('tilt') && m.getTerrain()) { m._qijiTilt = m.getTerrain(); m.setTerrain(null); }
+      else if (!flags.has('tilt') && m._qijiTilt) { if (window.__qiji3d) m.setTerrain(m._qijiTilt); m._qijiTilt = null; }
     } catch { /* 樣式還沒好 */ }
   }
 }
@@ -49,6 +65,7 @@ css.textContent = `#qiji-perf{position:fixed;z-index:2147483647;font:600 11px/1.
 border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:6px 8px;pointer-events:auto;user-select:none;-webkit-user-select:none;touch-action:manipulation}
 #qiji-perf pre{margin:0 0 4px;font:inherit;white-space:pre;max-width:240px;overflow:hidden;text-overflow:ellipsis}
 #qiji-perf canvas{display:block;width:240px;height:48px}
+html.perf-blur .glass{-webkit-backdrop-filter:blur(var(--lg-blur,20px)) saturate(var(--lg-sat,1.6))!important;backdrop-filter:blur(var(--lg-blur,20px)) saturate(var(--lg-sat,1.6))!important}
 #qiji-perf .fl{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-width:240px}
 #qiji-perf .fl button{font:600 11px/1 system-ui;color:#cfd8e6;background:#1e2633;border:1px solid #3a4558;border-radius:6px;padding:6px 7px}
 #qiji-perf .fl button[aria-pressed="true"]{background:#b45309;border-color:#f59e0b;color:#fff}
