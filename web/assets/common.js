@@ -335,6 +335,25 @@ export const LOW_POWER = (() => {
 })();
 document.documentElement.classList.toggle('low-power', LOW_POWER);
 
+// ---------- 玻璃效果（設定頁可關、可調濃淡；只影響這台裝置） ----------
+// qiji:glass = '0' 關閉；qiji:glass-a = 小按鈕底色不透明度 40～95（%），大面板自動再濃 12%
+export const GLASS_DEFAULT_A = 72;
+export function glassPrefs() {
+  let on = true, a = GLASS_DEFAULT_A;
+  try {
+    on = localStorage.getItem('qiji:glass') !== '0';
+    const v = Number(localStorage.getItem('qiji:glass-a'));
+    if (v >= 40 && v <= 95) a = v;
+  } catch { /* 私密模式 */ }
+  return { on, a };
+}
+export function applyGlass({ on, a } = glassPrefs()) {
+  const root = document.documentElement;
+  root.classList.toggle('no-glass', !on);
+  root.style.setProperty('--lg-a', String(a / 100));
+}
+applyGlass();
+
 // ---------- 效能量測浮層（開發用）：網址加 ?perf=1 開、?perf=0 關，同一分頁換頁會保留 ----------
 export const PERF = (() => {
   const q = new URLSearchParams(location.search).get('perf');

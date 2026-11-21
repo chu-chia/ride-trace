@@ -168,3 +168,19 @@ body.nav .rider .dot[data-more]:not([data-more=""])::after{content:attr(data-mor
 body.nav .rider.nv-target .dot{box-shadow:0 0 0 4px #4c8dff,0 2px 8px rgba(0,0,0,.35)}
 body.nav .nv-focus{display:flex}
 body.nav .nv-focus.nv-hidden{display:none}
+
+/* ── 玻璃（HIG regular）：浮鈕、速度、返回目前位置、聚焦列、底部抽屜。轉彎卡、橫幅、速限、SOS、結束導航維持實色 ──
+   導航模式有自己的深淺色（data-nvtheme），不跟著 app 主題，所以這裡重新算一次底色；不透明度 --lg-a 共用設定頁的值 */
+body.nav{--nvg-rgb:42 43 47; --nvg-sheet:30 31 34; --nvg-sub:rgba(255,255,255,.1); --nvg-inner:rgba(255,255,255,.18)}
+body.nav[data-nvtheme="light"]{--nvg-rgb:255 255 255; --nvg-sheet:255 255 255; --nvg-sub:rgba(0,0,0,.06); --nvg-inner:rgba(255,255,255,.7)}
+.nv-fab:not(.sos),.nv-cur,.nv-recenter,.nv-focus{
+  background:rgb(var(--nvg-rgb) / var(--lg-a))!important;
+  box-shadow:inset 0 1px 0 var(--nvg-inner),var(--nv-shadow)!important;
+  -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)); backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
+.nv-sheet{
+  background:rgb(var(--nvg-sheet) / min(1, calc(var(--lg-a) + .12)))!important; --nv-sheet-2:var(--nvg-sub);
+  -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)); backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
+.nv-fab.team .cnt{border-color:transparent}
+/* 省電：抽屜改回實色不模糊（小按鈕照樣是玻璃） */
+.low-power .nv-sheet{background:var(--nv-sheet)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.no-glass :is(.nv-fab,.nv-cur,.nv-recenter,.nv-focus,.nv-sheet){-webkit-backdrop-filter:none!important;backdrop-filter:none!important}

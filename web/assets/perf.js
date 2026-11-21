@@ -36,7 +36,7 @@ window.__qijiPerfFlags = flags;
 const maps = [];
 function applyFlags() {
   // blur：真的看得出來的毛玻璃（底色 45% 透明、模糊 16px），量 glass 按鈕／面板的負擔。
-  // 現有 .glass 底色 90% 不透明，模糊幾乎看不出來；省電模式（.low-power .glass）更是直接不模糊
+  // 正式的 .glass 現在是底色 72%（設定頁可調）、模糊 20px；省電模式只有大面板不模糊
   document.documentElement.classList.toggle('perf-blur', flags.has('blur'));
   for (const m of maps) {
     try {
