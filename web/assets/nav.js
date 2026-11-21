@@ -121,14 +121,14 @@ const spoken = new Set();
 /* ───── 地圖上的東西：我的箭頭、終點、轉彎箭頭、路線（進度漸層） ───── */
 const puckEl = document.createElement('div');
 puckEl.innerHTML = '<svg class="nv-puck" viewBox="0 0 44 44"><circle cx="22" cy="22" r="20" fill="#fff" opacity=".18"/><path d="M22 6 34 36 22 29 10 36z" fill="#1a73e8" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>';
-puckEl.style.zIndex = '1000'; // 自己永遠畫在隊友頭像上面（隊友的標記 z-index 是 1、2）
-const puck = new maplibregl.Marker({ element: puckEl, rotationAlignment: 'map', pitchAlignment: 'map' });
+puckEl.style.zIndex = '1000'; // 自己永遠畫在隊友頭像上面（隊友的標記 z-index 是 1、2）；被山擋住也不變透明（opacityWhenCovered）
+const puck = new maplibregl.Marker({ element: puckEl, rotationAlignment: 'map', pitchAlignment: 'map', opacityWhenCovered: '1' });
 const destEl = document.createElement('div');
 destEl.innerHTML = '<svg class="nv-dest" viewBox="0 0 34 44"><path d="M17 1C8.2 1 1 8 1 16.6 1 28.3 17 43 17 43s16-14.7 16-26.4C33 8 25.8 1 17 1z" fill="#d93025" stroke="#fff" stroke-width="2"/><circle cx="17" cy="16.5" r="6" fill="#fff"/></svg>';
-const dest = new maplibregl.Marker({ element: destEl, anchor: 'bottom' });
+const dest = new maplibregl.Marker({ element: destEl, anchor: 'bottom', opacityWhenCovered: '1' });
 const arrowEl = document.createElement('div');
 arrowEl.innerHTML = '<svg width="34" height="34" viewBox="0 0 34 34"><path d="M17 3 30 28 17 22 4 28z" fill="#fff" stroke="#1d4fb8" stroke-width="2" stroke-linejoin="round"/></svg>';
-const arrowHead = new maplibregl.Marker({ element: arrowEl, rotationAlignment: 'map', pitchAlignment: 'map' });
+const arrowHead = new maplibregl.Marker({ element: arrowEl, rotationAlignment: 'map', pitchAlignment: 'map', opacityWhenCovered: '1' });
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const lineF = (c) => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: c } });
 const grad = (f) => { f = Math.min(0.9999, Math.max(0.0001, f)); return ['step', ['line-progress'], '#8a8f98', f, document.body.dataset.nvtheme === 'light' ? '#1a73e8' : '#4c8dff']; };
