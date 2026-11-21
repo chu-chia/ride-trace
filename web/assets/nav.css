@@ -1,0 +1,162 @@
+/* 行程頁的導航模式（nav.js）：數值照改版原型 ride-trace-redesign/nav.html（隊伍呈現選 A：地圖為主，只放頭像） */
+.nv{display:none}
+body.nav .nv{display:block}
+body.nav{
+  --nv-green:#0f6e45; --nv-green-2:#0a5434; --nv-sheet:#1e1f22; --nv-sheet-2:#2a2b2f; --nv-ink:#fff; --nv-ink-2:#b9bcc3; --nv-eta:#3ccf83;
+  --nv-fab:#2a2b2f; --nv-fab-ink:#e8eaed; --nv-warn:#f4b400; --nv-shadow:0 2px 10px rgba(0,0,0,.35);
+}
+body.nav[data-nvtheme="light"]{--nv-sheet:#fff; --nv-sheet-2:#f1f3f4; --nv-ink:#202124; --nv-ink-2:#5f6368; --nv-eta:#188038; --nv-fab:#fff; --nv-fab-ink:#3c4043; --nv-shadow:0 2px 8px rgba(0,0,0,.22)}
+/* 導航時把行程頁的東西收起來 */
+body.nav #panel,body.nav #bMe,body.nav #nvCompass,body.nav .rtop,body.nav .sosFab,body.nav .followPill,body.nav #qxTurn,body.nav #qxProg,body.nav .skipLink,body.nav .map-loading,body.nav .qx-sosbar{display:none!important}
+body.nav .rider .name,body.nav .rider .arrow{display:none!important}
+body.nav .rider .dot{width:26px;height:26px;font-size:12px;border-width:2px}
+body.nav .rider.me{visibility:hidden}
+body.nav .maplibregl-ctrl-bottom-left,body.nav .maplibregl-ctrl-bottom-right{display:none}
+body.nav .nv button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+body.nav .nv svg{display:block}
+.nv-hidden,.nv-recenter.nv-hidden,.nv-fabs .nv-hidden{display:none!important}
+/* 不在 .nv 底下的按鈕（抽屜、浮鈕、返回）也清掉瀏覽器預設樣式 */
+.nv-sheet button,.nv-fabs button,.nv-recenter,.nv-edge{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+
+/* ── 轉彎卡 ── */
+.nv-turn{position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 8px);max-width:440px;z-index:12;color:#fff;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.nv-track{display:flex;gap:10px;align-items:flex-start;transition:transform .3s cubic-bezier(.2,.8,.2,1);will-change:transform}
+.nv-turn.dragging .nv-track{transition:none}
+.tcard{flex:0 0 100%;--c:#5f6368;--c2:#4a4d51}
+.tcard.live{--c:var(--nv-green);--c2:var(--nv-green-2)}
+.tcard.arrived{--c:#1a73e8;--c2:#1557b0}
+.tcard.off{--c:#5f6368}
+.turn-main{display:flex;align-items:center;gap:14px;padding:16px 14px 16px 12px;background:var(--c);border-radius:16px;box-shadow:var(--nv-shadow);position:relative;z-index:1;transition:background .3s}
+.tcard.has-then .turn-main{border-bottom-left-radius:0}
+.turn-ico{min-width:72px;flex:none;display:flex;flex-direction:column;align-items:center;gap:2px}
+.turn-ico svg{width:52px;height:52px}
+.turn-dist{font-size:22px;font-weight:700;white-space:nowrap}
+.turn-dist small{font-size:14px;font-weight:600;margin-left:2px;opacity:.9}
+.turn-txt{flex:1;min-width:0}
+.turn-verb{font-size:17px;opacity:.85}
+.turn-road{font-size:28px;font-weight:700;line-height:1.15;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.turn-then{display:none;align-items:center;gap:6px;padding:8px 16px 9px;background:var(--c2);font-size:17px;font-weight:600;width:max-content;border-radius:0 0 14px 14px;box-shadow:var(--nv-shadow)}
+.tcard.has-then .turn-then{display:flex}
+.turn-then svg{width:24px;height:24px}
+.tcard.near .turn-dist{font-size:28px}
+/* 沒有路線：自由騎乘 */
+.nv-free{position:fixed;left:8px;right:8px;max-width:440px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:12;background:var(--nv-sheet);color:var(--nv-ink);border-radius:16px;box-shadow:var(--nv-shadow);padding:12px 14px;display:flex;align-items:center;gap:10px;font-weight:600}
+.nv-free small{font-weight:500;color:var(--nv-ink-2)}
+.nv-free a{margin-left:auto;padding:8px 14px;border-radius:999px;background:var(--nv-green);color:#fff;font-size:14px;text-decoration:none;white-space:nowrap}
+
+/* ── 橫幅（偏離、測速、隊友 SOS）── */
+.nv-banner{position:fixed;left:8px;right:8px;max-width:440px;z-index:12;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;box-shadow:var(--nv-shadow);animation:nvdrop .25s ease-out}
+.nv-banner.warn{background:var(--nv-warn);color:#202124}
+.nv-banner.sos{background:var(--sos);color:#fff}
+.nv-banner.info{background:var(--nv-sheet);color:var(--nv-ink)}
+.nv-banner small{font-weight:500}
+.nv-banner .act{margin-left:auto;padding:8px 14px!important;border-radius:999px;background:rgba(255,255,255,.25)!important;font-size:15px;flex:none}
+.nv-banner.warn .act{background:rgba(0,0,0,.12)!important}
+@keyframes nvdrop{from{transform:translateY(-12px);opacity:0}}
+
+/* ── 右側浮鈕 ── */
+.nv-fabs{position:fixed;right:10px;z-index:11;display:flex!important;flex-direction:column;gap:12px;align-items:center;transition:opacity .2s}
+body:not(.nav) .nv-fabs{display:none!important}
+.nv-fab{width:52px;height:52px;border-radius:50%;background:var(--nv-fab)!important;color:var(--nv-fab-ink)!important;box-shadow:var(--nv-shadow);display:grid;place-items:center}
+.nv-fab svg{width:24px;height:24px}
+.nv-fab.team{position:relative}
+.nv-fab.team .cnt{position:absolute;top:-4px;right:-4px;min-width:22px;height:22px;border-radius:11px;background:#1a73e8;color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center;padding:0 5px;border:2px solid var(--nv-fab)}
+.nv-fab.sos{background:var(--sos)!important;color:#fff!important;font-weight:800;font-size:15px;letter-spacing:.5px}
+.nv-fab.on{color:#4c8dff!important}
+
+/* ── 左下速度 ── */
+.nv-speed{position:fixed;left:10px;z-index:11;display:flex!important;flex-direction:column;align-items:center;gap:8px;transition:opacity .2s}
+body:not(.nav) .nv-speed{display:none!important}
+.nv-limit{width:46px;height:46px;border-radius:50%;background:#fff;border:5px solid #d93025;color:#202124;font-weight:800;font-size:17px;display:grid;place-items:center;box-shadow:var(--nv-shadow)}
+.nv-cur{width:62px;height:62px;border-radius:50%;background:var(--nv-fab);color:var(--nv-fab-ink);box-shadow:var(--nv-shadow);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.nv-cur b{font-size:24px}.nv-cur small{font-size:11px;color:var(--nv-ink-2);margin-top:2px}
+.nv-cur.over b{color:#ff5b4f}
+
+/* ── 返回目前位置 ── */
+.nv-recenter{position:fixed;left:10px;z-index:11;align-items:center;gap:8px;padding:12px 20px!important;border-radius:999px;background:var(--nv-fab)!important;color:#4c8dff!important;font-weight:700;font-size:16px;box-shadow:var(--nv-shadow);display:flex!important}
+body:not(.nav) .nv-recenter{display:none!important}
+body[data-nvtheme="light"] .nv-recenter{color:#1a73e8!important}
+.nv-recenter svg{width:20px;height:20px}
+
+/* ── 底部抽屜（共用 sheetDrag） ── */
+.nv-sheet{position:fixed;left:0;right:0;bottom:0;z-index:13;background:var(--nv-sheet);color:var(--nv-ink);border-radius:20px 20px 0 0;box-shadow:0 -2px 14px rgba(0,0,0,.35);
+  padding:6px 16px calc(env(safe-area-inset-bottom,0px) + 12px);max-width:560px;margin:0 auto;height:min(78vh,640px);display:flex!important;flex-direction:column;
+  transform:translateY(var(--sheet-off,0px));transition:transform .28s cubic-bezier(.2,.8,.2,1);will-change:transform}
+body:not(.nav) .nv-sheet{display:none!important}
+.nv-sheet.dragging{transition:none}
+.nv-sheet .handle{width:100%;height:22px;display:grid;place-items:center;flex:none}
+.nv-sheet .handle::before{content:"";width:40px;height:5px;border-radius:3px;background:var(--nv-ink-2);opacity:.5}
+.nv-row{display:flex;align-items:center;gap:12px;flex:none}
+.nv-round{width:48px;height:48px;border-radius:50%;background:var(--nv-sheet-2)!important;display:grid;place-items:center;flex:none}
+.nv-round svg{width:24px;height:24px}
+.nv-eta{flex:1;text-align:center;line-height:1.2}
+.nv-eta-time{font-size:26px;font-weight:700;color:var(--nv-eta)}
+.nv-eta-time small{font-size:18px;font-weight:600}
+.nv-eta-sub{font-size:15px;color:var(--nv-ink-2);margin-top:2px}
+.nv-more{padding-top:14px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y}
+body.nav.nv-open .nv-fabs,body.nav.nv-open .nv-speed,body.nav.nv-open .nv-recenter{opacity:0;pointer-events:none}
+.nv-sec-t{font-size:13px;color:var(--nv-ink-2);margin:6px 2px 8px;font-weight:600}
+.nv-mate{display:flex;align-items:center;gap:12px;padding:9px 4px!important;min-height:48px;width:100%;text-align:left}
+.nv-mate+.nv-mate{border-top:1px solid color-mix(in srgb,var(--nv-ink-2) 20%,transparent)}
+.nv-av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:15px;flex:none}
+.nv-mate .nm{font-weight:600}.nv-mate .st{font-size:13px;color:var(--nv-ink-2)}
+.nv-mate .gap{margin-left:auto;text-align:right;font-weight:600;font-size:15px;flex:none}
+.nv-mate .gap small{display:block;font-weight:400;font-size:12px;color:var(--nv-ink-2)}
+.nv-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.nv-tile{display:flex!important;flex-direction:column;align-items:center;gap:6px;padding:10px 0!important;border-radius:14px;background:var(--nv-sheet-2)!important;font-size:13px;min-height:72px;justify-content:center}
+.nv-tile svg{width:24px;height:24px}
+.nv-end{width:100%;margin-top:14px;height:50px;border-radius:14px;background:#d93025!important;color:#fff!important;font-weight:700;font-size:16px}
+
+/* ── 地圖上的標記 ── */
+.nv-puck{width:44px;height:44px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.45))}
+.nv-dest{width:34px;height:44px}
+.av-sos{box-shadow:0 0 0 3px #fff,0 0 0 6px var(--sos);animation:nvpulse 1s infinite}
+.av-lost{background:#80868b!important;opacity:.75}
+@keyframes nvpulse{50%{box-shadow:0 0 0 3px #fff,0 0 0 12px rgba(215,0,21,0)}}
+
+/* ── A｜地圖為主：畫面外的隊友貼在邊緣，小箭頭指向他的方向 ── */
+.nv-edges{position:fixed;inset:0;pointer-events:none;z-index:10}
+body.nav.nv-open .nv-edges{display:none}
+.nv-edge{position:absolute;left:0;top:0;width:34px;height:34px;display:grid;place-items:center;pointer-events:auto}
+.nv-edge .nv-av{width:28px;height:28px;font-size:12px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.nv-edge svg{position:absolute;left:50%;top:50%;width:12px;height:12px;margin:-6px;color:#fff;filter:drop-shadow(0 0 2px #000)}
+.nv-edge.sos svg{color:#ff5b4f}
+
+/* 導航時把通知 toast 移到轉彎卡下面 */
+body.nav .toast{top:var(--nv-top,140px)!important}
+
+@media (min-width:700px){
+  .nv-turn,.nv-banner,.nv-free{left:16px;right:auto;width:420px}
+  .nv-turn{max-width:420px;overflow:hidden;padding-bottom:12px}
+}
+/* ── 手機橫向：轉彎卡和抽屜都靠左成一欄，地圖和自己的位置在右邊，按鈕排在最右一欄 ── */
+@media (orientation:landscape) and (max-height:520px){
+  body.nav{--pw:min(380px,42vw)}
+  .nv-turn,.nv-banner,.nv-free{left:8px;right:auto;width:var(--pw);max-width:none}
+  .turn-main{padding:10px 12px 10px 8px;gap:10px}
+  .turn-ico{min-width:56px}.turn-ico svg{width:40px;height:40px}
+  .turn-dist{font-size:18px}.turn-road{font-size:22px;-webkit-line-clamp:1}.turn-verb{font-size:15px}
+  .turn-then{font-size:15px;padding:5px 12px 6px}
+  .nv-sheet{left:8px;right:auto;width:var(--pw);max-width:none;margin:0;height:auto;max-height:calc(100% - 16px);padding-left:12px;padding-right:12px;bottom:8px;border-radius:20px}
+  .nv-eta-time{font-size:22px}.nv-eta-sub{font-size:13.5px}
+  .nv-round{width:42px;height:42px}
+  .nv-fabs{gap:8px}
+  .nv-fab{width:44px;height:44px}.nv-fab svg{width:21px;height:21px}.nv-fab.sos{font-size:13px}
+  .nv-limit{width:40px;height:40px;font-size:15px;border-width:4px}
+  .nv-cur{width:54px;height:54px}.nv-cur b{font-size:20px}
+  .nv-speed{flex-direction:row;align-items:flex-end}
+  .nv-turn{padding-bottom:0}
+  /* 抽屜打開也不會蓋到地圖（在左欄），浮鈕、速度、返回、邊緣頭像照常顯示 */
+  body.nav.nv-open .nv-fabs,body.nav.nv-open .nv-speed,body.nav.nv-open .nv-recenter{opacity:1;pointer-events:auto}
+  body.nav.nv-open .nv-edges{display:block}
+}
+
+/* 導航時右上工具列（全隊／3D／深色／指北）排在轉彎卡下面，抽屜打開時跟著滑出 */
+body.nav .tools{display:flex!important;top:calc(var(--nv-turn-b,130px) + 12px)!important}
+body.nav.nv-open .tools{opacity:0;pointer-events:none}
+@media (orientation:landscape) and (max-height:520px){ body.nav .tools{top:max(var(--edge),env(safe-area-inset-top,0px))!important} body.nav.nv-open .tools{opacity:1;pointer-events:auto} }
+/* 隊友頭像：跟我疊在一起的縮小變淡、靠太近的合併成一顆＋數字 */
+body.nav .rider.nv-nearme{opacity:.35;transform-origin:center}
+body.nav .rider.nv-nearme .dot{transform:scale(.7)}
+body.nav .rider.nv-merged{display:none}
+body.nav .rider .dot[data-more]:not([data-more=""])::after{content:attr(data-more);position:absolute;top:-8px;right:-12px;min-width:20px;height:18px;padding:0 4px;border-radius:9px;background:#1a73e8;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center;border:1.5px solid #fff}

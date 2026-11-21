@@ -252,7 +252,8 @@ function tick(now) {
   // 暫離超過設定秒數（預設 10 秒）、手指也不在地圖上，就回到原本的模式（縮放維持使用者調的）
   const back = resumeMs();
   if (S.away && back > 0 && !M.busy && Date.now() - S.awayAt > back) setFollow(S.follow, { keepZoom: true });
-  if (t && !S.away) {
+  if (S.navMode) { /* 導航模式（nav.js）自己管鏡頭 */ }
+  else if (t && !S.away) {
     // 切換跟隨對象：每一格朝他「現在」的位置內插過去（人一直在動，easeTo 到按下時的位置，結束會再跳一次），
     // 飛完直接接上跟隨。
     if (!S.followZoomed && S.styleReady) {  // 跟隨中使用者自己拉遠不再強制拉近（手勢規則第 2 條）
@@ -276,7 +277,7 @@ function tick(now) {
     const pts = [...S.members.values()].filter(inGroup).map((m) => m.pos);
     if (pts.length >= 2) M.followGroup(pts, { padding: S.pad, maxZoom: 15 });
   } else M.unfollow();
-  if (now - lastDeclutter > 200) {
+  if (!S.navMode && now - lastDeclutter > 200) {  // 導航模式由 nav.js 自己合併頭像
     lastDeclutter = now;
     const ft = followTarget();
     const list = [...S.members.values()].filter((m) => m.onMap && m.pos)
@@ -298,6 +299,11 @@ function syncTools() {
   $('#bAll').classList.toggle('away', S.follow === 'all' && S.away);
   $('#bMe').classList.toggle('away', S.follow === S.me && S.away);
   markFocus([...S.members].map(([id, m]) => [id, m.el]), S.follow === 'all' ? null : S.follow, S.away);
+  // 手機：下方中間「跟隨 X ✕」（照原型）
+  const fm = S.follow !== 'all' && !S.away ? S.members.get(S.follow) : null, fp = $('#followPill');
+  fp.classList.toggle('show', !!fm);
+  const html = fm ? `${avatar(fm.u)}<span>跟隨 ${esc(fm.u.uid === S.me ? '我' : fm.u.nickname)}</span><button type="button" aria-label="取消跟隨，回到全隊">✕</button>` : '';
+  if (fp.dataset.html !== html) { fp.dataset.html = html; fp.innerHTML = html; const x = fp.querySelector('button'); if (x) x.onclick = () => setFollow('all'); }
 }
 $('#bAll').onclick = () => setFollow('all');
 $('#bMe').onclick = () => pick(S.me);
@@ -339,51 +345,150 @@ function restoreTab() {
   if (saved.tab !== 'more' || !saved.more) selectTab(saved.tab, { open: false });
 }
 
-// 橫幅：每秒重畫，但內容沒變就不動 DOM（按鈕的「再按一次確定」倒數才不會被洗掉）
-function setBanner(html, bind) {
-  const b = $('#banner');
-  b.hidden = !html;
-  if (b.dataset.html === html) return;
-  b.dataset.html = html;
-  b.innerHTML = html;
+// 內容沒變就不動 DOM（每秒重畫；按鈕「再按一次確定」的倒數才不會被洗掉）
+function setHTML(el, html, bind) {
+  if (el.dataset.html === html) return;
+  el.dataset.html = html;
+  el.innerHTML = html;
   bind?.();
 }
-const inviteBtn = '<button class="btn" data-invite>＋ 邀請隊友</button>';
+/* ---------- 階段（照改版原型）：準備 → 集合 → 騎乘 → 結束，收起時只看到這一塊和它的主按鈕 ---------- */
+const STAGES = [['prep', '準備'], ['gather', '集合'], ['ride', '騎乘'], ['done', '結束']];
+function stepperHtml(cur) {
+  const ci = STAGES.findIndex(([k]) => k === cur);
+  return `<div class="stepper" aria-label="行程階段：${STAGES[ci][1]}">${STAGES.map(([, n], i) =>
+    `${i ? `<span class="ln ${i <= ci ? 'done' : ''}"></span>` : ''}<span class="s ${i < ci ? 'done' : i === ci ? 'cur' : ''}"><i>${i < ci ? '✓' : i + 1}</i>${n}</span>`).join('')}</div>`;
+}
+const sharing = () => [...S.members.values()].filter((m) => statusOf(m) !== 'none' && statusOf(m) !== 'done').length;
+function stageOf() {
+  const t = S.trip, me = S.members.get(S.me);
+  if (t.status === 'ended') return 'done';
+  if (t.status === 'live') return me && !me.u.active ? 'done' : 'ride';  // 自己結束紀錄了：自己這邊算結束
+  // 集合：至少兩個人在分享位置，或有人已經到集合點（只有自己一直開著 Traccar 不算，不然每趟準備中的行程都會變集合）
+  const meet = (S.wps || []).find((w) => w.kind === 'meet') || (S.wps || [])[0];
+  const atMeet = meet && [...S.members.values()].some((m) => statusOf(m) !== 'none' && statusOf(m) !== 'done' && hav(meet.lat, meet.lon, +m.state.lat, +m.state.lon) <= (meet.radius_m || 150) + 50);
+  return sharing() >= 2 || atMeet ? 'gather' : 'prep';
+}
+// 路線摘要（起終點、公里、分鐘）：路線換了才重抓
+let routeSum = null, routeFor;
+function loadRouteSum() {
+  const rid = S.trip?.route || '';
+  if (rid === routeFor) return;
+  routeFor = rid;
+  if (!rid) { routeSum = null; renderStage(); return; }
+  api(`/api/trips/${tid}/route/summary`).then((r) => { routeSum = r?.summary ? r : null; renderStage(); }).catch(() => {});
+}
+const ci = (ok, title, sub, act, id) => `<button type="button" class="ci ${ok ? 'ok' : ''}" id="${id}"><span class="ck" aria-hidden="true">✓</span><span class="m"><b>${title}</b><span>${sub}</span></span><span class="go2">${act}</span></button>`;
+const meSharing = () => { const me = S.members.get(S.me); return !!S.gps || (me && statusOf(me) !== 'none'); };
+function gpsAction() { if (!S.gps && !meSharing()) $('#gpsBtn').click(); else selectMore('report'); }
+function renderStage() {
+  const t = S.trip, st = stageOf(), owner = t.is_owner;
+  $('#stepper').innerHTML = stepperHtml(st);
+  const pre = st === 'prep' || st === 'gather';
+  $$('#peek [data-st]').forEach((x) => { x.hidden = x.dataset.st !== (pre ? 'pre' : st); });
+  if (pre) {
+    const list = [...S.members.values()], n = list.length, on = meSharing(), sh = sharing();
+    const ownerName = S.members.get(t.owner)?.u.nickname || '建立者';
+    const others = list.filter((m) => m.u.uid !== S.me).map((m) => m.u.nickname);
+    const p = routeSum?.points || [], sum = routeSum?.summary;
+    const routeTxt = sum ? `${esc(p[0]?.name || '起點')} → ${esc(p.at(-1)?.name || '終點')}・${sum.km >= 10 ? Math.round(sum.km) : (+sum.km).toFixed(1)} 公里・約 ${sum.min} 分` : '還沒有路線（不規劃也可以，當天就自由騎）';
+    const meet = (S.wps || []).find((w) => w.kind === 'meet') || (S.wps || [])[0];
+    const startBtn = owner ? '<button class="btn main green" id="startBtn">開始行程</button>' : '';
+    const waitBtn = `<button class="btn main wait" disabled>等 ${esc(ownerName)} 按開始…</button>`;
+    let html;
+    if (st === 'prep') {
+      // 準備：路線、隊友、集合點三件事；主按鈕永遠是「下一件該做的事」（照原型），都好了才是開始
+      const invTxt = n > 1 ? `${n} 人已加入：${esc(others.slice(0, 4).join('、') + (others.length > 4 ? ` 等 ${others.length} 人` : ''))}` : '現在只有你一個人';
+      const todo = owner ? (!sum ? ['cRoute', '規劃路線'] : n < 2 ? ['cInvite', '邀請隊友'] : !meet ? ['cMeet', '設定集合點'] : null) : null;
+      html = `<p class="stage-h">出發前準備</p>
+        <p class="stage-p">三件事打勾就準備好了；有人開始分享位置，就會進到「集合」。</p>
+        <div class="check">
+          ${ci(!!sum, '規劃路線', routeTxt, owner ? (sum ? '修改' : '規劃 ›') : '看', 'cRoute')}
+          ${ci(n > 1, '邀請隊友', invTxt, n > 1 ? '再邀' : '邀請 ›', 'cInvite')}
+          ${ci(!!meet, '集合點', meet ? esc(meet.name) : '還沒設定（在地圖上點一下就能加）', meet ? '看' : (owner ? '設定 ›' : '看'), 'cMeet')}
+        </div>
+        ${owner
+          ? (todo ? `<button class="btn main primary" id="todoBtn" data-go="${todo[0]}">${todo[1]}</button><p class="why">也可以不等，<button type="button" class="linkBtn" id="startBtn">直接開始行程</button>（會通知全隊）</p>`
+                  : `${startBtn}<p class="why">都準備好了。人到齊就按開始，全隊會收到通知、開始記錄軌跡。</p>`)
+          : (!on ? '<button class="btn main primary" id="todoBtn" data-go="cGps">開啟位置回報</button><p class="why">先開好，集合時隊友就看得到你在哪。</p>'
+                 : `${waitBtn}<p class="why">${esc(ownerName)}（建立者）按「開始」之後，全隊一起進入騎乘。</p>`)}`;
+    } else {
+      // 集合：開位置回報、到集合點幾個人、路線（照原型）
+      const R = (w, m) => hav(w.lat, w.lon, +m.state.lat, +m.state.lon);
+      const live = list.filter((m) => statusOf(m) !== 'none' && statusOf(m) !== 'done');
+      const here = meet ? live.filter((m) => R(meet, m) <= (meet.radius_m || 150) + 50) : [];
+      const away = meet ? live.filter((m) => !here.includes(m)).map((m) => `${esc(m.u.uid === S.me ? '你' : m.u.nickname)} 還有 ${fmtKm(R(meet, m) / 1000)}`) : [];
+      const off = n - live.length;
+      const hereTxt = meet
+        ? [here.length ? `${here.map((m) => esc(m.u.uid === S.me ? '你' : m.u.nickname)).join('、')} 已到` : '還沒有人到', ...away.slice(0, 2), off ? `${off} 人還沒開位置` : ''].filter(Boolean).join('；')
+        : `${live.map((m) => esc(m.u.uid === S.me ? '你' : m.u.nickname)).join('、')} 在分享位置${off ? `；${off} 人還沒開` : ''}`;
+      html = `<p class="stage-h">${meet ? `集合中・${here.length}／${n} 人到「${esc(meet.name)}」` : `集合中・${sh}／${n} 人在分享位置`}</p>
+        <p class="stage-p">${owner ? '人到齊就按開始，全隊會收到通知、開始記錄軌跡。' : `${esc(ownerName)}（建立者）按「開始」之後，全隊一起進入騎乘。`}</p>
+        <div class="check">
+          ${ci(on, '開啟我的位置回報', on ? (S.gps ? '網頁 GPS 回報中・隊友看得到你' : '位置回報中・隊友看得到你') : '還沒開，隊友看不到你在哪', on ? '設定' : '開啟 ›', 'cGps')}
+          ${ci(meet ? here.length >= n : off === 0, meet ? `到集合點 ${here.length}／${n} 人` : `分享位置 ${sh}／${n} 人`, hereTxt, '看地圖', 'cHere')}
+          ${ci(!!sum, '路線', routeTxt, owner ? (sum ? '修改' : '規劃 ›') : '看', 'cRoute')}
+        </div>
+        ${!on ? '<button class="btn main primary" id="todoBtn" data-go="cGps">開啟位置回報</button><p class="why">要先開，隊友和戰情室才看得到你。</p>'
+          : owner ? `${startBtn}<p class="why">會通知全隊，大家的軌跡從這一刻開始記錄。還沒到的人也可以晚點跟上。</p>`
+          : `${waitBtn}<p class="why">開始後會自動進入騎乘，你不用再按任何東西。</p>`}`;
+    }
+    const acts = {
+      cGps: gpsAction,
+      cInvite: () => selectMore('invite'),
+      cRoute: () => { if (owner) location.href = `/plan?trip=${tid}`; else selectTab('route'); },
+      cMeet: () => selectTab('wp'),
+      cHere: () => { setFollow('all'); setCollapsed(true); },
+    };
+    setHTML($('#preBox'), html, () => {
+      for (const [id, f] of Object.entries(acts)) { const el = $('#' + id); if (el) el.onclick = f; }
+      const tb = $('#todoBtn'); if (tb) tb.onclick = () => acts[tb.dataset.go]?.();
+      $('#startBtn')?.addEventListener('click', (e) => {
+        // 一按就會推播給全隊：先確認一次（UX-45）
+        armConfirm(e.currentTarget, '再按一次開始（會通知全隊）', async () => {
+          try {
+            S.trip = { ...S.trip, ...(await api(`/api/trips/${tid}/start`, { method: 'POST' })) }; renderAll();
+            let auto = '1'; try { auto = localStorage.getItem('qiji:nav:auto') ?? '1'; } catch { /* 私密模式 */ }
+            if (auto === '1' && window.qijiExtra?.route) dispatchEvent(new Event('qiji:nav-open'));
+          }
+          catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+        });
+      });
+    });
+  } else if (st === 'done') {
+    const me = S.members.get(S.me), k = me?.u.stats || {};
+    const km = +k.km || 0, mv = +k.moving_s || 0;
+    const html = `<p class="stage-h">${t.status === 'ended' ? '騎完了，辛苦了 🎉' : '你的紀錄已結束'}</p>
+      <div class="kv4 num"><div><b>${km.toFixed(1)}</b><span>公里</span></div><div><b>${mv ? dur(mv * 1000) : '–'}</b><span>騎乘時間</span></div><div><b>${mv > 60 ? Math.round(km / (mv / 3600)) : '–'}</b><span>平均 km/h</span></div><div><b>${k.max_kmh ? Math.round(+k.max_kmh) : '–'}</b><span>最高 km/h</span></div></div>
+      <p class="done-l">${t.status === 'ended' ? `整趟行程已結束${t.ended_reason ? `・${esc(String(t.ended_reason).split('，')[0])}` : ''}` : '車隊還在騎，地圖會繼續顯示隊友的位置'}</p>
+      <div class="acts2"><a class="btn main primary" href="/replay?id=${tid}">看回放</a></div>
+      <div class="acts2"><a class="btn" href="/footprint">看足跡</a><a class="btn" href="/">回首頁</a></div>`;
+    setHTML($('#doneBox'), html);
+  }
+  loadRouteSum();
+}
 function renderHeader() {
   const t = S.trip;
   $('#tName').textContent = t.name;
+  $('#tAv').textContent = [...(t.name || '騎')][0];
   document.title = `${t.name} · 騎跡`;
-  const [label, cls] = TRIP_ST[t.status] || ['', ''];
+  // 狀態列照原型：準備中／● 集合中／● 騎乘中 1:23:45・3/4 在線／已結束
+  const stg = stageOf();
+  const [label, cls] = { prep: ['準備中', ''], gather: ['● 集合中', 'info'], ride: ['● 騎乘中', 'ok'], done: [t.status === 'ended' ? '已結束' : '● 騎乘中（你已結束）', t.status === 'ended' ? '' : 'ok'] }[stg];
   $('#tStatus').className = 'chip ' + cls;
   $('#tStatus').textContent = label;
-  $('#tTimer').textContent = t.status === 'live' && t.started ? '已騎 ' + dur(Date.now() - +t.started) : '';
+  $('#tTimer').textContent = t.status === 'live' && t.started ? dur(Date.now() - +t.started) : '';
   const meActive = S.members.get(S.me)?.u.active;
-  if (t.status === 'planned') {
-    setBanner(t.is_owner
-      ? `<div>行程還沒開始。等大家到齊後按開始，所有人的位置才會開始記錄，也會通知全隊。</div><div class="bannerBtns">${inviteBtn}<button class="btn primary" id="startBtn">開始行程</button></div>`
-      : `<div>等待建立者開始行程。可以先到「更多 → 裝置與通知」設定位置來源。</div><div class="bannerBtns">${inviteBtn}</div>`,
-    () => $('#startBtn')?.addEventListener('click', (e) => {
-      // 一按就會推播給全隊：先確認一次（UX-45）
-      armConfirm(e.currentTarget, '再按一次開始（會通知全隊）', async () => {
-        try { S.trip = { ...S.trip, ...(await api(`/api/trips/${tid}/start`, { method: 'POST' })) }; renderAll(); }
-        catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
-      });
-    }));
-  } else if (t.status === 'ended') {
-    setBanner(`<div>行程已結束，可以整隊回放這一趟。</div><a class="btn primary" href="/replay?id=${tid}">看回放</a>`);
-  } else if (t.status === 'live' && (meActive || t.is_owner)) {
-    // 「我騎完了」放在面板上，不用到 更多 → 裝置與通知 找；建立者可以直接結束整趟（UX-10）
-    setBanner(`<div class="bannerBtns">${meActive ? '<button class="btn" id="doneBtn">我騎完了</button>' : ''}${t.is_owner ? '<button class="btn danger" id="finishBtn">結束整趟行程</button>' : ''}</div>`, () => {
-      $('#doneBtn')?.addEventListener('click', (e) => armConfirm(e.currentTarget, '再按一次結束我的紀錄', endMine));
-      $('#finishBtn')?.addEventListener('click', (e) => armConfirm(e.currentTarget, '再按一次結束全隊', async () => {
-        try { await api(`/api/trips/${tid}/finish`, { method: 'POST' }); }
-        catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
-      }));
-    });
-  } else setBanner('');
+  renderStage();
   $('#endBtn').hidden = !(t.status === 'live' && meActive);
+  $('#finishBtn').hidden = !(t.status === 'live' && t.is_owner);
   $('#teamInvite').hidden = t.status === 'ended';
+  $('#bShare').hidden = t.status === 'ended';
 }
+$('#finishBtn').onclick = (e) => armConfirm(e.currentTarget, '再按一次結束全隊', async () => {
+  try { await api(`/api/trips/${tid}/finish`, { method: 'POST' }); }
+  catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+});
 // 邀請入口（等待卡片、隊友分頁）都打開 更多 → 邀請隊友（UX-24）
 document.addEventListener('click', (e) => { if (e.target.closest('[data-invite], #teamInvite')) selectMore('invite'); });
 
@@ -404,6 +509,16 @@ function renderTeam() {
   // 「進團」和「正在回報位置」分開寫：大家都開著網頁、但還沒人開始回報時，不會看起來像全員離線（UX-33）
   $('#quickTeam').textContent = `${list.length} 人進團・${online ? `${online} 人正在回報` : '還沒有人回報位置'}${lagging ? `・${lagging} 人落隊` : ''}`;
   $('#sOnline').title = `${list.length} 人進團，${online} 人正在回報位置`;
+  $('#tOnline').textContent = S.trip.status === 'live' ? `・${online}/${list.length} 在線` : '';
+  // 騎乘中的收合區塊：已騎、海拔、在線、落隊、回報狀態
+  const myKm = +me?.u.stats?.km || 0, myAlt = $('#sAlt').textContent;
+  $('#rideA').innerHTML = `已騎 <b class="num">${myKm.toFixed(1)} km</b>${myAlt !== '–' ? `・海拔 <b class="num">${myAlt} m</b>` : ''}`;
+  $('#rideLag').textContent = lagging ? `・${lagging} 人落隊` : '';
+  renderRideB();
+  const rg = $('#rideGps'), on = meSharing();
+  rg.textContent = S.gps ? '● 網頁 GPS 回報中' : on ? '● 位置回報中' : '開始回報我的位置';
+  rg.classList.toggle('on', on); rg.classList.toggle('primary', !on);
+  if (S.trip.status === 'planned') renderStage();  // 有人開始分享位置：準備 → 集合
   // 和回放頁同一種隊員表：名字＋狀態、速度、海拔、已騎、距離我；點一下鏡頭跟著他
   teamTable($('#team'), list.map((m) => {
     const st = statusOf(m), [label, cls] = STATUS[st], s = m.state;
@@ -475,11 +590,16 @@ function renderInvite() {
 function renderLag() {
   const t = S.trip, el = $('#lagSet');
   const opts = [1, 2, 3, 5, 10].concat(t.lag_km).filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
-  el.innerHTML = t.is_owner
-    ? `落隊警示：離全隊中心超過 <select id="lagKm">${opts.map((v) => `<option value="${v}"${v === t.lag_km ? ' selected' : ''}>${v} km</option>`).join('')}</select>`
-    : `落隊警示：離全隊中心超過 ${t.lag_km} km`;
-  $('#lagKm')?.addEventListener('change', async (e) => {
-    try { await api(`/api/trips/${tid}/settings`, { method: 'PATCH', body: { lag_km: +e.target.value } }); toast(`落隊門檻改成 ${e.target.value} km`); }
+  // 一張卡片：說明＋門檻（建立者可以改，其他人只能看）
+  const html = `<div class="eyebrow">落隊警示</div>
+    <div class="small muted">有人離全隊中心超過這個距離，全隊會收到「落隊」通知，隊友列表也會標出來。</div>
+    ${t.is_owner ? `<div class="seg" id="lagKm" role="group" aria-label="落隊門檻">${opts.map((v) => `<button type="button" data-km="${v}" class="${v === t.lag_km ? 'on' : ''}" aria-pressed="${v === t.lag_km}">${v} km</button>`).join('')}</div>`
+      : `<div><b class="num" style="font-size:20px">${t.lag_km} km</b><span class="small muted">　（建立者可以調整）</span></div>`}`;
+  if (el.dataset.html === html) return;
+  el.dataset.html = html; el.innerHTML = html;
+  $('#lagKm')?.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-km]'); if (!b) return;
+    try { await api(`/api/trips/${tid}/settings`, { method: 'PATCH', body: { lag_km: +b.dataset.km } }); S.trip.lag_km = +b.dataset.km; renderLag(); toast(`落隊門檻改成 ${b.dataset.km} km`); }
     catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
   });
 }
@@ -660,6 +780,30 @@ async function endMine() {
 $('#endBtn').onclick = (e) => armConfirm(e.currentTarget, '再按一次確定結束', endMine);
 
 $('#bReplay').href = `/replay?id=${tid}`;
+$('#warLink2').href = `/war?id=${tid}`;
+// 騎乘中收合區塊第二行（照原型）：下一站＋距離；沒有路線時顯示在線人數
+function renderRideB() {
+  const ns = S.nextStop, lag = $('#rideLag').textContent;
+  $('#rideB').innerHTML = ns ? `下一站 <b>${esc(ns.name)}</b>・${fmtKm(ns.km)}${lag}` : `<b class="num">${$('#sOnline').textContent}</b> 人在線${lag}${$('#rideRoute').textContent}`;
+}
+addEventListener('qiji:next', renderRideB);
+addEventListener('qiji:wps', () => { if (S.trip?.status === 'planned') renderStage(); });
+$('#rideGps').onclick = gpsAction;
+// 開始導航（照原型）：有路線＝導航，沒有路線＝自由騎乘；導航模式在 nav.js
+$('#goNav').onclick = () => dispatchEvent(new Event('qiji:nav-open'));
+const syncGoNav = () => { $('#goNav').lastChild.textContent = window.qijiExtra?.route ? '開始導航' : '開始自由騎乘'; };
+setInterval(syncGoNav, 2000); syncGoNav();
+// 路線剩多少（trip-extra.js 寫在 #quickRoute）：抄到騎乘中的收合區塊
+new MutationObserver(() => { const v = $('#quickRoute').textContent; $('#rideRoute').textContent = v ? `・${v}` : ''; }).observe($('#quickRoute'), { childList: true, characterData: true, subtree: true });
+// 手機：SOS 浮鈕（照原型），打開同一個求救視窗；SOS 進行中時字跟著變「解除」
+$('#sosFab').onclick = () => $('#sosOpen').click();
+new MutationObserver(() => { $('#sosFab').textContent = $('#sosOpen').textContent; $('#sosFab').setAttribute('aria-label', $('#sosOpen').getAttribute('aria-label') || ''); }).observe($('#sosOpen'), { childList: true, characterData: true, subtree: true, attributes: true });
+// 手機直向：頂列搬到畫面上方浮動（照原型：圓形返回鍵＋膠囊），電腦和橫向放回側欄
+{
+  const NARROW = matchMedia('(max-width: 760px)');
+  const place = () => { if (NARROW.matches) $('#rtop').append($('#head')); else $('#panel').insertBefore($('#head'), $('#panel .panel-mini')); refreshPad(); };
+  place(); NARROW.addEventListener('change', place);
+}
 $('#warLink').href = `/war?id=${tid}`;
 $('#warFoot').href = `/war?id=${tid}`;
 $('#trUrl').textContent = `${location.origin}/osmand`;

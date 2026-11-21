@@ -1,7 +1,7 @@
 // 行程頁的 M3／M4 功能：集合點、前方測速、快速訊息、地圖標註、SOS、路線（進度條、轉彎提示）。
 // 和 trip.js 分開放，避免和畫面設計的改動互相衝突。trip.js 只提供三個掛鉤：
 //   window.qijiM（地圖包裝）、window.qijiState（頁面狀態）、window 的 'qiji:msg' 事件（每則 WebSocket 訊息）
-import { api, tripGate, armConfirm, $, esc, toast, clock, ago } from '/assets/common.js';
+import { api, tripGate, armConfirm, $, esc, toast, clock, ago, avatar } from '/assets/common.js';
 import { mountPushCard } from '/assets/push.js';
 
 const tid = new URLSearchParams(location.search).get('id');
@@ -10,6 +10,8 @@ const tid = new URLSearchParams(location.search).get('id');
 await tripGate(tid);
 const M = window.qijiM, map = window.qijiMap, S = window.qijiState;
 const X = { wps: [], pins: new Map(), open: null, pick: null };
+// 集合點給 trip.js 的「出發前／集合」清單用（到集合點幾個人）
+const shareWps = () => { S.wps = X.wps; dispatchEvent(new Event('qiji:wps')); };
 const KIND = { meet: '集合點', rest: '休息點' };
 const nameOf = (uid) => S.members.get(uid)?.u.nickname || '';
 
@@ -182,7 +184,7 @@ map.on('click', (e) => {
 });
 
 async function loadWps() {
-  try { X.wps = await api(`/api/trips/${tid}/waypoints`); drawWps(); if (X.open === 'wp') render(); } catch { /* 不是成員或網路錯誤時 trip.js 會處理 */ }
+  try { X.wps = await api(`/api/trips/${tid}/waypoints`); shareWps(); drawWps(); if (X.open === 'wp') render(); } catch { /* 不是成員或網路錯誤時 trip.js 會處理 */ }
 }
 
 /* ---------- 測速照相 ---------- */
@@ -367,8 +369,10 @@ async function markRead() {
   try { setUnread((await api(`/api/trips/${tid}/chat/read`, { method: 'POST', body: { id: last.id } })).unread); } catch { /* 略過 */ }
 }
 function chatRow(m) {
-  const mine = m.uid === S.me;
-  return `<div class="qc-msg${mine ? ' me' : ''}"><div class="qc-meta">${mine ? '' : `<b>${esc(nameOf(m.uid) || '隊友')}</b> `}<time>${clock(m.ts)}</time></div><div class="qc-bubble">${esc(m.text)}</div></div>`;
+  // 照原型：別人的訊息左邊放頭像、上面一行「名字・時間」；自己的靠右、橘色泡泡
+  const mine = m.uid === S.me, u = S.members.get(m.uid)?.u;
+  const av = mine ? '' : avatar(u || { nickname: nameOf(m.uid) || '隊友', color: '#8e8e93' });
+  return `<div class="qc-msg${mine ? ' me' : ''}">${av}<div><div class="qc-meta">${mine ? '' : `<b>${esc(nameOf(m.uid) || '隊友')}</b>・`}<time>${clock(m.ts)}</time></div><div class="qc-bubble">${esc(m.text)}</div></div></div>`;
 }
 function renderChatList(stick = true) {
   const box = $('#qcList');
@@ -380,7 +384,7 @@ function renderChatList(stick = true) {
 }
 function renderMsgPanel() {
   pop.innerHTML = `
-    <div class="qx-head"><b>快速訊息</b></div>
+    <div class="qx-head"><b>快速訊息</b><small>一鍵通知全隊</small></div>
     <div class="qx-presets">${PRESETS.map((t) => `<button class="btn" data-say="${esc(t)}">${esc(t)}</button>`).join('')}</div>
     <div class="qx-head qc-head"><b>聊天</b></div>
     <div class="qc-list" id="qcList"><div class="small muted qc-empty">載入中…</div></div>
@@ -684,6 +688,11 @@ function renderProgress() {
   const me = X.prog[S.me];
   const left = me ? total - me.km : null;
   $('#quickRoute').textContent = me ? `剩 ${fmtKm(Math.max(0, left))}` : `全長 ${fmtKm(total)}`;
+  // 行程頁收合區塊（照原型）：下一站＝我前面最近的停靠點，沒有就是終點
+  const nx = me ? ticks.filter((t) => t.km > me.km + 0.03).sort((a, b) => a.km - b.km)[0] : null;
+  const dest = X.route.points?.at(-1)?.name || '終點';
+  S.nextStop = me ? (nx ? { name: nx.w.name, km: nx.km - me.km } : { name: dest, km: Math.max(0, left) }) : null;
+  dispatchEvent(new Event('qiji:next'));
   bar.hidden = false;
   bar.innerHTML = `
     <div class="qx-prog-h"><b>全隊進度</b><span>${me ? `我 ${fmtKm(me.km)} / ${fmtKm(total)} · 剩 ${fmtKm(left)} · 約 ${etaClock((left / speedKmh(S.me)) * 60)} 到` : `全長 ${fmtKm(total)}`}</span></div>
@@ -746,7 +755,7 @@ setInterval(() => { if (X.route) renderProgress(); }, 2000);
 /* ---------- WebSocket 訊息 ---------- */
 addEventListener('qiji:msg', (e) => {
   const msg = e.detail;
-  if (msg.kind === 'waypoints') { X.wps = msg.items; drawWps(); if (X.open === 'wp' && !X.pick?.lngLat) render(); }
+  if (msg.kind === 'waypoints') { X.wps = msg.items; shareWps(); drawWps(); if (X.open === 'wp' && !X.pick?.lngLat) render(); }
   if (msg.kind === 'marks') { X.marks = msg.items; drawMarks(); if (X.open === 'mark' && !X.pick?.lngLat) render(); }
   if (msg.kind === 'hazard' && msg.uid === S.me) {
     toast(`前方 ${msg.dist_m} m 有${msg.label}${msg.note ? '：' + msg.note : ''}`, { icon: '!', color: '#ff9f0a', sub: `${nameOf(msg.by)} 標註的` });
