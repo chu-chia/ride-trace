@@ -1,8 +1,9 @@
 // 戰情室（規格 4.7，給在家看的人用的大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、騎士卡、事件、
 // 行程進度＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-// 版面照改版原型（ride-trace-redesign/war.html）：標題列＋KPI、左欄騎士／天氣路況／集合點、中間地圖、下方剖面、右欄事件；
-// 這個檔只給手機直拿（war.html 依螢幕選版面）：地圖＋分頁（騎士／事件／剖面）；電腦與手機橫向用 war.js。
-import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, ago, press, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter } from '/assets/common.js';
+// 這個檔只給手機直拿（war.html 依螢幕選版面；電腦與手機橫向用 war.js）。版面照改版原型 B（ride-trace-redesign/war-phone.html?v=b）：
+// 全螢幕地圖＋底部抽屜（收起：全程進度條＋三個數字＋分頁鈕；拉開：騎士／路線／事件／剖面），重要事件跳通知橫幅（往上滑掉）。
+// 身分：role＝viewer（只看）的人不出現在畫面上，只算「N 人觀看」；car（後援車）用方塊圖示、不算名次和帶頭距離。
+import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, ago, press, setLabel, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter, WATCH } from '/assets/common.js';
 import { createMap, addCompass } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -16,21 +17,117 @@ map.setPitch(60);
 const S = { trip: null, members: new Map(), events: [], route: null, prog: {}, gaps: {}, flags: {}, sos: new Map(), waypoints: [], weather: [], traffic: [], profile: null, styleReady: false };
 window.qijiWar = S;
 const FEED_FILTER_KEY = 'qiji:war:feed-filter:v2';
-const mobile = matchMedia('(max-width:899px) and (orientation:portrait),(max-width:899px) and (min-height:521px)');  // 手機橫向用電腦版版面
+const GAP_KEY = 'qiji:war:gap-mode';
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 $('#back').href = `/trip?id=${encodeURIComponent(tid)}`;
+if (WATCH) $('#back').hidden = true;  // 觀看連結：沒有行程頁可以回
 $('#mapStyle').onclick = () => setLabel($('#mapStyle'), M.nextStyle());
 $('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 press($('#b3d'), M.is3d);
-addCompass(M, document.querySelector('.mapw .tools'));  // 指北針：點一下北方朝上
-// 窄螢幕分頁：騎士／事件／剖面（剖面切過去時 canvas 才有尺寸，要重畫）
+addCompass(M, document.querySelector('.tools'));  // 指北針：點一下北方朝上
+/* ---------- 底部抽屜：三段停（收起／半開／全開） ----------
+   手感照共用 sheetDrag（超過 7px 才開始、跟著手指、拉過頭 1/3 阻力、放開看速度），但多一段「半開」：上半看地圖、下半看清單。
+   放開時：用「目前位置＋速度 × 0.2 秒」推算會停在哪，選最近的一段（甩快一點就會跳到下一段）。
+   只有全開時清單可以捲；清單捲到最上面再往下拉＝拉抽屜。抽屜目前露出的高度每一格交給地圖留白（車隊留在看得到的那塊地圖中間）。 */
+const sheet = $('#sheet'), body = sheet.querySelector('.sheet-body');
+sheet.dataset.mt = 'l';
+const STOPS = ['peek', 'mid', 'full'];
+let stop = 'peek', off = 0, dragging = false;
+const sheetH = () => sheet.offsetHeight;
+const peekH = () => { const pk = sheet.querySelector('.peek'); return Math.round(pk.offsetTop + pk.offsetHeight + Math.max(10, parseFloat(getComputedStyle(sheet).paddingBottom) || 0)); };
+// 每一段的位移（抽屜往下推多少）：全開＝0；半開＝露出畫面的 52%（至少比收起多 160px）；收起＝只露出進度條、數字、分頁鈕
+const offOf = (st) => {
+  const H = sheetH(), closed = Math.max(0, H - peekH());
+  if (st === 'full') return 0;
+  if (st === 'peek') return closed;
+  return Math.max(0, Math.min(closed - 160, H - Math.round(innerHeight * 0.52)));
+};
+function setOff(px, animate) {
+  off = px;
+  sheet.classList.toggle('dragging', !animate);
+  sheet.style.setProperty('--sheet-off', `${px}px`);
+  // 工具列：抽屜快全開時才往上滑走（半開時地圖還看得到，工具列留著）
+  const t = 1 - px / Math.max(1, offOf('peek'));
+  document.documentElement.style.setProperty('--sheet-t', Math.max(0, Math.min(1, (t - 0.6) / 0.4)).toFixed(3));
+}
+function setStop(st, animate = true) {
+  stop = st;
+  sheet.classList.toggle('small', st === 'peek');
+  sheet.dataset.stop = st;
+  body.classList.toggle('scroll', st === 'full');  // 只有全開時清單可以捲
+  if (st !== 'full') body.scrollTop = 0;
+  setOff(offOf(st), animate);
+}
+// 舊介面：true＝打開（收起時打開到半開）、false＝收起
+const setSheet = (open) => setStop(open ? (stop === 'peek' ? 'mid' : stop) : 'peek');
+{
+  let y0 = null, off0 = 0, last = 0, lastT = 0, vel = 0, moved = false, pid = null, inBody = false;
+  sheet.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target.closest('input, select, textarea')) return;
+    inBody = !!e.target.closest('.sheet-body');
+    if (inBody && stop === 'full' && body.scrollTop > 0) return;  // 全開、清單已經往下捲：交給清單捲
+    y0 = e.clientY; off0 = off; last = y0; lastT = performance.now(); vel = 0; moved = false; pid = e.pointerId;
+  });
+  addEventListener('pointermove', (e) => {
+    if (y0 == null || e.pointerId !== pid) return;
+    const dy = e.clientY - y0;
+    if (!moved && Math.abs(dy) < 7) return;
+    if (!moved && inBody && stop === 'full' && dy < 0) { y0 = null; return; }  // 全開時在清單裡往上滑＝捲清單
+    if (!moved) { moved = true; dragging = true; try { sheet.setPointerCapture(e.pointerId); } catch { /* ignore */ } }
+    const t = performance.now(); vel = (e.clientY - last) / Math.max(1, t - lastT); last = e.clientY; lastT = t;
+    const max = offOf('peek');
+    let o = off0 + dy;
+    if (o < 0) o /= 3;
+    if (o > max) o = max + (o - max) / 3;
+    setOff(o, false);
+  });
+  const end = (e) => {
+    if (y0 == null || e.pointerId !== pid) return;
+    y0 = null; dragging = false;
+    if (!moved) { sheet.classList.remove('dragging'); return; }
+    sheet.endAt = performance.now();
+    // 推算停點：位置＋速度 × 200ms，選最近的一段；甩得很快（> 0.6 px/ms）至少往甩的方向走一段
+    const proj = off + vel * 200;
+    let best = STOPS.reduce((a, b) => (Math.abs(offOf(b) - proj) < Math.abs(offOf(a) - proj) ? b : a));
+    const i0 = STOPS.indexOf(stop);
+    if (Math.abs(vel) > 0.6 && best === stop) best = STOPS[Math.max(0, Math.min(2, i0 + (vel < 0 ? 1 : -1)))];
+    setStop(best);
+  };
+  addEventListener('pointerup', end);
+  addEventListener('pointercancel', end);
+  // iOS：清單捲到頂再往下拉、或沒全開時拖清單，擋掉原生捲動（pointer 事件才不會被取消；iOS 不支援 touch-action: pan-down）
+  sheet.addEventListener('touchmove', (e) => { if (y0 != null && (moved || stop !== 'full' || body.scrollTop <= 0)) e.preventDefault(); }, { passive: false });
+  // 拖完瀏覽器補送的 click 不要觸發按鈕
+  sheet.addEventListener('click', (e) => { if (performance.now() - (sheet.endAt || 0) < 400) { e.preventDefault(); e.stopPropagation(); } }, true);
+}
+// 點把手：收起 → 半開 → 全開 → 收起
+sheet.querySelector('.handle').onclick = () => setStop(STOPS[(STOPS.indexOf(stop) + 1) % 3]);
+addEventListener('resize', () => { if (!dragging) setStop(stop, false); });
+if ('ResizeObserver' in window) new ResizeObserver(() => { if (!dragging) setStop(stop, false); }).observe(sheet.querySelector('.peek'));
+requestAnimationFrame(() => setStop('peek', false));
+// 分頁：收起時點分頁鈕＝打開抽屜並切過去（剖面切過去時 canvas 才有尺寸，要重畫）
 $('#mt').onclick = (e) => {
   const b = e.target.closest('[data-m]');
   if (!b) return;
-  document.body.dataset.mt = b.dataset.m;
+  sheet.dataset.mt = b.dataset.m;
   document.querySelectorAll('#mt button').forEach((x) => x.classList.toggle('on', x === b));
-  setTimeout(() => { renderProgress(); map.resize(); }, 30);
+  if (stop === 'peek') setStop('mid');
+  body.scrollTop = 0;
+  renderPane();
+  setTimeout(renderProgress, 30);
+};
+// 差距寫法：時間（+分:秒）或距離（+公里），記在這台
+let gapMode = (() => { try { return localStorage.getItem(GAP_KEY) === 'km' ? 'km' : 'time'; } catch { return 'time'; } })();
+const syncGm = () => document.querySelectorAll('#gm button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.g === gapMode)));
+syncGm();
+$('#gm').onclick = (e) => {
+  const b = e.target.closest('[data-g]');
+  if (!b) return;
+  gapMode = b.dataset.g;
+  try { localStorage.setItem(GAP_KEY, gapMode); } catch { /* 略過 */ }
+  syncGm(); renderCards();
 };
 addEventListener('resize', () => { map.resize(); renderProgress(); });
 
@@ -44,13 +141,18 @@ const EV = {
 const EV_NAME = {
   lost: '失聯', back: '恢復', start: '出發', end: '結束', stop: '停車', join: '加入', kick: '移出', behind: '落隊', ahead: '超前', regroup: '歸隊', waypoint: '停靠點', create: '建立', arrive: '抵達', allin: '到齊',
   speedcam: '測速', roadevent: '路況', weather: '降雨', msg: '訊息', chat: '聊天', mark: '標記', sos: 'SOS', sos_off: '解除 SOS', route: '路線', offroute: '偏離路線', onroute: '回到路線',
-  reroute: '重新規劃', town: '鄉鎮', stuck: '停滯', moving: '出發',
+  reroute: '重新規劃', town: '鄉鎮', stuck: '停滯', moving: '出發', role: '身分',
 };
 const GLYPH = { start: '▶', moving: '▶', end: '■', stop: '‖', lost: '!', back: '✓', join: '+', kick: '✕', behind: '!', ahead: '»', regroup: '✓', waypoint: '⚑', create: '+', arrive: '★', allin: '★', speedcam: '◉', roadevent: '!', weather: '雨', msg: '✉', chat: '✉', mark: '⚑', sos: 'S', sos_off: '✓', route: '↺', offroute: '!', onroute: '✓', reroute: '↺', town: '◎', stuck: '!' };
 const SRC = { web: '網頁', traccar: 'Traccar', sim: '模擬', 'sim-self': '模擬' };
+// 身分：viewer＝只看（不畫、不列），car＝後援車（畫成方塊、不算名次）
+const VIEWERS = new Map();
+const isCar = (m) => m.u.role === 'car';
 
 /* ---------- 標記與軌跡 ---------- */
 function upsert(u, state = {}) {
+  if (u.role === 'viewer') { VIEWERS.set(u.uid, u); dropMember(u.uid); return null; }
+  VIEWERS.delete(u.uid);
   let m = S.members.get(u.uid);
   if (!m) {
     const el = document.createElement('div');
@@ -61,11 +163,19 @@ function upsert(u, state = {}) {
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
+  m.el.classList.toggle('car', isCar(m));
+  m.el.querySelector('.dot').textContent = isCar(m) ? '🚐' : initialOf(m.u.nickname);
   m.el.style.setProperty('--c', m.u.color);
   m.el.style.setProperty('--ink', inkOn(m.u.color));
   m.state = { ...m.state, ...state };
   if (!m.pos && m.state.lat) m.pos = [+m.state.lon, +m.state.lat];
   return m;
+}
+function dropMember(uid) {
+  const m = S.members.get(uid);
+  if (!m) return;
+  m.marker.remove();
+  S.members.delete(uid);
 }
 const trailsGeo = () => ({ type: 'FeatureCollection', features: [...S.members.values()].filter((m) => m.trail.length > 1).map((m) => ({
   type: 'Feature', properties: { color: m.u.color }, geometry: { type: 'LineString', coordinates: m.pos ? [...m.trail, m.pos] : m.trail } })) });
@@ -94,8 +204,13 @@ let autoFollow = true;  // false＝暫離（使用者拖了地圖）
 let awayAt = 0;
 let lastFit = '';  // fitLast() 上次框的那組位置
 let lastTarget = '';  // 上一格鏡頭在追什麼（換了就平滑接過去）
-// 地圖只佔中間那格：留白只要讓開右上工具列
-const padRaw = () => (mobile.matches ? { top: 40, bottom: 30, left: 30, right: 76 } : { top: 70, bottom: 50, left: 60, right: 90 });
+// 地圖鋪滿全螢幕：留白讓開上方標題列、右上工具列、抽屜「目前」露出的高度（拖曳中、動畫中每一格都跟著，
+// 車隊一直在看得到的那塊地圖中間）；看得到的地圖至少留 140px，抽屜全開時就不再往上推
+const padRaw = () => {
+  const top = ($('.whd').getBoundingClientRect().bottom || 60) + 20;
+  const shown = innerHeight - sheet.getBoundingClientRect().top;
+  return { top, bottom: Math.max(24, Math.min(shown + 24, innerHeight - top - 140)), left: 30, right: 76 };
+};
 // 手勢規則（docs/地圖手勢規則.md）：拖曳＝暫離（按鈕／卡片變外框，10 秒沒動自動回去）；縮放、旋轉、傾斜繼續跟隨；
 // 全隊模式下縮放也算暫離
 function goAway() {
@@ -132,9 +247,8 @@ function pick(uid) {
   M.unfollow();
   resumeFollow();
 }
-const PADS = smoothPad(padRaw);
-const pad = () => PADS.get();
-addEventListener('resize', () => PADS.refresh());
+// 留白直接用抽屜當下的位置（抽屜本身已經有動畫），不另外做平滑：平滑會落後抽屜，車隊會先跑掉再追回來
+const pad = padRaw;
 const gate = frameGate();
 function frame(now) {
   if (!gate(now)) { requestAnimationFrame(frame); return; } // 省電模式約 30 fps
@@ -256,7 +370,19 @@ function recentSpeed(m) {
 }
 const kmOf = (m) => (numeric(S.prog[m.u.uid]?.km) ? +S.prog[m.u.uid].km : null);
 // 在線、還在路上的人（KPI、帶頭距離用）
-const riding = () => [...S.members.values()].filter((m) => kmOf(m) != null && m.u.active !== false && !isOff(status(m)[0]));
+const riding = () => [...S.members.values()].filter((m) => !isCar(m) && kmOf(m) != null && m.u.active !== false && !isOff(status(m)[0]));
+const routeKmh = () => Math.max(5, Math.min(150, +S.route?.summary?.km / (+S.route?.summary?.min / 60) || 25));
+// 全隊的速度：在路上的人最近速度取中位數（沒有就用路線平均）。差距換成時間時大家用同一個速度，名次和差距才會一致
+function teamKmh() {
+  const v = riding().map(recentSpeed).filter((x) => x > 5).sort((a, b) => a - b);
+  return v.length ? v[Math.floor(v.length / 2)] : routeKmh();
+}
+// 差距（F1 式）：落後帶頭 d 公里；時間＝照全隊速度騎完這段要多久
+function gapText(d) {
+  if (gapMode === 'km') return d >= 1 ? `+${d.toFixed(1)} km` : `+${Math.round(d * 100) * 10} m`;
+  const sec = Math.round(d / teamKmh() * 3600), mm = Math.floor(sec / 60);
+  return mm >= 60 ? `+${Math.floor(mm / 60)}:${String(mm % 60).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}` : `+${mm}:${String(sec % 60).padStart(2, '0')}`;
+}
 
 /* ---------- 標題列與 KPI ---------- */
 function renderHead() {
@@ -265,72 +391,159 @@ function renderHead() {
   const live = t.status === 'live';
   $('#live').classList.toggle('off', !live);
   $('#hT').textContent = live ? `騎乘中 ${t.started ? hms(Date.now() - +t.started) : ''}` : t.status === 'ended' ? '已結束' : '等待開始';
-  const all = [...S.members.values()], online = all.filter((m) => !isOff(status(m)[0])).length;
+  const nv = VIEWERS.size;
+  $('#watch').classList.toggle('hidden', !nv);
+  $('#watch').textContent = `👀 ${nv} 人觀看`;
   const on = riding(), ks = on.map(kmOf);
   const lead = ks.length ? Math.max(...ks) : null, tail = ks.length ? Math.min(...ks) : null;
   let eta = '–';
   const total = S.route?.cum_km?.at(-1);
   if (live && tail != null && numeric(total)) {
     const last = on.find((m) => kmOf(m) === tail);
-    const v = recentSpeed(last) || (+S.route.summary?.km / (+S.route.summary?.min / 60)) || 40;
-    eta = clock(Date.now() + Math.max(0, total - tail) / v * 3600000);
+    eta = clock(Date.now() + Math.max(0, total - tail) / (recentSpeed(last) || routeKmh()) * 3600000);
   }
-  $('#kpi').innerHTML = `<div><b>${lead == null ? '–' : fmtKm(lead)}</b>帶頭進度</div><div><b>${lead == null ? '–' : fmtKm(lead - tail)}</b>隊伍拉長</div>`
-    + `<div><b>${eta}</b>全員預計抵達</div><div><b>${online}/${all.length}</b>在線</div>`;
+  const html = `<div><b>${lead == null ? '–' : fmtKm(lead)}</b>帶頭進度</div><div><b>${lead == null ? '–' : fmtKm(lead - tail)}</b>隊伍拉長</div><div><b>${eta}</b>全員預計抵達</div>`;
+  if ($('#kpi').dataset.html !== html) { $('#kpi').dataset.html = html; $('#kpi').innerHTML = html; }
 }
 
-/* ---------- 左欄：騎士卡、天氣路況、集合點 ---------- */
+/* ---------- 全程進度條（抽屜收起時也看得到）---------- */
+function renderStrip() {
+  const box = $('#strip'), total = S.route?.cum_km?.at(-1);
+  if (!(total > 0)) { box.innerHTML = '<div class="none">這趟沒有預定路線，無法畫全隊進度</div>'; return; }
+  const pct = (km) => `${(clamp(km / total, 0, 1) * 100).toFixed(2)}%`;
+  const ks = riding().map(kmOf), lead = ks.length ? Math.max(...ks) : 0;
+  const wps = stops().map((w) => `<div class="wp" style="left:${pct(w.km)}">${esc(w.name)}</div>`).join('');
+  const key = `${total}:${wps}`;
+  if (box.dataset.key !== key) {
+    box.dataset.key = key;
+    box.innerHTML = `<div class="ln"></div><div class="dn"></div>${wps}<div class="wp end" style="left:100%">終點</div><div class="ps"></div>`;
+    // 名字疊到前一個就只留刻度（終點一定留；從終點往回看，誰撞到右邊那個就藏誰）
+    const labels = [...box.querySelectorAll('.wp')].reverse();
+    let left = Infinity;
+    for (const el of labels) {
+      const r = el.getBoundingClientRect();
+      if (r.right > left - 4) el.classList.add('nl'); else left = r.left;
+    }
+  }
+  box.querySelector('.dn').style.width = pct(lead);
+  // 每個人一個點：位置每秒更新（transition 平滑移動），後面的先畫、帶頭的疊在最上面
+  const ps = box.querySelector('.ps');
+  const list = [...S.members.values()].filter((m) => kmOf(m) != null && m.u.active !== false).sort((a, b) => kmOf(a) - kmOf(b));
+  list.forEach((m, i) => {
+    let d = ps.querySelector(`[data-uid="${CSS.escape(String(m.u.uid))}"]`);
+    if (!d) { d = document.createElement('div'); d.dataset.uid = m.u.uid; ps.append(d); }
+    d.className = `p${isCar(m) ? ' car' : ''}${S.focus === m.u.uid ? ' sel' : ''}`;
+    d.style.cssText = `left:${pct(kmOf(m))};--c:${m.u.color};--ink:${inkOn(m.u.color)};z-index:${i + 1}`;
+    const tx = isCar(m) ? '🚐' : initialOf(m.u.nickname);
+    if (d.textContent !== tx) d.textContent = tx;
+  });
+  const keep = new Set(list.map((m) => String(m.u.uid)));
+  [...ps.children].forEach((d) => { if (!keep.has(d.dataset.uid)) d.remove(); });
+}
+
+/* ---------- 騎士：照騎行順序，F1 式差距 ---------- */
+function badgeOf(m) {
+  const [st, stCls] = status(m), flag = S.flags[m.u.uid], off = isOff(st);
+  if (S.sos.has(m.u.uid)) return ['SOS', 'crit'];
+  if (flag === 'behind' && !off) return ['落隊', 'warn'];
+  if (flag === 'ahead' && !off) return ['超前', 'warn'];
+  if (numeric(m.state.batt) && +m.state.batt <= 15 && !off) return ['電量低', 'warn'];
+  return st === '騎乘中' ? null : [st, stCls];
+}
 function renderCards() {
-  const list = [...S.members.values()].sort((a, b) => (kmOf(b) ?? -1) - (kmOf(a) ?? -1));
-  const online = list.filter((m) => !isOff(status(m)[0])).length;
-  $('#teamT').textContent = `騎士（${online}/${list.length} 在線）`;
+  // 在路上的照公里數排（後援車也排在它的位置、不給名次）；不在線（失聯、結束、還沒回報）排最後
+  const all = [...S.members.values()];
+  const onRoad = all.filter((m) => kmOf(m) != null && !isOff(status(m)[0])).sort((a, b) => kmOf(b) - kmOf(a));
+  const rest = all.filter((m) => !onRoad.includes(m)).sort((a, b) => (kmOf(b) ?? -1) - (kmOf(a) ?? -1));
+  const list = [...onRoad, ...rest];
+  const riders = all.filter((m) => !isCar(m)), online = riders.filter((m) => !isOff(status(m)[0])).length;
+  $('#teamT').textContent = `騎行順序（${online}/${riders.length} 在線）`;
   const ks = riding().map(kmOf), lead = ks.length ? Math.max(...ks) : null;
-  const total = S.route?.cum_km?.at(-1);
   const box = $('#cards');
   if (!list.length) { box.innerHTML = '<p class="empty">還沒有隊友</p>'; return; }
   box.querySelector('.empty')?.remove();
+  let pos = 0;
   list.forEach((m, i) => {
-    const s = m.state, [st, stCls] = status(m), flag = S.flags[m.u.uid], off = isOff(st), km = kmOf(m);
-    const badge = S.sos.has(m.u.uid) ? ['SOS', 'crit'] : flag === 'behind' && !off ? ['落隊', 'warn'] : flag === 'ahead' && !off ? ['超前', 'warn'] : [st, stCls];
-    const l1 = [km != null ? fmtKm(km) : numeric(m.u.stats?.km) ? fmtKm(+m.u.stats.km) : '', numeric(s.alt) ? `${Math.round(+s.alt)} m` : '',
-      numeric(s.batt) ? `電量 ${Math.round(+s.batt)}%` : '', SRC[s.src] || s.src || ''].filter(Boolean).join('・');
-    const gap = lead != null && km != null && !off ? lead - km : null;
-    const l2 = [gap == null ? '' : gap < 0.05 ? '帶頭' : `距離帶頭 ${fmtKm(gap)}`, seenAt(s) ? `${ago(seenAt(s))}更新` : ''].filter(Boolean).join('・');
-    const stop = nextStop(km), avg = recentSpeed(m);
-    const eta = !off && stop && avg ? `${stop.name} 預計 ${clock(Date.now() + Math.max(0, stop.km - km) / avg * 3600000)}` : '';
-    const pct = numeric(total) && km != null ? clamp(km / total * 100, 0, 100) : 0;
+    const s = m.state, car = isCar(m), off = isOff(status(m)[0]), km = kmOf(m);
+    if (!car && !off) pos++;
+    const bd = car ? null : badgeOf(m);
+    const sub = [km != null ? fmtKm(km) : numeric(m.u.stats?.km) ? fmtKm(+m.u.stats.km) : '還沒有位置', !off && numeric(s.speed) ? `${Math.round(+s.speed * 3.6)} km/h` : '',
+      numeric(s.batt) ? `電量 ${Math.round(+s.batt)}%` : '', SRC[s.src] || ''].filter(Boolean).join('・');
+    const d = lead != null && km != null ? lead - km : null;
+    // 只有名次第 1 的人寫「領先」；停在同一個地方的其他人寫 +0:00（F1 也是這樣）
+    const gap = off ? `<span class="gap off">${esc(status(m)[0])}</span>` : d == null ? '<span class="gap off">–</span>'
+      : !car && pos === 1 ? '<span class="gap lead">領先</span>' : `<span class="gap num">${gapText(Math.max(0, d))}</span>`;
     let b = box.querySelector(`[data-uid="${CSS.escape(String(m.u.uid))}"]`);
     if (!b) { b = document.createElement('button'); b.type = 'button'; b.className = 'wr'; b.dataset.uid = m.u.uid; }
     if (box.children[i] !== b) box.insertBefore(b, box.children[i] || null);
     b.classList.toggle('sel', S.focus === m.u.uid && autoFollow);
     b.classList.toggle('away', S.focus === m.u.uid && !autoFollow);
     b.classList.toggle('sos', S.sos.has(m.u.uid));
-    const html = `${avatar(m.u)}<span class="m"><b>${esc(m.u.nickname)}</b> <span class="badge ${badge[1]}">${esc(badge[0])}</span>`
-      + `<div class="s num">${esc(l1 || '還沒有位置')}</div>${l2 ? `<div class="s num">${esc(l2)}</div>` : ''}${eta ? `<div class="s num">${esc(eta)}</div>` : ''}`
-      + `<div class="bar"><i style="width:${pct.toFixed(1)}%;background:${esc(m.u.color)}"></i></div></span>`
-      + `<span class="r num"><b>${off ? '–' : Math.round((+s.speed || 0) * 3.6)}</b>km/h</span>`;
+    const html = `<span class="pos num">${car || off ? '–' : pos}</span>${car ? `<span class="avatar car">🚐</span>` : avatar(m.u)}`
+      + `<span class="m"><b>${esc(m.u.nickname)}</b>${car ? '<span class="badge muted">後援車</span>' : ''}${bd ? `<span class="badge ${bd[1]}">${esc(bd[0])}</span>` : ''}`
+      + `<div class="s num">${esc(sub)}</div></span>${gap}`;
     if (b.dataset.html !== html) { b.dataset.html = html; b.innerHTML = html; }
   });
   [...box.children].slice(list.length).forEach((x) => x.remove());
   markFocus([...S.members].map(([id, m]) => [id, m.el]), S.focus, !autoFollow);
-  renderStops();
 }
-$('#cards').addEventListener('click', (e) => { const b = e.target.closest('.wr'); if (b) pick(S.members.has(b.dataset.uid) ? b.dataset.uid : +b.dataset.uid); });
-// 集合點：正在等人的那一站（幾人到齊）；都到齊了就寫「全員到齊，已出發」，再列下一站
-function renderStops() {
-  const list = stops();
-  $('#stopsBox').classList.toggle('hidden', !list.length);
-  if (!list.length) return;
+$('#cards').addEventListener('click', (e) => { const b = e.target.closest('.wr'); if (b) pickFromList(b.dataset.uid); });
+// 清單裡點人：鏡頭跟著他，抽屜收起來讓出地圖
+function pickFromList(id) {
+  pick(S.members.has(id) ? id : +id);
+  setSheet(false);
+}
+
+/* ---------- 路線：直的路線圖（終點在上、起點在下） ---------- */
+function renderLin() {
+  const total = S.route?.cum_km?.at(-1);
+  if (!(total > 0)) { $('#lin').innerHTML = '<p class="empty">這趟沒有預定路線。</p>'; return; }
+  const ks = riding().map(kmOf), lead = ks.length ? Math.max(...ks) : 0;
+  const items = [];
+  const st = stops();
   const n = (w) => (w.arrived || []).length, N = (w) => w.total || S.members.size;
-  const waiting = list.find((w) => n(w) > 0 && !w.all_in);
-  const done = [...list].reverse().find((w) => w.all_in);
-  const next = list.find((w) => n(w) === 0);
-  const ks = riding().map(kmOf), lead = ks.length ? Math.max(...ks) : null;
-  const rows = [];
-  if (waiting) rows.push(`<div class="wide"><b>${esc(waiting.name)}</b>等待中・${n(waiting)}/${N(waiting)} 到齊</div>`);
-  else if (done) rows.push(`<div class="wide"><b>${esc(done.name)}</b>全員到齊，已出發</div>`);
-  if (next && next !== waiting) rows.push(`<div class="wide"><b>${esc(next.name)}</b>下一站${lead != null ? `・帶頭還有 ${fmtKm(Math.max(0, next.km - lead))}` : ''}</div>`);
-  $('#stops').innerHTML = rows.join('');
+  const nextW = st.find((w) => w.km > lead + 0.15);
+  st.forEach((w) => {
+    const passed = w.km <= lead + 0.15;
+    const note = w.all_in ? '全員到齊，已出發' : n(w) ? `等待中・${n(w)}/${N(w)} 到齊` : w === nextW ? `下一站・帶頭還有 ${fmtKm(Math.max(0, w.km - lead))}` : passed ? '已通過' : '';
+    items.push({ km: w.km, html: `<div class="st wp"><em class="num">${fmtKm(w.km)}</em><b>⚑ ${esc(w.name)}</b>${note ? `<small>${esc(note)}</small>` : ''}</div>` });
+  });
+  // 前方的路況、降雨（帶頭後面 2 公里以內也列，提醒後面的人）
+  S.traffic.filter((x) => x.route_km >= lead - 2).forEach((x) => items.push({ km: +x.route_km,
+    html: `<div class="st rd" style="--c:#ff9f0a"><em class="num">${fmtKm(+x.route_km)}</em><b style="color:#ff9f0a">⚠ ${esc(x.type)}</b><small>${esc(x.name)}</small></div>` }));
+  S.weather.filter((x) => x.route_km >= lead - 2).forEach((x) => items.push({ km: +x.route_km,
+    html: `<div class="st rd" style="--c:#64d2ff"><em class="num">${fmtKm(+x.route_km)}</em><b style="color:#64d2ff">☂ 降雨 ${x.pop}%</b><small>${esc(x.name)}・${esc(x.area)}</small></div>` }));
+  const ppl = [...S.members.values()].filter((m) => kmOf(m) != null && m.u.active !== false).sort((a, b) => kmOf(b) - kmOf(a));
+  let prev = null;
+  ppl.forEach((m) => {
+    const km = kmOf(m), car = isCar(m), bd = car ? null : badgeOf(m), s = m.state;
+    let gapLine = '';
+    if (prev && !car && km != null) {
+      const d = kmOf(prev) - km, sec = d / teamKmh() * 3600;
+      if (sec >= 120) gapLine = `<div class="gapln">⋯ 差 ${Math.round(sec / 60)} 分鐘（${fmtKm(d)}）</div>`;
+    }
+    if (!car) prev = m;
+    items.push({ km, who: true, html: `${gapLine}<button type="button" class="who" data-uid="${esc(m.u.uid)}">${car ? '<span class="avatar car">🚐</span>' : avatar(m.u)}`
+      + `<span class="n"><b>${esc(m.u.nickname)}</b>${bd ? `<span class="badge ${bd[1]}">${esc(bd[0])}</span>` : ''}<small class="num">${esc([fmtKm(km), numeric(s.speed) ? `${Math.round(+s.speed * 3.6)} km/h` : '', numeric(s.batt) ? `電量 ${Math.round(+s.batt)}%` : ''].filter(Boolean).join('・'))}</small></span></button>` });
+  });
+  // 由終點往起點排；同一公里時人排在點的後面（人在那個點之前還沒到）
+  items.sort((a, b) => b.km - a.km || (a.who ? 1 : 0) - (b.who ? 1 : 0));
+  const html = `<div class="ax"><div class="done"></div>`
+    + `<div class="st wp"><em class="num">${fmtKm(total)}</em><b>🏁 終點</b></div>${items.map((x) => x.html).join('')}`
+    + `<div class="st"><em class="num">0 公里</em><b>起點</b>${S.trip?.started ? `<small>${clock(+S.trip.started)} 出發</small>` : ''}</div></div>`;
+  if ($('#lin').dataset.html !== html) { $('#lin').dataset.html = html; $('#lin').innerHTML = html; }
+  // 走過的那段（橘色）：從起點畫到帶頭那個人（圖上的間距不是照公里比例，所以照帶頭的位置量）
+  const ax = $('#lin').querySelector('.ax'), first = ax?.querySelector('.who:not(:has(.car))');
+  if (ax && first) ax.querySelector('.done').style.height = `${Math.max(0, ax.offsetHeight - first.offsetTop - 15)}px`;
+}
+$('#strip').addEventListener('click', (e) => { const d = e.target.closest('.p'); if (d) pickFromList(d.dataset.uid); });
+$('#lin').addEventListener('click', (e) => { const b = e.target.closest('.who'); if (b) pickFromList(b.dataset.uid); });
+// 只畫看得到的分頁（每秒更新時不浪費）
+function renderPane() {
+  const t = sheet.dataset.mt;
+  if (t === 'l') renderCards();
+  else if (t === 'w') { renderLin(); }
+  else if (t === 'p') renderProgress();
 }
 /* 天氣與路況使用既有本機 API；氣象署請求只有縣市代碼，騎士座標不外送。 */
 function renderConditions() {
@@ -509,17 +722,68 @@ function renderProgress() {
   g.textAlign = 'left';
 }
 
+/* ---------- 通知橫幅：重要事件一次跳一則，4 秒自己收；手指往上滑掉 ---------- */
+// SOS 另有固定橫幅（renderSos），這裡不重複
+const NOTIFY = new Set(['behind', 'lost', 'offroute', 'stuck', 'arrive', 'allin', 'roadevent', 'weather']);
+const noteQ = [];
+let noteOn = false, noteT = 0;
+function notify(e) {
+  if (!NOTIFY.has(e.type) || !e.text) return;
+  noteQ.push(e);
+  if (noteQ.length > 5) noteQ.shift();  // 一下子來很多：只留最新的幾則
+  if (!noteOn) nextNote();
+}
+function nextNote() {
+  const n = $('#note'), e = noteQ.shift();
+  if (!e) { noteOn = false; return; }
+  noteOn = true;
+  const who = e.uid ? nameOf(e.uid) : '';
+  n.innerHTML = `<span class="ico" style="--c:${EV[e.type] || '#8e8e93'}">${GLYPH[e.type] || '•'}</span><div><b>${esc(e.text)}</b><small class="num">${esc(EV_NAME[e.type] || '事件')}・${clock(+e.ts || Date.now())}${who ? '・' + esc(who) : ''}</small></div>`;
+  n.dataset.uid = e.uid || '';
+  n.style.removeProperty('--ny');
+  n.classList.add('on');
+  clearTimeout(noteT);
+  noteT = setTimeout(hideNote, 4000);
+}
+function hideNote() {
+  const n = $('#note');
+  clearTimeout(noteT);
+  n.classList.remove('on');
+  setTimeout(nextNote, 380);  // 收起動畫跑完再出下一則
+}
+{
+  const n = $('#note');
+  let y0 = null, dy = 0, pid = null;
+  n.addEventListener('pointerdown', (e) => { if (!n.classList.contains('on')) return; y0 = e.clientY; dy = 0; pid = e.pointerId; clearTimeout(noteT); n.classList.add('drag'); try { n.setPointerCapture(pid); } catch { /* ignore */ } });
+  n.addEventListener('pointermove', (e) => {
+    if (y0 == null || e.pointerId !== pid) return;
+    dy = e.clientY - y0;
+    n.style.setProperty('--ny', `${dy < 0 ? dy : dy / 4}px`);  // 往下拉只會一點點（橡皮筋）
+  });
+  const end = (e) => {
+    if (y0 == null || e.pointerId !== pid) return;
+    y0 = null; n.classList.remove('drag');
+    if (dy < -24) { n.style.setProperty('--ny', '-160%'); hideNote(); return; }
+    n.style.removeProperty('--ny');
+    // 點一下（沒滑）：鏡頭跟著那個人
+    if (Math.abs(dy) < 6 && n.dataset.uid) { const id = [...S.members.keys()].find((k) => String(k) === n.dataset.uid); if (id != null) pick(id); hideNote(); return; }
+    noteT = setTimeout(hideNote, 2500);
+  };
+  n.addEventListener('pointerup', end);
+  n.addEventListener('pointercancel', end);
+}
+
 /* ---------- WebSocket ---------- */
 // 自動重連＋斷線橫幅在 livesock.js（和行程頁共用）
 function connect() {
-  liveSocket(`/ws/trips/${tid}`, { onMessage: handle, onForbidden: () => { tripGate(tid, { fresh: true }); } });
+  liveSocket(`/ws/trips/${tid}${WATCH ? `?watch=${encodeURIComponent(WATCH)}` : ''}`, { onMessage: handle, onForbidden: () => { tripGate(tid, { fresh: true }); } });
 }
 function handle(msg) {
   switch (msg.kind) {
     case 'snapshot': {
       const t = msg.trip;
       S.trip = t;
-      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); m.trail = (t.trails[u.uid] || []).slice(); if (u.state?.pre) m.lastRough = true; if (numeric(u.state?.route_km)) S.prog[u.uid] = { km: +u.state.route_km }; });
+      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); if (!m) return; m.trail = (t.trails[u.uid] || []).slice(); if (u.state?.pre) m.lastRough = true; if (numeric(u.state?.route_km)) S.prog[u.uid] = { km: +u.state.route_km }; });
       S.events = t.events; S.gaps = t.gaps || {}; S.flags = t.flags || {};
       $('#name').textContent = `戰情室・${t.name}`;
       document.title = `戰情室 · ${t.name}`;
@@ -554,13 +818,14 @@ function handle(msg) {
     case 'waypoints': S.waypoints = msg.items || []; renderCards(); break;
     case 'member': upsert(msg.user, {}); break;
     case 'trip': if (S.trip) S.trip.status = msg.status; renderHead(); break;
-    case 'kicked': if (msg.uid === S.trip?.me) tripGate(tid, { fresh: true }); else { S.members.get(msg.uid)?.marker?.remove(); S.members.delete(msg.uid); } break;
+    case 'kicked': if (msg.uid === S.trip?.me) tripGate(tid, { fresh: true }); else { dropMember(msg.uid); VIEWERS.delete(msg.uid); } break;
     case 'event':
       S.events.push(msg);
       if (S.events.length > 200) S.events.shift();
       if (msg.type === 'sos') S.sos.set(msg.uid, msg);
       if (msg.type === 'sos_off') S.sos.delete(msg.uid);
       if (msg.type === 'allin' || msg.type === 'arrive' || msg.type === 'regroup') loadWaypoints();  // 到齊人數
+      notify(msg);
       renderFeed(); renderSos();
       break;
     case 'chat':  // 聊天另存在 trip:{id}:chat，大螢幕也顯示在事件裡
@@ -573,12 +838,12 @@ function handle(msg) {
       break;
   }
 }
-// 每秒更新：計時、KPI、騎士卡、剖面上的位置（原型也是每秒一次）
+// 每秒更新：計時、KPI、進度條、看得到的分頁（原型也是每秒一次）
 setInterval(() => {
   renderHead();
-  renderCards();
+  renderStrip();
+  renderPane();
   renderSos();
-  if (!mobile.matches || document.body.dataset.mt === 'p') renderProgress();
 }, 1000);
 setInterval(() => { if (S.route) renderConditions(); }, 5000);
 setInterval(() => { if (S.route) loadConditions(); loadWaypoints(); }, 5 * 60_000);

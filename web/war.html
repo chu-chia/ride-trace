@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="/vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
 <script>
-/* 兩種版面：手機直拿＝地圖＋分頁（改版原型，war-m.*）；電腦與手機橫向＝可自由編輯排版的浮動面板（war.*）。
+/* 兩種版面：手機直拿＝全螢幕地圖＋底部抽屜（war-m.*）；電腦與手機橫向＝可自由編輯排版的浮動面板（war.*）。
    轉向或視窗寬度跨過界線就重新載入，換成另一種版面 */
 (() => {
   // 手機（觸控、螢幕短邊 ≤ 820）：直拿用手機版；橫拿把版面寬度設成 1280（和以前的「電腦版」鈕一樣），整頁照電腦版排、縮小顯示（要在第一次排版前設定）
@@ -62,40 +62,38 @@
 <div class="sosbar" id="sosbar"></div>
 </template>
 <template id="warM">
+<div id="map" role="region" aria-label="地圖"></div>
 <header class="whd">
   <a class="icon-btn" id="back" href="/" data-icon="back" aria-label="回行程頁"></a>
   <div class="wttl"><h1 id="name">戰情室</h1><div class="live" id="live"><i></i><span id="hT">連線中…</span></div></div>
-  <div class="sp"></div>
-  <div class="kpi num" id="kpi"></div>
+  <span class="watch hidden" id="watch"></span>
 </header>
-<div class="col l" id="colL">
-  <div class="sec-t first"><span id="teamT">騎士</span></div>
-  <div id="cards"></div>
-  <div class="sec-t">沿途天氣與路況</div>
-  <div class="wx" id="wx"><p class="empty">讀取沿途資訊…</p></div>
-  <div id="stopsBox"><div class="sec-t">集合點</div><div class="wx" id="stops"></div></div>
+<div class="tools" role="toolbar" aria-label="地圖工具">
+  <button class="tool on" id="centerTeam" data-icon="team" aria-pressed="true" type="button">全隊</button>
+  <button class="tool on" id="b3d" data-icon="cube" aria-pressed="true" type="button">3D</button>
+  <button class="tool" id="mapStyle" data-icon="layers" type="button">深色</button>
 </div>
-<div class="mapw">
-  <div id="map" role="region" aria-label="地圖"></div>
-  <div class="sosbars" id="sosbar"></div>
-  <div class="tools" role="toolbar" aria-label="地圖工具">
-    <button class="tool on" id="centerTeam" data-icon="team" aria-pressed="true" type="button">全隊</button>
-    <button class="tool on" id="b3d" data-icon="cube" aria-pressed="true" type="button">3D</button>
-    <button class="tool" id="mapStyle" data-icon="layers" type="button">深色</button>
+<div class="sosbars" id="sosbar"></div>
+<div class="wnote" id="note" role="status" aria-live="polite"></div>
+<section class="wsheet small" id="sheet" aria-label="戰情室資訊">
+  <button class="handle" type="button" aria-label="展開或收合"></button>
+  <div class="peek">
+    <div class="strip" id="strip" aria-label="全隊在路線上的位置"></div>
+    <div class="kpi num" id="kpi"></div>
+    <nav class="mtabs" id="mt" aria-label="戰情室資訊"><button data-m="l" class="on" type="button">騎士</button><button data-m="w" type="button">路線</button><button data-m="r" type="button">事件</button><button data-m="p" type="button">剖面</button></nav>
   </div>
-</div>
-<div class="prof" id="prof"><canvas id="pc" aria-label="全隊進度與海拔剖面"></canvas></div>
-<div class="col r" id="colR">
-  <div class="sec-t first">事件<span class="wchips" id="feedF"></span></div>
-  <div id="feed"></div>
-</div>
-<nav class="mtabs" id="mt" aria-label="戰情室資訊"><button data-m="l" class="on" type="button">騎士</button><button data-m="r" type="button">事件</button><button data-m="p" type="button">剖面</button></nav>
+  <div class="sheet-body">
+    <div class="pane" data-p="l"><div class="sec-t"><span id="teamT">騎行順序</span><span class="gm" id="gm" role="group" aria-label="差距顯示"><button type="button" data-g="time">時間</button><button type="button" data-g="km">距離</button></span></div><div id="cards"></div></div>
+    <div class="pane" data-p="w"><div class="lin" id="lin"></div><div class="sec-t">沿途天氣與路況</div><div class="wx" id="wx"><p class="empty">讀取沿途資訊…</p></div></div>
+    <div class="pane" data-p="r"><div class="sec-t">事件<span class="wchips" id="feedF"></span></div><div id="feed"></div></div>
+    <div class="pane" data-p="p"><div class="prof" id="prof"><canvas id="pc" aria-label="全隊進度與海拔剖面"></canvas></div></div>
+  </div>
+</section>
 </template>
 <script src="/vendor/maplibre-gl-5.24.0/maplibre-gl.js"></script>
 <script>
 {
   const m = window.WAR_MODE === 'm';
-  if (m) document.body.dataset.mt = 'l';
   document.body.prepend(document.getElementById(m ? 'warM' : 'warD').content.cloneNode(true));
   const s = document.createElement('script');
   s.type = 'module';

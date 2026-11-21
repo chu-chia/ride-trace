@@ -1,81 +1,138 @@
-/* 戰情室（手機直拿；電腦與手機橫向用 war.css 的可編輯面板）：照改版原型（ride-trace-redesign/war.html）的三欄格線，尺寸、字級直接沿用原型。
-   面板用不透明的深灰（--solid 三階），和其他改版頁一致；地圖只佔中間那格。 */
+/* 戰情室（手機直拿；電腦與手機橫向用 war.css 的可編輯面板）：照改版原型 B（ride-trace-redesign/war-phone.html?v=b）。
+   全螢幕地圖＋底部抽屜：收起時是全程進度條＋三個數字＋分頁鈕，往上拉看 騎士／路線／事件／剖面。
+   抽屜拖曳用共用的 sheetDrag（和規劃頁、行程頁同一套手感）。 */
 html,body{width:100%;height:100%;overflow:hidden;margin:0}
-body{display:grid;height:100vh;height:100dvh;grid-template-columns:330px 1fr 340px;grid-template-rows:56px 1fr 150px;
-  grid-template-areas:"hd hd hd" "l m r" "l p r";gap:0;background:var(--solid);color:var(--fg);
-  --surface:var(--solid);--surface-2:var(--solid-2);--surface-3:var(--solid-3)}
+body{background:var(--solid);color:var(--fg);--surface:var(--solid);--surface-2:var(--solid-2);--surface-3:var(--solid-3)}
 .num{font-variant-numeric:tabular-nums}
 .hidden{display:none!important}
-.empty{color:var(--muted);font-size:12.5px;margin:4px 2px}
+.empty{color:var(--muted);font-size:12.5px;margin:8px 2px}
+#map{position:fixed;inset:0}
 
-/* 標題列：返回、行程名稱＋騎乘中計時、右邊 KPI */
-.whd{grid-area:hd;display:flex;align-items:center;gap:12px;padding:0 14px;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));background:var(--surface);border-bottom:1px solid var(--line);min-width:0}
-.whd .icon-btn{margin-left:-6px}
-.wttl{min-width:0}
-.whd h1{font-size:17px;margin:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.whd .live{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--ok-ink)}
-.whd .live i{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+/* 上方標題列：浮在地圖上（上緣漸層），返回、行程名稱＋騎乘中計時、觀看人數 */
+.whd{position:fixed;left:0;right:0;top:0;z-index:9;display:flex;align-items:center;gap:8px;min-width:0;
+  padding:calc(env(safe-area-inset-top) + 6px) max(12px,env(safe-area-inset-right)) 10px max(12px,env(safe-area-inset-left));
+  background:linear-gradient(rgba(0,0,0,.72),rgba(0,0,0,.35) 70%,rgba(0,0,0,0));pointer-events:none}
+.whd>*{pointer-events:auto}
+.whd .icon-btn{background:var(--glass);flex:none}
+.wttl{min-width:0;flex:1}
+.whd h1{font-size:16px;margin:0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.whd .live{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--ok-ink)}
+.whd .live i{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
 .whd .live.off{color:var(--muted)}.whd .live.off i{background:var(--muted)}
-.whd .sp{flex:1}
-.kpi{display:flex;gap:18px;font-size:12px;color:var(--muted);flex:none}
-.kpi div{white-space:nowrap}
-.kpi b{display:block;font-size:17px;color:var(--fg)}
+.watch{flex:none;font-size:12px;color:var(--muted);background:var(--glass);padding:5px 10px;border-radius:999px;white-space:nowrap}
 
-/* 左右兩欄 */
-.col{background:var(--surface);overflow-y:auto;padding:12px;min-height:0}
-.col.l{grid-area:l;border-right:1px solid var(--line);padding-left:max(12px,env(safe-area-inset-left))}
-.col.r{grid-area:r;border-left:1px solid var(--line);padding-right:max(12px,env(safe-area-inset-right))}
-.sec-t{font-size:13px;font-weight:700;color:var(--muted);margin:18px 4px 8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
-.sec-t.first{margin-top:2px}
+/* 右上工具列：標題列下面；抽屜往上拉時跟著滑出畫面 */
+.tools{top:calc(env(safe-area-inset-top) + 62px);transition:transform .2s;transform:translateY(calc(var(--sheet-t,0) * -1 * (100% + 140px)))}
+.tool{background:var(--glass);box-shadow:0 4px 14px rgba(0,0,0,.45);border:0;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+.tool.on{background:var(--accent-fill);color:#fff}
+.tool.away{background:var(--glass);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent),0 4px 14px rgba(0,0,0,.45)}
 
-/* 騎士卡 */
-.wr{display:flex;gap:10px;align-items:center;padding:10px;border-radius:14px;background:var(--surface-2);margin-bottom:8px;width:100%;text-align:left;border:0;color:var(--fg);font:inherit;cursor:pointer}
-.wr.sel{box-shadow:inset 0 0 0 2px var(--accent)}
-.wr.away{box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent) 50%,transparent)}
-.wr.sos{box-shadow:inset 0 0 0 2px var(--sos)}
-.wr .avatar{width:38px;height:38px;font-size:15px}
+/* 通知橫幅：一次一則，4 秒自己收；手指往上滑掉 */
+.wnote{position:fixed;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));top:calc(env(safe-area-inset-top) + 56px);z-index:12;
+  display:flex;gap:10px;align-items:center;padding:11px 13px 14px;border-radius:16px;background:var(--solid-2);box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:14px;
+  transform:translateY(-160%);opacity:0;transition:transform .32s cubic-bezier(.2,.8,.2,1),opacity .32s;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.wnote.on{transform:translateY(var(--ny,0px));opacity:1}
+.wnote.drag{transition:none}
+.wnote::after{content:"";position:absolute;left:50%;bottom:5px;width:34px;height:4px;margin-left:-17px;border-radius:2px;background:var(--muted);opacity:.5}
+.wnote .ico{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;font-size:13px;flex:none;background:var(--c)}
+.wnote b{font-weight:600;display:block;overflow-wrap:anywhere}
+.wnote small{display:block;color:var(--muted);font-size:12px}
+
+/* SOS 橫幅：一人一條，蓋在最上面；定位＝鏡頭跟著他，已處理＝這台收起（新的 SOS 會再出現） */
+.sosbars{position:fixed;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));top:calc(env(safe-area-inset-top) + 56px);z-index:13;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.sosbar{pointer-events:auto;background:var(--sos);color:#fff;border-radius:14px;padding:11px 13px;font-weight:700;display:flex;gap:8px;align-items:center;box-shadow:var(--shadow);font-size:14px}
+.sosbar .t{min-width:0;flex:1}
+.sosbar button{background:rgba(255,255,255,.22);padding:8px 12px;border-radius:999px;font-weight:700;color:#fff;border:0;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+
+/* 底部抽屜：高度固定，開合用 transform 整塊推（sheetDrag 寫 --sheet-off） */
+.wsheet{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--solid);border-radius:20px 20px 0 0;box-shadow:0 -2px 16px rgba(0,0,0,.4);
+  height:calc(100dvh - env(safe-area-inset-top) - 60px);display:flex;flex-direction:column;overflow:hidden;
+  padding:0 max(14px,env(safe-area-inset-right)) 0 max(14px,env(safe-area-inset-left));
+  transform:translateY(var(--sheet-off,0px));transition:transform .28s cubic-bezier(.2,.8,.2,1);will-change:transform}
+.wsheet.dragging{transition:none}
+.wsheet .handle{height:22px;display:grid;place-items:center;flex:none;width:100%;background:none;border:0;padding:0;cursor:grab}
+.wsheet .handle::before{content:"";width:40px;height:5px;border-radius:3px;background:var(--muted);opacity:.5}
+.wsheet .peek{flex:none}
+.wsheet{touch-action:none}
+/* 清單只有全開（.scroll）時能捲；收起、半開時整塊拖曳都交給抽屜 */
+.sheet-body{flex:1;min-height:0;overflow:hidden;overscroll-behavior:contain;touch-action:none;margin:0 -14px;padding:0 14px max(16px,env(safe-area-inset-bottom))}
+.sheet-body.scroll{overflow-y:auto;touch-action:pan-y}
+.pane{display:none}
+.wsheet[data-mt="l"] .pane[data-p="l"],.wsheet[data-mt="w"] .pane[data-p="w"],.wsheet[data-mt="r"] .pane[data-p="r"],.wsheet[data-mt="p"] .pane[data-p="p"]{display:block}
+
+/* 全程進度條：一條線、走過的部分上色；集合點、終點標名字；每人一個點（後援車是方塊、排在線下面） */
+.strip{position:relative;height:56px;margin:4px 22px 0 10px}
+.strip .ln{position:absolute;left:0;right:0;top:20px;height:6px;border-radius:3px;background:var(--solid-3)}
+.strip .dn{position:absolute;left:0;top:20px;height:6px;border-radius:3px;background:var(--accent)}
+.strip .wp{position:absolute;top:14px;transform:translateX(-50%);font-size:10.5px;color:var(--muted);white-space:nowrap;text-align:center;pointer-events:none}
+.strip .wp::before{content:"";display:block;width:3px;height:18px;margin:0 auto 14px;background:var(--muted);border-radius:2px}
+.strip .wp.end{transform:translateX(-85%)}
+.strip .wp.nl{color:transparent}
+.strip .p{position:absolute;top:11px;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;border:2px solid var(--solid);display:grid;place-items:center;font-size:11px;font-weight:700;background:var(--c);color:var(--ink,#fff);transition:left 1s linear}
+.strip .p.car{border-radius:7px;top:30px;width:20px;height:20px;font-size:11px;background:var(--solid-3)}
+.strip .p.sel{box-shadow:0 0 0 2px var(--accent)}
+.strip .none{position:absolute;inset:14px 0 auto;text-align:center;font-size:12px;color:var(--muted)}
+.kpi{display:flex;gap:6px;margin:4px 0 0}
+.kpi div{flex:1;background:var(--solid-2);border-radius:11px;padding:7px 9px;font-size:11.5px;color:var(--muted);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi b{display:block;font-size:16px;color:var(--fg)}
+.mtabs{display:flex;gap:4px;background:var(--solid-2);border-radius:10px;padding:3px;margin:8px 0 6px}
+.mtabs button{flex:1;padding:7px 0;border-radius:8px;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:0;cursor:pointer}
+.mtabs button.on{background:var(--solid-3);color:var(--fg)}
+.sec-t{font-size:13px;font-weight:700;color:var(--muted);margin:14px 2px 6px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+/* 騎士：照騎行順序，像 F1：名次、第一位寫「領先」、其他人寫 +時間 或 +距離 */
+.gm{display:flex;gap:2px;background:var(--solid-2);border-radius:8px;padding:2px}
+.gm button{font:inherit;font-size:12px;font-weight:600;padding:3px 10px;border-radius:6px;border:0;background:none;color:var(--muted);cursor:pointer}
+.gm button[aria-pressed="true"]{background:var(--solid-3);color:var(--fg)}
+.wr{display:flex;gap:10px;align-items:center;padding:9px 4px;border:0;border-bottom:1px solid var(--line);background:none;width:100%;text-align:left;color:var(--fg);font:inherit;cursor:pointer}
+.wr.sel{background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:10px}
+.wr.away{background:color-mix(in srgb,var(--accent) 6%,transparent);border-radius:10px}
+.wr.sos{background:color-mix(in srgb,var(--sos) 18%,transparent);border-radius:10px}
+.wr .pos{width:18px;text-align:center;font-weight:800;color:var(--muted);flex:none;font-size:15px}
+.wr .avatar{width:34px;height:34px;font-size:14px}
+.wr .avatar.car{border-radius:10px;background:var(--solid-3)}
 .wr .m{flex:1;min-width:0}
-.wr .m b{font-size:15px}
-.wr .m .s{font-size:12.5px;color:var(--muted)}
-.wr .r{text-align:right;font-size:12px;color:var(--muted);flex:none}
-.wr .r b{display:block;font-size:20px;color:var(--fg)}
-.wr .bar{height:5px;border-radius:3px;background:var(--surface-3);margin-top:6px;overflow:hidden}
-.wr .bar i{display:block;height:100%}
-.badge{font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent-ink);white-space:nowrap}
+.wr .m b{font-size:14.5px}
+.wr .m .s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wr .gap{flex:none;text-align:right;font-weight:700;font-size:15px;white-space:nowrap}
+.wr .gap.lead{color:var(--ok-ink)}
+.wr .gap.off{color:var(--muted);font-size:12.5px;font-weight:600}
+.badge{font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent-ink);white-space:nowrap;margin-left:4px;vertical-align:1px}
 .badge.ok{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok-ink)}
 .badge.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn-ink)}
 .badge.crit{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit-ink)}
-.badge.muted{background:var(--surface-3);color:var(--muted)}
+.badge.muted{background:var(--solid-3);color:var(--muted)}
 
-/* 天氣路況、集合點的小格子 */
+/* 路線：直的路線圖（終點在上、起點在下），集合點、路況、每個人照公里數排上去，人和人之間寫差幾分鐘 */
+.lin{padding:12px 0 4px}
+.lin .ax{position:relative;margin-left:70px;border-left:6px solid var(--solid-3);padding-left:20px}
+.lin .done{position:absolute;left:-6px;bottom:0;width:6px;background:var(--accent);border-radius:3px}
+.lin .st{position:relative;min-height:42px;padding:4px 0}
+.lin .st>em{position:absolute;left:-98px;width:66px;text-align:right;font-style:normal;font-size:11.5px;color:var(--muted);top:7px}
+.lin .st::before{content:"";position:absolute;left:-30px;top:8px;width:14px;height:14px;border-radius:50%;background:var(--solid);border:3px solid var(--muted)}
+.lin .st.wp::before{border-color:var(--accent);background:var(--accent)}
+.lin .st.rd::before{border-color:var(--c);width:10px;height:10px;left:-28px;top:10px}
+.lin .st b{font-size:14.5px}.lin .st small{display:block;font-size:12px;color:var(--muted)}
+.lin .who{display:flex;align-items:center;gap:8px;margin:5px 0;background:none;border:0;padding:0;font:inherit;color:var(--fg);text-align:left;width:100%;cursor:pointer}
+.lin .who .avatar{width:30px;height:30px;font-size:12px;margin-left:-45px;border:2px solid var(--solid)}
+.lin .who .avatar.car{border-radius:9px;background:var(--solid-3)}
+.lin .who .n{flex:1;min-width:0;font-size:14px}.lin .who .n small{display:block;font-size:12px;color:var(--muted)}
+.lin .gapln{font-size:12px;color:var(--warn-ink);margin:2px 0}
+
+/* 天氣路況小格子 */
 .wx{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.wx>div{background:var(--surface-2);border-radius:12px;padding:10px;font-size:12.5px;color:var(--muted);min-width:0;overflow-wrap:anywhere}
-.wx>div.wide{grid-column:1/3}
+.wx>div{background:var(--solid-2);border-radius:12px;padding:10px;font-size:12.5px;color:var(--muted);min-width:0;overflow-wrap:anywhere}
 .wx b{display:block;color:var(--fg);font-size:15px}
 .wx b.rain{color:#64d2ff}.wx b.road{color:#ff9f0a}.wx b.okk{color:var(--ok-ink)}
 .wx .empty{grid-column:1/3}
 
-/* 地圖 */
-.mapw{grid-area:m;position:relative;min-width:0;min-height:0}
-#map{position:absolute;inset:0}
-.mapw .tools{position:absolute;top:10px;right:10px;z-index:6}
-.mapw .tool{background:var(--glass);box-shadow:0 4px 14px rgba(0,0,0,.45);border:0;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
-.mapw .tool.on{background:var(--accent-fill);color:#fff}
-.mapw .tool.away{background:var(--glass);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent),0 4px 14px rgba(0,0,0,.45)}
-/* SOS 橫幅：地圖上方，一人一條；定位＝鏡頭跟著他，已處理＝這台收起（新的 SOS 會再出現） */
-.sosbars{position:absolute;left:10px;right:76px;top:10px;z-index:7;display:flex;flex-direction:column;gap:8px;pointer-events:none}
-.sosbar{pointer-events:auto;background:var(--sos);color:#fff;border-radius:14px;padding:12px 14px;font-weight:700;display:flex;gap:10px;align-items:center;box-shadow:var(--shadow);font-size:15px}
-.sosbar .t{min-width:0;flex:1}
-.sosbar button{background:rgba(255,255,255,.22);padding:8px 14px;border-radius:999px;font-weight:700;color:#fff;border:0;font:inherit;font-size:14px;cursor:pointer;white-space:nowrap}
-.sosbar button:first-of-type{margin-left:auto}
-
-/* 剖面：海拔＋休息／集合點＋每個人的位置 */
-.prof{grid-area:p;background:var(--surface);border-top:1px solid var(--line);position:relative;padding:8px 12px;min-width:0;min-height:0}
+/* 剖面 */
+.prof{height:220px;margin-top:10px}
 .prof canvas{width:100%;height:100%;display:block}
 
 /* 事件 */
 .wchips{display:flex;gap:4px}
-.wchips button{height:26px;padding:0 10px;border-radius:999px;background:var(--surface-2);color:var(--fg);border:0;font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.wchips button{height:26px;padding:0 10px;border-radius:999px;background:var(--solid-2);color:var(--fg);border:0;font:inherit;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
 .wchips button[aria-pressed="true"]{background:var(--accent-fill);color:#fff}
 .ev{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
 .ev .ico{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;font-size:13px;flex:none;background:var(--c)}
@@ -84,18 +141,4 @@ body{display:grid;height:100vh;height:100dvh;grid-template-columns:330px 1fr 340
 .ev.new{animation:evfl 1.2s}
 @keyframes evfl{0%{background:rgba(255,138,61,.3)}100%{background:transparent}}
 
-.mtabs{display:none}
-@media (max-width:899px) and (orientation:portrait),(max-width:899px) and (min-height:521px){
-  body{grid-template-columns:1fr;grid-template-rows:calc(52px + env(safe-area-inset-top)) 44vh 44px 1fr;grid-template-areas:"hd" "m" "tb" "x"}
-  .whd{padding-top:env(safe-area-inset-top)}
-  .kpi{display:none}
-  .mtabs{grid-area:tb;display:flex;gap:4px;padding:4px 8px;background:var(--surface)}
-  .mtabs button{flex:1;border-radius:9px;font:inherit;font-size:14px;font-weight:600;color:var(--muted);background:none;border:0;cursor:pointer}
-  .mtabs button.on{background:var(--surface-2);color:var(--fg)}
-  .col.l,.col.r,.prof{grid-area:x;border:0}
-  .col{padding-bottom:max(12px,env(safe-area-inset-bottom))}
-  .prof{height:100%;padding-bottom:max(8px,env(safe-area-inset-bottom))}
-  body:not([data-mt="l"]) .col.l,body:not([data-mt="r"]) .col.r,body:not([data-mt="p"]) .prof{display:none}
-  .sosbar{font-size:14px;padding:10px 12px}
-}
-@media(prefers-reduced-motion:reduce){.ev.new{animation:none}}
+@media(prefers-reduced-motion:reduce){.ev.new{animation:none}.wnote,.strip .p{transition:none}}
