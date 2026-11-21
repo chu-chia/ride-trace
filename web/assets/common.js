@@ -336,14 +336,14 @@ export const LOW_POWER = (() => {
 document.documentElement.classList.toggle('low-power', LOW_POWER);
 
 // ---------- 玻璃效果（設定頁可關、可調濃淡；只影響這台裝置） ----------
-// qiji:glass = '0' 關閉；qiji:glass-a = 小按鈕底色不透明度 40～95（%），大面板自動再濃 12%
+// qiji:glass = '0' 關閉；qiji:glass-a = 小按鈕底色不透明度 0～100（%），大面板自動再濃 12%
 export const GLASS_DEFAULT_A = 72;
 export function glassPrefs() {
   let on = true, a = GLASS_DEFAULT_A;
   try {
     on = localStorage.getItem('qiji:glass') !== '0';
-    const v = Number(localStorage.getItem('qiji:glass-a'));
-    if (v >= 40 && v <= 95) a = v;
+    const s = localStorage.getItem('qiji:glass-a'), v = Number(s);
+    if (s !== null && s !== '' && v >= 0 && v <= 100) a = v;
   } catch { /* 私密模式 */ }
   return { on, a };
 }
