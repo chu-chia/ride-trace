@@ -325,6 +325,18 @@ export const LOW_POWER = (() => {
   return v ? v === '1' : matchMedia('(pointer: coarse)').matches;
 })();
 document.documentElement.classList.toggle('low-power', LOW_POWER);
+
+// ---------- 效能量測浮層（開發用）：網址加 ?perf=1 開、?perf=0 關，同一分頁換頁會保留 ----------
+export const PERF = (() => {
+  const q = new URLSearchParams(location.search).get('perf');
+  try {
+    if (q === '1') sessionStorage.setItem('qiji:perf', '1');
+    if (q === '0') { sessionStorage.removeItem('qiji:perf'); localStorage.removeItem('qiji:perf'); }
+    // 加到主畫面的 App 沒有網址列：設定頁的「效能量測浮層」開關存在 localStorage
+    return sessionStorage.getItem('qiji:perf') === '1' || localStorage.getItem('qiji:perf') === '1';
+  } catch { return q === '1'; }
+})();
+if (PERF) { window.__qijiMaps ||= []; import('/assets/perf.js'); }
 // 動畫迴圈用：回傳 false 表示這一格跳過（省電時約 30 fps）
 export function frameGate() {
   const ms = LOW_POWER ? 1000 / 30 - 2 : 0;

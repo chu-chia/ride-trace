@@ -98,6 +98,7 @@
   <div class="list">
     <div class="li wrap"><span class="m"><b>拖曳地圖後自動回到跟隨</b><span>行程頁、戰情室適用；回放不會自動回去。縮放、旋轉不會離開跟隨</span></span><div class="seg" id="resume" role="group" aria-label="自動回到跟隨"><button type="button" data-v="0">不自動</button><button type="button" data-v="10">10 秒</button><button type="button" data-v="15">15 秒</button><button type="button" data-v="30">30 秒</button></div></div>
     <label class="li"><span class="m"><b>省電模式</b><span>地圖 30 fps、解析度最多 2 倍、面板不做背景模糊、戰情室不自動旋轉（手機預設開啟）</span></span><input type="checkbox" class="sw" id="lowPower"></label>
+    <label class="li"><span class="m"><b>效能量測浮層</b><span>開發用：在地圖頁左上角顯示 FPS、掉格與地圖重畫次數（只影響這台裝置）</span></span><input type="checkbox" class="sw" id="perfHud"></label>
   </div>
 
   <div class="sec-t">通知與裝置</div>
@@ -128,12 +129,13 @@
   </div>
 </main>
 <script type="module">
-import { api, $, esc, avatar, LOW_POWER } from '/assets/common.js';
+import { api, $, esc, avatar, LOW_POWER, PERF } from '/assets/common.js';
 import { resumeMs } from '/assets/gestures.js';
 import { mountPushCard, pushEndpoint, dropLocalPush } from '/assets/push.js';
 import { clearSwrCache } from '/assets/swr.js';
 mountPushCard($('#pushCard'));  // 和行程頁同一張推播卡（UX-08）
 $('#lowPower').checked = LOW_POWER;
+$('#perfHud').checked = PERF;
 // 分段按鈕（照原型）：點了就存，按鈕狀態跟著換
 function seg(el, value, save) {
   const paint = (v) => el.querySelectorAll('[data-v]').forEach((b) => { const on = b.dataset.v === String(v); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
@@ -156,6 +158,7 @@ for (const [id, key] of [['#navAuto', 'qiji:nav:auto'], ['#navVoice', 'qiji:nav:
 document.querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => { const body = document.getElementById(b.dataset.open), open = body.hidden; body.hidden = !open; b.setAttribute('aria-expanded', String(open)); }; });
 if (location.hash === '#appearance') { $('#look').hidden = false; $('[data-open="look"]').setAttribute('aria-expanded', 'true'); }
 $('#lowPower').onchange = (e) => { try { localStorage.setItem('qiji:lowpower', e.target.checked ? '1' : '0'); } catch { /* 私密模式 */ } document.documentElement.classList.toggle('low-power', e.target.checked); };
+$('#perfHud').onchange = (e) => { try { if (e.target.checked) localStorage.setItem('qiji:perf', '1'); else { localStorage.removeItem('qiji:perf'); sessionStorage.removeItem('qiji:perf'); } } catch { /* 私密模式 */ } };
 const me = await api('/api/me');
 const { colors, named } = await api('/api/me/palette');
 const colorName = Object.fromEntries((named || []).map((x) => [x.color, x.name]));

@@ -47,6 +47,8 @@ function setOff(px, animate) {
   off = px;
   sheet.classList.toggle('dragging', !animate);
   sheet.style.setProperty('--sheet-off', `${px}px`);
+  // 全開而且沒在拖：地圖整個被蓋住，暫停重畫（拖曳中要露出地圖，不暫停）
+  M.pauseRender(px <= 1 && animate);
   // 工具列：抽屜快全開時才往上滑走（半開時地圖還看得到，工具列留著）
   const t = 1 - px / Math.max(1, offOf('peek'));
   document.documentElement.style.setProperty('--sheet-t', Math.max(0, Math.min(1, (t - 0.6) / 0.4)).toFixed(3));
@@ -289,7 +291,7 @@ function frame(now) {
     else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
     else M.followGroup(pts, { padding: pad(), maxZoom: 14 });
   } else if (S.styleReady && !pts.length && !S.profiling && autoFollow && !M.busy) fitLast();
-  if (now - lastTrail > 500) { lastTrail = now; map.getSource('trails')?.setData(trailsGeo()); }
+  if (now - lastTrail > 500 && !window.__qijiPerfFlags?.has('notrail')) { lastTrail = now; map.getSource('trails')?.setData(trailsGeo()); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
