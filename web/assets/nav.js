@@ -351,7 +351,8 @@ function edges() {
       el = document.createElement('button'); el.type = 'button'; el.className = 'nv-edge';
       el.innerHTML = `${avHtml(m)}<svg viewBox="0 0 16 16"><path d="M8 1l6 13-6-3.5L2 14z" fill="currentColor"/></svg>`;
       el.setAttribute('aria-label', `${m.u.nickname}，在畫面外，點一下看他在哪`);
-      el.onclick = () => focusMate(uid); $('#nvEdges').append(el); edgeEls.set(uid, el);
+      el.onclick = () => { if (el.dataset.group) setSheet(true); else focusMate(uid); };  // 合併的那顆：打開隊伍清單
+      $('#nvEdges').append(el); edgeEls.set(uid, el);
     }
     el.style.display = '';
     const s = mateState(m, sos);
@@ -363,16 +364,23 @@ function edges() {
     const ty = dy > 1e-3 ? (bot - h / 2 - y0) / dy : dy < -1e-3 ? (top + h / 2 - y0) / dy : Infinity;
     const t = Math.max(0, Math.min(tx, ty));
     let x = x0 + dx * t, y = y0 + dy * t;
-    for (const q of placed) if (Math.abs(x - q.x) < (w + q.w) / 2 + 4 && Math.abs(y - q.y) < h + 4) y = y > (top + bot) / 2 ? q.y - h - 6 : q.y + h + 6;
     // 避開畫面上的按鈕（速度圈、右側浮鈕、返回目前位置、右上工具列）：疊到就往上推到它上面（工具列就推到下面）
     for (let k = 0; k < 4; k++) {
       const hit = blocks.find((r) => x + w / 2 > r.left - 4 && x - w / 2 < r.right + 4 && y + h / 2 > r.top - 4 && y - h / 2 < r.bottom + 4);
       if (!hit) break;
       y = hit.top < (top + bot) / 2 && hit.bottom < innerHeight / 2 ? hit.bottom + h / 2 + 6 : hit.top - h / 2 - 6;
     }
-    placed.push({ x, y, w });
+    // 跟已經放好的邊緣頭像疊到：不另外排開（太佔空間），合併到那一顆，數字 +1
+    const lead = placed.find((q) => Math.abs(x - q.x) < w && Math.abs(y - q.y) < h);
+    if (lead) { lead.n += 1; lead.uids.push(uid); el.style.display = 'none'; continue; }
+    placed.push({ x, y, w, el, n: 0, uids: [uid] });
     el.style.transform = `translate(${Math.round(x - 17)}px,${Math.round(y - 17)}px)`;
     el.querySelector('svg').style.transform = `rotate(${Math.round(rel)}deg) translateY(-22px)`;
+  }
+  for (const q of placed) {
+    const av = q.el.querySelector('.nv-av'), v = q.n ? `+${q.n}` : '';
+    if (av.dataset.more !== v) av.dataset.more = v;
+    q.el.dataset.group = q.n ? q.uids.join(',') : '';
   }
   for (const [uid, el] of edgeEls) if (!seen.has(uid)) { el.remove(); edgeEls.delete(uid); }
 }

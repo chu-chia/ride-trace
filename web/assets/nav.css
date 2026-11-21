@@ -160,3 +160,5 @@ body.nav .rider.nv-nearme{opacity:.35;transform-origin:center}
 body.nav .rider.nv-nearme .dot{transform:scale(.7)}
 body.nav .rider.nv-merged{display:none}
 body.nav .rider .dot[data-more]:not([data-more=""])::after{content:attr(data-more);position:absolute;top:-8px;right:-12px;min-width:20px;height:18px;padding:0 4px;border-radius:9px;background:#1a73e8;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center;border:1.5px solid #fff}
+.nv-edge .nv-av{position:relative}
+.nv-edge .nv-av[data-more]:not([data-more=""])::after{content:attr(data-more);position:absolute;top:-8px;right:-12px;min-width:20px;height:18px;padding:0 4px;border-radius:9px;background:#1a73e8;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center;border:1.5px solid #fff}
