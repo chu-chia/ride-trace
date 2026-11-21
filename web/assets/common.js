@@ -338,9 +338,9 @@ document.documentElement.classList.toggle('low-power', LOW_POWER);
 
 // ---------- 玻璃效果（設定頁可關、可調；只影響這台裝置） ----------
 // qiji:glass = '0' 關閉；qiji:glass-a = 小按鈕底色不透明度 0～100（%），大面板自動再濃 12%
-// qiji:glass-x = 玻璃進階（測試用，JSON）：模糊、亮度、邊緣折射與強度、色散、漸層亮邊、轉彎卡玻璃、省電時抽屜也用玻璃
+// qiji:glass-x = 玻璃進階（測試用，JSON）：模糊、亮度、邊緣折射與強度、色散、漸層亮邊、轉彎卡玻璃、省電時抽屜也用玻璃、側邊面板／行程抽屜玻璃
 export const GLASS_DEFAULT_A = 72;
-export const GLASS_X_DEFAULT = { blur: 20, bri: 0, refr: false, refrS: 60, disp: false, rim: false, turn: false, sheetLP: false };
+export const GLASS_X_DEFAULT = { blur: 20, bri: 0, refr: false, refrS: 60, disp: false, rim: false, turn: false, sheetLP: false, panel: true };
 export function glassPrefs() {
   let on = true, a = GLASS_DEFAULT_A, x = { ...GLASS_X_DEFAULT };
   try {
@@ -366,6 +366,7 @@ export function applyGlass(g = glassPrefs()) {
   root.classList.toggle('glass-rim', !!g.rim);
   root.classList.toggle('glass-turn', !!g.turn);
   root.classList.toggle('glass-sheet-lp', !!g.sheetLP);
+  root.classList.toggle('glass-panel', !!g.panel);
   root.style.setProperty('--lg-a', String(g.a / 100));
   root.style.setProperty('--lg-blur', `${g.blur}px`);
   root.style.setProperty('--lg-bri', String(1 + g.bri / 100));
@@ -374,7 +375,7 @@ export function applyGlass(g = glassPrefs()) {
 
 // 邊緣折射（設定頁開）：替每個玻璃元件依尺寸產生位移圖，寫進 --liquid-filter。只有 Chromium 有效；
 // 色散＝紅綠藍三個通道位移量不同，邊緣會出現彩色邊
-const GLASS_SEL = '.glass,.toast,.nv-fab:not(.sos),.nv-cur,.nv-recenter,.nv-focus,.nv-sheet,.wsheet,.psheet,.turn-main,.turn-then';
+const GLASS_SEL = '.rtop #back,.rtop #bFog,.rtop .pill,.rtop .panel-title,.followPill,.wnote,.pbar,.glass,.toast,.nv-fab:not(.sos),.nv-cur,.nv-recenter,.nv-focus,.nv-sheet,.wsheet,.psheet,.turn-main,.turn-then';
 const ER = { opts: null, svg: null, ro: null, mo: null, mine: new Set(), size: new WeakMap(), seq: 0 };
 function erFilter(el) {
   const o = ER.opts; if (!o || el.dataset.lgOwn) return;

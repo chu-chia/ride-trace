@@ -142,6 +142,7 @@
         <label class="gx-s"><span><b>色散</b><small>折射時邊緣出現紅藍彩邊（要先開邊緣折射）</small></span><input type="checkbox" class="sw" id="gxDisp"></label>
         <label class="gx-s"><span><b>漸層亮邊</b><small>左上亮、右下淡的邊框，像光從左上打過來</small></span><input type="checkbox" class="sw" id="gxRim"></label>
         <label class="gx-s"><span><b>轉彎卡也用玻璃</b><small>導航上方的綠色轉彎卡跟著濃淡變透明</small></span><input type="checkbox" class="sw" id="gxTurn"></label>
+        <label class="gx-s"><span><b>側邊面板／行程抽屜也用玻璃</b><small>行程頁、回放、足跡的面板（手機是底部抽屜）；關掉就是改版原型的實色面板</small></span><input type="checkbox" class="sw" id="gxPanel"></label>
         <label class="gx-s"><span><b>省電時抽屜也用玻璃</b><small>省電模式預設把抽屜、大面板改成實色；打開就照樣是玻璃（較耗電）</small></span><input type="checkbox" class="sw" id="gxSheet"></label>
         <button type="button" class="btn" id="gxReset">進階全部回預設</button>
       </div>
@@ -189,7 +190,7 @@ $('#lowPower').checked = LOW_POWER;
 {
   const g = glassPrefs();
   const R = [['gxBlur', 'blur', 'px'], ['gxBri', 'bri', '%'], ['gxRefrS', 'refrS', '']];
-  const S = [['gxRefr', 'refr'], ['gxDisp', 'disp'], ['gxRim', 'rim'], ['gxTurn', 'turn'], ['gxSheet', 'sheetLP']];
+  const S = [['gxRefr', 'refr'], ['gxDisp', 'disp'], ['gxRim', 'rim'], ['gxTurn', 'turn'], ['gxSheet', 'sheetLP'], ['gxPanel', 'panel']];
   const show = () => {
     $('#glassVal').textContent = `${g.a}%`;
     $('#glassRow').classList.toggle('off', !g.on); $('#glassX').classList.toggle('off', !g.on);

@@ -242,11 +242,29 @@ a.li{color:inherit}
 /* 省電模式：小按鈕照樣是玻璃（實測 4 顆按鈕負擔很小），大面板不做背景模糊（地圖每重畫一格就要重算一次整片模糊） */
 .low-power :is(.panel,.war-panel,.mobile-sheet).glass,.low-power :is(.nv-sheet,.wsheet,.psheet){-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:var(--glass)!important}
 /* ── 玻璃進階（設定頁，測試用；common.js 在 <html> 加 class） ── */
+/* 各頁浮在地圖上的小元件（手機版上方返回鈕、標題膠囊、跟隨膠囊、足跡模式鈕、回放播放列、戰情室提示列）：跟 .tool 一樣用玻璃 */
+html:not(.no-glass) :is(.rtop #back,.rtop #bFog,.rtop .pill,.rtop .panel-title,.fpmode button:not(.on),.followPill,.wnote,.pbar){
+  background:var(--lg-float)!important; box-shadow:var(--lg-rim),var(--lg-shadow)!important;
+  -webkit-backdrop-filter:var(--lg-bf)!important; backdrop-filter:var(--liquid-filter,) var(--lg-bf)!important}
+/* 側邊面板／手機行程抽屜（預設開，設定頁可關）：大面板，底色比按鈕濃 12%；裡面的卡片改半透明填色 */
+html.glass-panel:not(.no-glass) :is(.panel.glass,.panel.solid){
+  --surface:var(--lg-surface); --surface-2:var(--lg-surface-2); --surface-3:var(--lg-surface-2);
+  background:var(--lg-big); border:1px solid var(--lg-edge); box-shadow:var(--lg-rim),var(--shadow);
+  -webkit-backdrop-filter:var(--lg-bf); backdrop-filter:var(--liquid-filter,) var(--lg-bf)}
+html.glass-panel:not(.no-glass) .panel :is(.handle,.keep){background:transparent}
+.low-power.glass-panel:not(.glass-sheet-lp) :is(.panel.glass,.panel.solid){-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:var(--solid)!important}
+.low-power.glass-panel:not(.glass-sheet-lp) .panel :is(.handle,.keep){background:var(--solid)}
+@media (prefers-reduced-transparency: reduce){
+  html.glass-panel :is(.panel.glass,.panel.solid){background:var(--solid)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+  html.glass-panel .panel :is(.handle,.keep){background:var(--solid)}
+  :is(.rtop #back,.rtop #bFog,.rtop .pill,.rtop .panel-title,.fpmode button,.followPill,.wnote,.pbar){-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+}
 /* 漸層亮邊：左上亮、右下淡，像光從左上打過來 */
 .glass-rim{--lg-rim:inset 1px 1px 0 rgba(255,255,255,.75),inset -1px -1px 0 rgba(255,255,255,.3),inset 0 0 14px rgba(255,255,255,.08)}
 /* 省電時抽屜也用玻璃（系統降低透明度、關閉玻璃時不套用） */
 @media not (prefers-reduced-transparency: reduce){
   html.glass-sheet-lp.low-power:not(.no-glass) :is(.war-panel,.mobile-sheet).glass{background:var(--lg-big)!important;-webkit-backdrop-filter:var(--lg-bf)!important;backdrop-filter:var(--liquid-filter,) var(--lg-bf)!important}
+  html.glass-sheet-lp.glass-panel.low-power:not(.no-glass) :is(.panel.glass,.panel.solid){background:var(--lg-big)!important;-webkit-backdrop-filter:var(--lg-bf)!important;backdrop-filter:var(--liquid-filter,) var(--lg-bf)!important}
   html.glass-sheet-lp.low-power:not(.no-glass) :is(.wsheet,.psheet){background:var(--lg-big)!important;-webkit-backdrop-filter:var(--lg-bf)!important;backdrop-filter:var(--liquid-filter,) var(--lg-bf)!important}
 }
 .liquid-glass-filter{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
