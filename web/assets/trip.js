@@ -457,15 +457,46 @@ function renderStage() {
     });
   } else if (st === 'done') {
     const me = S.members.get(S.me), k = me?.u.stats || {};
-    const km = +k.km || 0, mv = +k.moving_s || 0;
-    const html = `<p class="stage-h">${t.status === 'ended' ? '騎完了，辛苦了 🎉' : '你的紀錄已結束'}</p>
-      <div class="kv4 num"><div><b>${km.toFixed(1)}</b><span>公里</span></div><div><b>${mv ? dur(mv * 1000) : '–'}</b><span>騎乘時間</span></div><div><b>${mv > 60 ? Math.round(km / (mv / 3600)) : '–'}</b><span>平均 km/h</span></div><div><b>${k.max_kmh ? Math.round(+k.max_kmh) : '–'}</b><span>最高 km/h</span></div></div>
-      <p class="done-l">${t.status === 'ended' ? `整趟行程已結束${t.ended_reason ? `・${esc(String(t.ended_reason).split('，')[0])}` : ''}` : '車隊還在騎，地圖會繼續顯示隊友的位置'}</p>
+    const D = doneSum, my = D?.mine;
+    // 有回放摘要就用它（含爬升）；還沒載到先用即時統計
+    const km = my ? my.km : +k.km || 0, mv = my ? my.moving_ms / 1000 : +k.moving_s || 0;
+    const avg = my ? my.avg_kmh : mv > 60 ? km / (mv / 3600) : 0;
+    const climb = my ? my.climb_m : null;
+    const lines = [];
+    if (t.status === 'ended') {
+      if (D?.dest) lines.push(`${ICO_OK}${D.arrived === D.total ? `全隊 ${D.total} 人都抵達` : `${D.arrived}／${D.total} 人抵達`} <b>${esc(D.dest)}</b>`);
+      else if (t.ended_reason) lines.push(`${ICO_OK}${esc(String(t.ended_reason).split('，')[0])}`);
+      if (D?.towns?.length) lines.push(`${ICO_STAR}新點亮 ${D.towns.length} 個鄉鎮：<b>${D.towns.slice(0, 3).map(esc).join('、')}${D.towns.length > 3 ? ` 等` : ''}</b>（已算進足跡）`);
+    } else lines.push(`${ICO_OK}車隊還在騎，地圖會繼續顯示隊友的位置`);
+    const html = `<p class="stage-h">${t.status === 'ended' ? '騎完了，辛苦了' : '你的紀錄已結束'}</p>
+      <div class="kv4 num"><div><b>${km.toFixed(1)}</b><span>公里</span></div><div><b>${mv ? dur(mv * 1000) : '–'}</b><span>騎乘時間</span></div><div><b>${avg ? Math.round(avg) : '–'}</b><span>平均 km/h</span></div><div><b>${climb != null ? Math.round(climb).toLocaleString() : '–'}</b><span>爬升 m</span></div></div>
+      ${lines.map((l) => { const m = l.match(/^(<svg[\s\S]*?<\/svg>)([\s\S]*)$/); return `<p class="done-l">${m ? `${m[1]}<span>${m[2]}</span>` : `<span>${l}</span>`}</p>`; }).join('')}
       <div class="acts2"><a class="btn main primary" href="/replay?id=${tid}">看回放</a></div>
       <div class="acts2"><a class="btn" href="/footprint">看足跡</a><a class="btn" href="/">回首頁</a></div>`;
     setHTML($('#doneBox'), html);
+    loadDoneSum();
   }
   loadRouteSum();
+}
+/* 結束階段的摘要：我的里程／騎乘時間／平均／爬升（回放摘要）、全隊幾人抵達終點、這趟新點亮的鄉鎮 */
+const ICO_OK = '<svg class="dl-ico ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const ICO_STAR = '<svg class="dl-ico star" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.2 6.6.7-4.9 4.6 1.4 6.6L12 17.3l-5.9 3.3 1.4-6.6-4.9-4.6 6.6-.7z"/></svg>';
+let doneSum = null, doneLoading = false;
+async function loadDoneSum() {
+  if (doneSum || doneLoading || S.trip?.status !== 'ended') return;
+  doneLoading = true;
+  try {
+    const [rp, rt, towns] = await Promise.all([api(`/api/trips/${tid}/replay`), api(`/api/trips/${tid}/route/summary`).catch(() => null), api('/api/me/towns').catch(() => null)]);
+    const end = rt?.points?.at(-1), riders = rp.members.filter((m) => m.track?.length > 1);
+    const near = (m) => { const p = m.track.at(-1); return end && hav(p[1], p[2], end.lat, end.lon) < 500; };
+    const t0 = +S.trip.started || rp.t0, t1 = +S.trip.ended_at || rp.t1;
+    doneSum = {
+      mine: rp.members.find((m) => String(m.uid) === String(S.me))?.summary || null,
+      dest: end ? end.name || '終點' : '', total: riders.length, arrived: riders.filter(near).length,
+      towns: (towns?.recent || []).filter((x) => x.ts >= t0 - 60000 && x.ts <= t1 + 600000).map((x) => `${x.county}${x.name}`),
+    };
+  } catch { doneSum = { mine: null, dest: '', total: 0, arrived: 0, towns: [] }; }
+  renderStage();
 }
 function renderHeader() {
   const t = S.trip;
@@ -484,6 +515,7 @@ function renderHeader() {
   $('#finishBtn').hidden = !(t.status === 'live' && t.is_owner);
   $('#teamInvite').hidden = t.status === 'ended';
   $('#bShare').hidden = t.status === 'ended';
+  document.body.classList.toggle('trip-ended', t.status === 'ended');  // 結束後不需要 SOS 浮鈕
 }
 $('#finishBtn').onclick = (e) => armConfirm(e.currentTarget, '再按一次結束全隊', async () => {
   try { await api(`/api/trips/${tid}/finish`, { method: 'POST' }); }
@@ -629,8 +661,7 @@ function handle(msg) {
   switch (msg.kind) {
     case 'snapshot': {
       const t = msg.trip;
-      // 行程結束後只剩回放：直接換到回放頁（replace，按上一頁不會又回到這裡）
-      if (t.status === 'ended') { location.replace(`/replay?id=${tid}`); return; }
+      // 行程結束：照改版原型先看這趟的摘要（結束階段），再選看回放／看足跡／回首頁
       S.trip = t; S.me = t.me;
       ensureQueue();  // 上次沒補完的位置（例如在山上重新整理過）接著補
       t.members.forEach((u) => {
@@ -665,7 +696,7 @@ function handle(msg) {
     case 'member': upsertMember(msg.user, {}); renderTeam(); break;
     case 'trip':
       S.trip.status = msg.status;
-      if (msg.status === 'ended') { toast('行程結束了，3 秒後前往回放', { icon: '騎' }); setTimeout(() => location.replace(`/replay?id=${tid}`), 3000); }
+      if (msg.status === 'ended') { S.trip.ended_at = Date.now(); toast('行程結束了', { icon: '騎', sub: '下面是這趟的摘要，可以看回放' }); setCollapsed(false); }
       if (msg.status === 'live') { S.trip.started = Date.now(); S.members.forEach((m) => (m.u.active = true)); }
       renderHeader();
       break;
