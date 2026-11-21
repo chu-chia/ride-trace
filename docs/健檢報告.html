@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>騎跡 RideTrace — 10 軸健檢報告</title>
+<style>
+:root{
+  --bg:#f7f7f8; --card:#fff; --ink:#17171a; --muted:#5d5d63; --line:#e3e3e8;
+  --s4:#b3261e; --s3:#c2410c; --s2:#8a6d00; --s1:#1d5c8f; --s0:#5d5d63;
+  --ok:#1a7f4b; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+[data-theme="dark"]{ --bg:#0f0f11; --card:#19191c; --ink:#f2f2f5; --muted:#a2a2ab; --line:#2c2c33;
+  --s4:#ff6b61; --s3:#ffa062; --s2:#e3c34a; --s1:#6cb6ef; --s0:#a2a2ab; --ok:#57d38c; }
+@media (prefers-color-scheme:dark){ [data-theme="auto"]{ --bg:#0f0f11; --card:#19191c; --ink:#f2f2f5; --muted:#a2a2ab; --line:#2c2c33;
+  --s4:#ff6b61; --s3:#ffa062; --s2:#e3c34a; --s1:#6cb6ef; --s0:#a2a2ab; --ok:#57d38c; } }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);line-height:1.6;
+  font-family:ui-sans-serif,-apple-system,"PingFang TC","Hiragino Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px}
+header{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:18px}
+h1{font-size:clamp(22px,3.4vw,32px);margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13.5px;margin-top:6px}
+button{font:inherit;cursor:pointer;color:inherit;background:var(--card);border:1px solid var(--line);
+  border-radius:9px;padding:8px 13px;min-height:38px}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+h2{font-size:17px;margin:34px 0 12px;letter-spacing:-.01em}
+.mono{font-family:var(--mono);font-size:12.5px}
+/* 總分表 */
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+tbody tr:last-child td{border-bottom:0}
+td.n{text-align:center;font-variant-numeric:tabular-nums;font-family:var(--mono);width:44px}
+.axis{font-weight:600}
+.verdict{color:var(--muted);font-size:13px}
+.bar{display:flex;height:7px;border-radius:4px;overflow:hidden;max-width:168px;background:var(--line)}
+.bar i{display:block;height:100%;flex:none}
+/* 工具列 */
+.bar-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0 6px}
+.bar-tools input{flex:1 1 200px;min-height:38px;min-width:180px;padding:8px 12px;border:1px solid var(--line);
+  border-radius:9px;background:var(--card);color:var(--ink)}
+.count{color:var(--muted);font-size:13px;margin-left:auto}
+/* finding 卡 */
+.f{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--s0);border-radius:11px;
+  padding:14px 16px;margin:10px 0}
+.f[data-sev="4"]{border-left-color:var(--s4)} .f[data-sev="3"]{border-left-color:var(--s3)}
+.f[data-sev="2"]{border-left-color:var(--s2)} .f[data-sev="1"]{border-left-color:var(--s1)}
+.fhead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}
+.sev{font-size:11.5px;font-weight:700;letter-spacing:.03em;padding:2px 9px;border-radius:20px;color:#fff}
+[data-sev="4"] .sev{background:var(--s4)} [data-sev="3"] .sev{background:var(--s3)}
+[data-sev="2"] .sev{background:var(--s2);color:#17171a} [data-sev="1"] .sev{background:var(--s1)}
+[data-sev="0"] .sev{background:var(--s0);color:#fff}
+.ax{font-size:11.5px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:2px 9px}
+.f h3{margin:0;font-size:15.5px;letter-spacing:-.005em}
+.lbl{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-top:10px}
+.f p{margin:4px 0;font-size:14px}
+.ev{background:color-mix(in srgb,var(--bg) 60%,transparent);border-radius:7px;padding:7px 10px;margin-top:4px}
+.ev code{font-family:var(--mono);font-size:12.5px;color:var(--ink);word-break:break-word}
+.good{border:1px solid var(--line);border-radius:11px;padding:6px 18px;background:var(--card)}
+.good li{font-size:14px;margin:7px 0}
+.pill{display:inline-block;background:var(--ok);color:#fff;font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px}
+.foot-note{display:block;color:var(--muted);font-size:12.5px;margin-top:10px}
+summary{cursor:pointer;font-weight:600;font-size:14px;padding:6px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>騎跡 RideTrace — 10 軸健檢報告</h1>
+    <div class="sub">
+      基準 commit <code class="mono">5022795</code>｜2026-11-17｜5 路唯讀稽核分頭讀 code ＋主體抽查，未修改任何檔案<br>
+      共 <b id="total">—</b> 項發現，依嚴重程度排列。行號會因並行修改漂移，動手前請再對一次。
+    </div>
+  </div>
+  <button id="theme" aria-label="切換明暗色">明／暗</button>
+</header>
+
+<section aria-label="各軸總分">
+  <h2>10 軸總分</h2>
+  <table>
+    <thead><tr><th>軸</th><th>評語</th><th style="text-align:center">嚴</th><th style="text-align:center">高</th><th style="text-align:center">中</th><th style="text-align:center">低</th><th style="text-align:center">提示</th><th>分布</th></tr></thead>
+    <tbody id="axes"></tbody>
+  </table>
+</section>
+
+<section aria-label="立刻要處理">
+  <h2>上線／上傳 GitHub 之前一定要先做的 6 件事</h2>
+  <ol id="must" style="font-size:14.5px"></ol>
+</section>
+
+<section aria-label="發現清單">
+  <h2>全部發現（依嚴重程度）</h2>
+  <div class="bar-tools" role="group" aria-label="篩選">
+    <input id="q" type="search" placeholder="搜尋關鍵字、檔名、key 名稱…" aria-label="搜尋發現">
+    <span class="count" id="count" aria-live="polite"></span>
+  </div>
+  <div class="bar-tools" role="group" aria-label="依嚴重度篩選" id="sevbtns"></div>
+  <div class="bar-tools" role="group" aria-label="依軸篩選" id="axbtns"></div>
+  <div id="list"></div>
+</section>
+
+<section aria-label="做得好的地方">
+  <h2>這個專案做對的地方（彙報時可以講）</h2>
+  <ul class="good" id="goods"></ul>
+</section>
+
+<footer><p class="foot-note">
+  稽核方式：5 個唯讀 sub-agent 分別負責「驗證與授權＋隱私」「資料正確性＋併發」「Redis＋效能」「可靠性＋維運」「前端＋無障礙」，
+  逐檔讀 code 並提出 file:line 證據；主體再抽查 compose 的 requirepass／maxmemory／healthcheck、<code class="mono">alarm</code> 有無被讀、
+  maxlen 出現位置、限流出現位置、<code class="mono">TS_RETENTION_MS</code>、<code class="mono">trip.js → trip-extra.js</code> 的相依鏈、
+  <code class="mono">export_redis</code> 排除清單、<code class="mono">admin.py</code> 的 scan_iter，結論與 sub-agent 一致。<br>
+  沒有做的：沒有跑單元測試（專案本來就沒有）、沒有實際用真手機走一遍寫入路徑、沒有把每條 finding 都在執行環境重現。
+  「低／提示」級的判定摻有稽核者的主觀判斷，把它當成待討論清單而不是违规清單。
+</p></footer>
+</div>
+
+<script>
+const SEV=["提示","低","中","高","嚴重"];
+const AX=["驗證與授權","隱私與個資","資料正確性","併發與原子性","Redis 與記憶體","效能與擴展","可靠性與容錯","部署與維運","前端與手機實戰","無障礙與可維護性"];
+const VERDICT=[
+ "授权覆蓋率其實很好（逐端點核對過 IDOR 全部有擋），但 session 無法撤銷、管理員靠 username 決定、WS 只驗一次握手",
+ "「位置不外送」的核心宣稱屬實，但匯出工具與 log 檔是兩個被忽略的缺口，且完全沒有座標降精度",
+ "里程完全沒有雜訊門檻，同一個公式有四種寫法，客戶端 ts 不做範圍檢查",
+ "Lua／SET NX 的原子手法用得漂亮；漏的是 ingest 讀寫邊界、progress 沒有 ts 閘門、active_trip 覆寫",
+ "TTL 覆蓋率意外地好，但行程級 key 與 TimeSeries 永不回收，也沒有 maxmemory",
+ "寫入路徑的 pipeline 是教科書級；瓶頸在 client 端串行往返與後台的無腦全掃描",
+ "at-least-once 的冪等設計大多正確；外部依賴變慢、壞資料卡批次、推播失敗這三類沒有防禦",
+ "沒有 healthcheck、備份存得起來卻還原不了、鏡像不可重現、Redis 對整個網段敞開",
+ "弱網／斷線時會假裝正常；地圖 CDN 一掉，連 SOS 按鈕都會跟著失效",
+ "沒有任何自動化測試與 CI；警示只有視覺、SOS 沒有鍵盤路徑、表單多數沒有名字"
+];
+/* sev: 4嚴重 3高 2中 1低 0提示 | ax: 軸索引 */
+const F=[
+{sev:4,ax:0,t:"Redis 完全沒有認證，而且 6390 綁在 0.0.0.0（Valhalla 8752 也是）",
+ ev:"docker-compose.yml:6-15、70-71（command 沒有 --requirepass、ports 是 \"6390:6379\"）；實測 docker exec redis-cli DBSIZE → 111141，無需密碼直接進",
+ im:"Redis 就是這個系統的全部資產：session:*（拿到就能冒用任何帳號含管理員）、user:* 的 scrypt 雜湊、device:*（可偽造他人位置）、全年足跡與所有軌跡。同一個 WiFi／網段的人可以整包讀走，或一條 FLUSHALL 歸零。Valhalla 的 trace_route／expansion 是重運算，不用金鑰就能打死 CPU。唯一擋著的是 Redis protected-mode，而它只要有人加一份 redis.conf 就失效。",
+ fx:"redis command 加 --requirepass ${REDIS_PASSWORD}，REDIS_URL 帶密碼；ports 改 \"127.0.0.1:6390:6379\"、\"127.0.0.1:8752:8002\"（Tailscale serve 打的是 127.0.0.1:8750，這兩個 port 本來就不需要對外）。"},
+{sev:4,ax:1,t:"export_redis 的 demo 模式宣稱「乾淨」，實際上仍會外洩精確座標與推播訂閱",
+ ev:"backend/tools/export_redis.py:39-44（private_patterns 沒有 user:{uid}:push）、76-78（全域排除也沒有 trip:*:events／chat／progress／stream:notify）；座標來源：interact.py:66-68（快速訊息帶 lat/lon）、worker.py:417-418（異常久停）、interact.py:110-111（地圖標註）",
+ im:"docs/繳交清單.md:3 明說 Drive 連結「知道連結的人皆可檢視」。拿到連結的人可以從 trip:*:events 還原出你在多趟行程裡的精確座標點，並用推播 endpoint（p256dh＋auth）長期關聯同一台裝置。文件號稱的「已排除個人足跡」名不副實。",
+ fx:"private_patterns 補 f\"user:{uid}:push\"；全域排除補 stream:notify、trip:*:chat、trip:*:chatread、trip:*:progress、trip:*:marks、trip:*:mark:*、trip:*:waypoints、trip:*:wp:*；再加一段「依 private uid 清洗事件 Stream」：對 trip:*:events 跑 xrange，uid 屬私人帳號或欄位含 lat/lon 的就 xdel。"},
+{sev:4,ax:0,t:"git history 裡的機器人密碼「目前仍在 .env 中使用」",
+ ev:"commit 9d9e18e:backend/tools/simulate.py:31 BOT_PASSWORD = \"（已遮蔽）\"；.env:1 SIM_BOT_PASSWORD=（已遮蔽）（完全相同）；docs/繳交清單.md:12 自己警告過但尚未處理",
+ im:"sim_* 不是丟棄帳號——它們是正式帳號，有 trip、有 track/footprint。知道這組共用密碼就能登入任何 sim_* → GET /api/trips/{tid}/replay 讀到該行程所有真人隊友的完整軌跡與聊天。推到 GitHub 之後收不回來。",
+ fx:"先改 .env 的 SIM_BOT_PASSWORD 並重建機器人帳號（DEL username:sim_* / user:{uid} / SCAN user:{uid}:*）；推檔前用 git filter-repo --replace-text 重寫歷史，別只刪最新 commit。"},
+{sev:4,ax:2,t:"里程完全沒有雜訊門檻：停車時 GPS 漂移會直接灌進里程與移動時間",
+ ev:"db.py:89-93（UPDATE_STATS_LUA 只有 250 km/h 上限與 dt>3600 排除，沒有最小位移／最小精度）；同樣的漏洞在 replay.py:37-39 與 geo.py:63-65 各寫一遍；acc（定位精度）在 ingest.py:80 收進來卻沒有任何一處使用",
+ im:"停車時 GPS 隨機游走是單調累加（每段都是正距離），紅綠燈 3 分鐘、看風景 20 分鐘里程就會長；雜訊常剛好超過 5 km/h 所以 moving_s 一起灌水 → trip:{tid}:stats:{uid} 的 km／max_kmh／moving_s／avg_kmh、回放摘要的 km／climb_m、/me 的 total_km 全部偏高，停得越久錯越多。海拔只靠 3 m 門檻（replay.py:55）擋不住 10 m 級的垂直誤差，climb_m 系統性偏高。",
+ fx:"在 geo.py 定義 MIN_STEP_M=3、MIN_STEP_KMH=3，由 worker 用 ARGV 傳進 UPDATE_STATS_LUA，條件加上 d>=MIN_D and v>=MIN_V and (not acc or acc<=30)；replay.summarize 與 geo.segment_cells 共用同一組常數；import_gpx.py:86-89 的第四種規則一起對齊。"},
+{sev:4,ax:6,t:"Traccar 的 SOS（alarm=sos）後端完全沒接：按了等於沒按",
+ ev:"logs-2.txt:209 Position requested alarm=sos；backend/app/ingest.py:133-166 只解析 id／lat／lon／altitude／speed／bearing／accuracy／batt／timestamp，沒有讀 alarm（全 backend grep alarm = 0 筆）；唯一的 SOS 入口是網頁 POST /api/trips/{tid}/sos（interact.py:150-161）",
+ im:"README:82 與 docs/部署.md:46 都明確建議「騎車時用 Traccar，螢幕關掉也沒關係」。在那條唯一能背景使用的路徑上，SOS 是不存在的功能：騎士按下去，伺服器不知道、事件流沒有、推播不會發、隊友畫面不會亮紅條。這是安全功能的空洞，不是功能瑕疵。順帶：Traccar 傳的欄位名是 batteryLevel，現在只讀 batt，所以電量永遠是空。",
+ fx:"osmand() 讀 q.get(\"alarm\")／body.get(\"alarm\"），值為 sos／soscancel 時用已經查出的 uid 直接呼叫 interact.send_sos／cancel_sos 的底層 coroutine（要把 Depends(current_uid) 抽成可共用的函式）；batt 同時接受 batteryLevel。"},
+{sev:4,ax:7,t:"「真機實測」的 log 證明手機是把 GPS 送到 demo.traccar.org（明文 HTTP），自己的寫入路徑一次都沒測過",
+ ev:"logs.txt:2／logs-2.txt:2 Tracker start http://demo.traccar.org:5055 （裝置ID已遮蔽）；整份 log（15:24:43～15:36:15）沒有任何一筆指向 macbook-pro.tail866fc3.ts.net:8443/osmand；回應碼一路 400 → 500 → 403，logs-2.txt:140 退避已到 5m 上限",
+ im:"docs/records/2026-11-17-handoff.md:101-104 寫「下一步：真機實測，看真實手機 GPS 能不能寫進來」——實際測的是 Traccar 官方 demo server，自己的 ingest／hb／worker／失聯偵測完全沒被觸及。同時這違反 AGENTS.md「個人位置資料絕不送到外部服務」：log 內容是家址等級座標，而且走明文 HTTP 給第三方。",
+ fx:"Traccar Client 伺服器填 https://<你的尾名>:8443/osmand；重測後照 handoff 自己的方法確認有通：docker compose logs -f api | grep osmand、redis-cli HGETALL trip:46:state:1 看 src=traccar。驗收文件裡把「真機已測」寫成實測結果，否則就老實寫未測。"},
+{sev:4,ax:8,t:"MapLibre 只能從 unpkg 拿且零防錯 → CDN 一掉，地圖頁當死，連 SOS 按鈕都會變死的",
+ ev:"trip.html:127、plan.html:150、replay.html:113、war.html:74、footprint.html:96、me.html:72 都是 <script src=\"https://unpkg.com/maplibre-gl@5.24.0/…\">（無 SRI、無本地備援、無 onerror）；trip.js:33 const M = createMap(...) 在第 36-39 行設定 window.qijiM 之前就會中止 → trip-extra.js:8 const M = window.qijiM 拿到 undefined → trip-extra.js:83 M.onStyle(...) 拋 TypeError → trip-extra.js:424 的 SOS pointerdown 永遠掛不上去，但按鈕（trip-extra.js:16-28）已經畫出來了。只有 login.html:203 做了 import().catch()",
+ im:"騎到收訊差的地方（正是最需要 SOS 的場合）重新整理頁面 → 地圖全黑、面板停在「載入中」、沒有任何錯誤訊息與重試钮；按 SOS 沒有任何反應，也得不到「按了沒用」的告知。",
+ fx:"(1) mapbase.js 頂端加護欄：沒有 maplibregl 就在畫面中央顯示「地圖元件載入失敗，請檢查網路後重試」＋重試钮，並讓資料／警示邏輯照常跑；(2) 把 SOS 掛載拆到最前面（或獨立 sos.js），任何地圖異常都不能影響它，trip-extra.js:83 之前先 if (!M) return；(3) MapLibre 的 js／css 放進 web/assets/vendor/（/assets 掛載已經在 main.py:69），unpkg 只留作來源註解。"},
+{sev:3,ax:8,t:"WebSocket 斷線完全沒告知（server 也沒有 ping）→ 即時地圖靜默凍結，畫面看起來一切正常",
+ ev:"trip.js:327-334（只有 onmessage／onclose，無 onerror、無「連線中／已斷線」提示）；war.js:191-195 同形；backend/app/live.py:32-40 的 pump() 沒有 heartbeat，所以 NAT／Tailscale 靜默斷線時 onclose 可能永遠不來",
+ im:"隧道、山區、鎖螢幕後回到頁面——鏡頭與隊友點點停在最後一筆、面板數字不再變，但沒有任何「即時連線中斷」標示。對一個以安全為訴求的產品，「看起來正常但其實是舊資料」比報錯更危險：落隊與失聯警示在這段期間等於不存在。",
+ fx:"trip.js 記 S.wsAt（每則訊息更新），readyState!==1 或超過 15 秒沒有訊息就把頂端狀態改成「即時連線中斷（重試中）」＋琥珀底並寫進 aria-live=polite；live.py 的 pump() 每 20 秒發一則 {kind:\"ping\"} 讓前端能偵測半開連線。"},
+{sev:3,ax:0,t:"/api/login 完全沒有限流，而且帳號不存在時跳過雜湊 → 爆破、DoS、帳號列舉一次湊齊",
+ ev:"auth.py:105-112（整個 handler 沒有任何計數或鎖）；auth.py:21 hashlib.scrypt(n=2**14, r=8, p=1) → 每次驗證吃約 128 MB RAM；uid 不存在時 if not uid or not pw 直接短路，不跑 scrypt",
+ im:"(1) 猜密碼／塞號零成本（funnel 開開時尤為致命）；(2) 幾十個併發登入就能打爆容器記憶體；(3) 響應時間差就能探測「這個帳號存在」，register 的 409（auth.py:91-92）也是明確的列舉點。",
+ fx:"沿用專案既有的 SET NX PX 模式：if not await r.set(f\"ratelimit:login:{ip}\",1,nx=True,px=1000) → 429；再加依 username 的失敗計數 INCR／EXPIRE 做指數退避；帳號不存在時也跑一次 check_pw 對齊時間；register 加 ALLOW_REGISTRATION 開關。"},
+{sev:3,ax:0,t:"Session 缺 Secure 旗標、可用 ?token= 傳憑證、無法撤銷、也没有改密碼",
+ ev:"auth.py:78 resp.set_cookie(COOKIE, tok, max_age=SESSION_TTL, httponly=True, samesite=\"lax\")（沒有 secure=True）；auth.py:46 tok = request.query_params.get(\"token\")；auth.py:75-79 只寫 session:{tok}，沒有任何 user:{uid}:sessions 索引；全專案搜不到改密碼端點",
+ im:"任何一次 http 連線（funnel 誤用 http、自己打 http://host:8750）就會把 30 天有效的 session 明文送出去；query token 會進 uvicorn access log、瀏覽器歷史與 Referer —— handoff:104 還在教人 docker compose logs -f api | grep osmand。登入 100 次就有 100 條有效 session，裝置遺失無法單點撤銷、無法全部登出，密碼外洩也換不了密碼。",
+ fx:"set_cookie(..., secure=True)（--proxy-headers 已開，X-Forwarded-Proto 可用）；刪掉 query string 支撐，WS 需要的話改一次性 ws_ticket（SET ex=10）；_new_session 加 SADD user:{uid}:sessions、logout 時 SREM；新增 logout_all 與 POST /api/me/password（驗舊密碼 → 更新 pw → 撤銷全部 session）。"},
+{sev:3,ax:0,t:"管理員由「使用者名稱」決定、預設值 wei、註冊全開 → 誰先搶到 wei 誰就是管理員",
+ ev:"admin.py:14,18-19 ADMINS = os.environ.get(\"ADMIN_USERS\",\"wei\")、is_admin() 比對 username；docker-compose.yml:26 ADMIN_USERS: ${ADMIN_USERS:-wei}，而目前的 .env 根本沒有這個變數 → 實際生效的就是 \"wei\"；auth.py:85 只限制 [a-z0-9_]{3,20}，部署.md:39 也承認登入頁可以自己註冊",
+ im:"任何一次新環境重建（down -v、換 VM、同學重現）都是開放競圖：搶到 wei 就能進 /api/admin/overview 看 Redis 全貌，用 /api/admin/test/* 對任何行程偽造 SOS／失聯事件並推播到別人手機（admin_test.py:100-131）。",
+ fx:"is_admin 改成讀帳號上的 role 欄位（register 時若 name in ADMINS 就寫 role=admin）；.env 補 ADMIN_USERS；register 開頭加 ALLOW_REGISTRATION 開關。"},
+{sev:3,ax:0,t:"WebSocket 只在握手時驗一次身分 → 被踢出後仍持續收到全隊位置、事件與聊天",
+ ev:"live.py:19-23 只在進入時 sismember(members)；live.py:32-43 的 pump() 迴圈只從 pub/sub 搬訊息、不再檢查成員；trips.py:199-219 的 kick() 把人移出 members／active，但沒有任何機制關閉那條 WS（前端 trip.js:374-377 收到 kicked 只是導航，斷不斷線全看瀏覽器）",
+ im:"被踢的人（或共用同一個 session 的舊分頁）會無限期收到全隊即時位置、事件、聊天與軌跡快照。",
+ fx:"pump() 每則（或每 5 秒節流）复查 sismember(members)，不在就 ws.close(4403)；kick() 顺便 PUBLISH 一個 recheck 訊息讓 server 端主動斷。"},
+{sev:3,ax:2,t:"客戶端自報的 ts 完全沒有範圍檢查 → 時鐘超前會讓整條管線靜音，也能回填假足跡",
+ ev:"ingest.py:39-49 _ts() 對任何數字都收；ingest.py:53-54 ts = fix.ts or now；fresh = prev is None or ts > prev[0]（:74-76）是 footprint／daykm／fog／track／GEO／TS／stream:ingest 唯一的閘門；handoff:36 已經踩過：模擬器跑完後 last.ts 在未來，之後用現在時間送點就被當成舊資料",
+ im:"裝置時鐘跑過去 1 小時，就有 1 小時的點被當成舊資料丟棄；跑到 2027 年就是永久失效，而且 API 回 200、只有 stale:true。反向也開放：任何人可以用過去的 ts 把假點回填進自己的足跡（年曆／日里程／點亮鄉鎮／熱力圖全部跟著錯且無法分辨）、用散布幾百年的時間戳製造大量 fog:* set 讓記憶體膨脹、ts 大到 fromtimestamp 溢出直接 500。",
+ fx:"ingest() 算完 ts 後做邊界：ts > now+120_000 → 400「裝置時間明顯不正確」；ts < now-24h → 退回 now 並標記 ts_fixed；_ts() 先 math.isfinite；連續 stale 超過 N 次寫一個 ts:sys:stale 計數讓後台看得見。"},
+{sev:3,ax:3,t:"route_km／progress 沒有 ts 閘門：重送的舊點會蓋掉新點，落隊誤報並推播給全隊",
+ ev:"worker.py:361-378 check_progress 直接 HSET progress／state 的 route_km、off_m，沒有任何地方比較 f[\"ts\"] 與已存值；對比 db.py:81（UPDATE_STATS_LUA 有 if prev >= ts then return）就知道做法存在、只做了一邊。觸發路徑三條：XAUTOCLAIM 60 秒重送（worker.py:448-454）、alerts group 落後於 stats（外部 HTTP 拖慢）、LAST_IDX 是 process-local（worker.py:313）換人就退化成全線掃描（worker.py:354）",
+ im:"progress 正是 LAG_LUA（db.py:125-128,153-154）算中位數的輸入 → 沿路線里程倒退、進度條跳回、偏離路線誤報，並翻 lagflag 觸發「落隊 X km」推播給全隊（push.py:57 who=all）。",
+ fx:"新增 UPDATE_PROGRESS_LUA（keys: progress、progress_ts、state）：Lua 內先 HGET progress_ts，prev >= ts 就 return 0，否則才寫三份；check_progress 回傳 0 時跳過偏離判斷與 publish。K 裡補 progress_ts，並與 lagchk 一樣在行程結束時清。"},
+{sev:3,ax:3,t:"ingest 的讀與寫是兩個非事務 pipeline：同 uid 併發時 last 倒退、XADD 被退件而且錯誤被吞",
+ ev:"ingest.py:59-62（讀 active_trip／last）與 :84-88、:119-121（寫，transaction=False）；p.xadd(K.footprint(uid), …, id=f\"{ts}-*\")；results = await p.execute(raise_on_error=False)；errors 只進 response 的 errors[:3]，不 log",
+ im:"A(ts=200) 與 B(ts=150) 都讀到 prev.ts=100 → 都 fresh。A 寫完 last=200，B 隨後把 last 寫回 150（倒退），而 XADD footprint 用 150-* 小於 stream 的 last-id → Redis 回錯、該點從足跡永久消失；下一點從 150 的位置算距離 → 同一段路算兩次。兩支手機同帳號、補傳與即時交錯就會中（handoff 記過兩次症狀）。",
+ fx:"把「比 ts＋更新 last＋寫 footprint／daykm／fog」收進一支 COMMIT_POINT_LUA：HGET ts >= ARGV.ts 就 return 0，否則 HSET＋XADD＋HINCRBYFLOAT＋SADD 原子完成；cells／dist 仍在 Python 算好傳入。回傳 0 才報 stale。errors 要 log.warning，不能只塞回 response。"},
+{sev:3,ax:3,t:"失聯偵測純事件驅動（Keyspace Notification 是 at-most-once），漏一次就永久顯示正常",
+ ev:"live.py:59-81 只有收到 __keyevent@*__:expired 才會 HSET status=lost；這個 listener 只掛在 API 進程（main.py:22），worker 沒有；Pub/Sub 訂閱斷線期間的 expire 事件永久遺失，也沒有任何對帳機制",
+ im:"Redis 重啟、API 重新部署、網路抖動期間過期的 hb 永遠不會被補處理 → 那個人在地圖上永遠顯示正常、也不會推播失聯。反向：hb 被 SET ex=90 覆寫時也可能觸發 lazy-expiry 事件，人剛好回來卻在這一刻被判失聯並推播全隊。接著连锁到落隊：LAG_LUA 只看 status=='ok' 就拿 GEOPOS 算距離，而 GEO 從不清除 → status 卡 ok＋位置停在 10 分鐘前 → 「落隊 8 km」推播全隊。",
+ fx:"把判定從事件改成狀態對帳：worker 加一個每 5 秒的 sweep_lost()，對每個 live 行程 SMEMBERS active → pipeline EXISTS hb:{tid}:{uid} → 不存在且 status!='lost' 就標 lost＋emit，反之標 ok。expiry_listener 留當快路徑（或砍掉），並在 emit 前 EXISTS hb 複查一次。"},
+{sev:3,ax:3,t:"active_trip 被覆寫但舊行程的 active 沒清 → 舊行程永久 live、假失聯、全員到齊卡死",
+ ev:"trips.py:90-92 加入進行中的行程時直接 SADD active＋SET active_trip（舊行程的 active 沒被 SREM）；trips.py:148 開始時也直接覆寫；ingest.py:60,96-112 只認 active_trip 那一筆；END_RECORD_LUA（db.py:66）要 SCARD active == 0 才改 ended",
+ im:"舊行程的 hb 不再被續期 → 舊行程隊友收到失聯推播；SCARD active 永遠降不到 0 → 該行程永久 live（這就是為什麼 handoff 裡只能手動進 redis-cli 改 status）；ARRIVE_LUA 的 SDIFF(active, arrived) 會被那個已經不在這裡騎的人卡死，全員到齊永不觸發。更糟的是這個人之後通勤、買飯的每一筆位置都會寫進那趟老行程並觸發整套警示。",
+ fx:"抽一個 drop_active(uid, old_tid)（內容同 end_record 的 Lua），join_trip 與 start_trip 先讀 old = GET active_trip(uid)，不同就呼叫它；start_trip 的 MULTI 裡對每個 member 一併清。"},
+{sev:3,ax:4,t:"行程永不回收：track／TimeSeries／trip:* 全部留下，一趟約 11.7 MB 永久駐留",
+ ev:"ingest.py:97 p.xadd(K.track(tid,uid), fields) 無 maxlen；db.py:61-71 END_RECORD_LUA 只改 status，完全沒有 DEL；全專案 delete( 出現在 trips.py:212、routes.py:408,425、waypoints.py:100,114、interact.py:127 —— 都不是行程收尾；trips.py:92,148 的 SET active_trip 沒有 ex=",
+ im:"以 10 人、每人每秒一點、2 小時一趟估算：track 5.8 MB＋speed/alt TimeSeries 2.4 MB（RETENTION=0）屬於「回放用完就該丢卻永不回收」，一天一趟一年約 4.3 GB 單向成長。疊上上一條（active_trip 殘留），未收尾的行程會把使用者往後每一筆位置都吸進去。",
+ fx:"active_trip 加 ex=3600 並在 ingest 每筆續期；結束時 UNLINK trip:{tid} 系列的即時 key，track／ts:*／events／chat 進一個 trips:archive ZSET（score=ended_at），由 worker 每小時巡一次、到期 UNLINK（要留就先用 XRANGE 匯出成壓縮 JSON 放 data/）；加一個 owner 專用的 POST /api/trips/{tid}/close 做強制結束。"},
+{sev:3,ax:5,t:"管理後台每 5 秒做一次全 keyspace SCAN ＋ 對歷史行程逐趟 HMGET",
+ ev:"admin.py:167 len([k async for k in r.scan_iter(\"cache:cwa:*\")])（沒有 count → Redis 用預設 COUNT 10）；admin.py:98-104 for i in range(1, seq+1): p.hmget(K.trip(i), …)；前端 admin.js:60 setInterval(tick,5000)；keyspace 實測 111,141 個 key（import_poi.py:104 就寫了 10.5 萬筆 poi:{i}）",
+ im:"開著一個 /admin 分頁 = 每 5 秒把整個 keyspace 走一遍（約 2,400 cmd/s）＋為了列出「進行中的行程」發幾百到幾千條 HMGET。兩個人開後台就加倍。這是目前最容易讓整個系統變慢的單一程式碼，而它只是個儀表板。",
+ fx:"cwa 快取數改成寫入時 HINCRBY meta:cwa counties（或 SADD cwa:counties 後 SCARD）；維持一個 trips:live ZSET（start 時 ZADD、改 ended 時 ZREM），overview 只要 ZREVRANGE＋一條 pipeline 的 hmget。"},
+{sev:3,ax:5,t:"worker 的 alerts group 每筆位置串行約 11 次往返 —— 这才是真正的吞吐量上限",
+ ev:"worker.py:423-431 每筆依序 await 7 個 check_*，每個內部再 1～4 次串行 await（check_arrival 在 worker.py:122-129 逐個 waypoint hmget；check_speedcam :164-180；events.publish 每則再附帶一次 TS.INCRBY，events.py:36-42）；handle_stats 也逐筆 await（longterm.py:47-51 是三條串行往返）",
+ im:"RTT 0.15 ms（同機）時約 580 fixes/s；RTT 0.5 ms（Redis 與 worker 不同機）約 175/s；1 ms 約 90/s。也就是 90～580 個「每秒一點」的騎士就到頂，而 Redis 本身還沒出力（每筆位置約 37 個命令）。進度推播與 gap 刷新也會跟著抖。",
+ fx:"照專案現對的寫法（poi.py:122-126 已經示範一次 pipeline 送多個 GEOSEARCH）把批次內需要的讀取一次撈回：wp:*／speedcam:* 的 hmget、各節流 SET NX 全放同一條 pipeline，再逐筆純邏輯判斷；longterm.record_point 的 ZINCRBY＋HGET celltown 併成一條；events.publish 的 TS.INCRBY 進同一 pipeline 或改用 INFO commandstats。"},
+{sev:3,ax:6,t:"外部 API 在 per-message 迴圈裡同步 await：依賴「變慢」比「變掛」更毒",
+ ev:"traffic.py:90 timeout=20、:119-135 失敗只 log＋60 秒冷卻；weather.py:54-71 timeout=20、:74-92 失敗回 None 且 lock:cwa 只有 20 秒 TTL、沒有失敗冷卻；兩者都在 worker.py:430-431 的逐筆迴圈裡；routes.py:183-189 Valhalla timeout=120 且 res.json() 在 try 外面",
+ im:"TDX 或氣象署變慢（不是回錯，是 20 秒回不來）時，一批最多 200 筆裡的每一筆都可能卡 20 秒，同一批其他隊友的落隊／抵達／測速判斷就在同一條 await 上排隊，而且沒有斷路器會停止排隊。Valhalla 卡住時一條 request 佔住 uvicorn 連線最長數分鐘；Valhalla 若回非 JSON（前置代理的 502 HTML），res.json() 直接 500＋traceback。",
+ fx:"把外部抓取從 per-message 路徑拿掉——只讓一個背景 task 定期 ensure_fresh()（用現成的 SET NX 搶鎖），worker 與 API 一律只讀 Redis（traffic.near() 本來就是純 Redis）；timeout 壓到 5 秒（Valhalla 台灣本島路線實測 <100 ms）、weather 補上 FAIL_COOLDOWN_S；_post 的 raise_for_status／res.json() 進 try，except (ValueError, httpx.HTTPError) → 503。"},
+{sev:3,ax:6,t:"worker 一批 200 筆共用一個 try：一筆髒資料就能讓整個 group 永久卡死",
+ ev:"worker.py:456-458 res = await xreadgroup(...) → await ack(stream, group, await handler(msgs))；handle_alerts（:421-435）只有解析座標那幾處有 try，其餘任何例外（Redis 抖動、traffic.short() 的 KeyError、worker.py:357 cum[i+1] 的 IndexError）都會冒出 handler；:450 claim_cursor 已前移，例外後不會回到壞筆那個 id；:467-469 一律 sleep(3) 重試同一批",
+ im:"落隊、抵達、測速、偏離路線、異常久停全部停擺，/admin 的 pending 一直漲，但沒有任何地方會告警——重送時又踩同一筆，變成死迴圈。",
+ fx:"handler 內逐筆 try/except：壞筆記 log（含 stream id、tid、uid）後照样放進 ACK 清單（或轉進 stream:ingest:dlq），好筆照常處理；捕到例外時把 claim_cursor 重置為 \"0-0\"。"},
+{sev:3,ax:6,t:"推播是 at-most-once，而且去重與冷卻旗標在送出之前就吃掉 → 失敗永久遺失",
+ ev:"push.py:106-118 _send_one 無 response 時 return 0；:132-139 只有 404／410 會刪訂閱，429／500 只 log.warning（沒有重試、不讀 Retry-After）；:157 SET push:sent NX 在送出之前；:153-155 push:calm NX 也在送出之前；:160 無條件回傳全部 id → worker.py:458 照樣 XACK",
+ im:"手機換網、FCM 對某 endpoint 限流 429、Mozilla 5xx —— 該則通知直接消失，事後只剩一行 warning。因為 push:sent／push:calm 已先設，即使未來加了重送也會被自己的去重擋掉：現行設計擋掉了重複，同時把重試也一起封死。最受影響的正是 SOS（push.py:55 urgent）。",
+ fx:"send_to_user 回傳逐裝置結果；handle_push 只在「至少一台成功或明確失效」時才把該 id 放進 ACK 清單，全失敗就不回傳 → 讓現成的 XAUTOCLAIM（60 秒）自然重試；push:sent 移到成功後才設，429 依 Retry-After 延後。"},
+{sev:3,ax:7,t:"四個服務都沒有 healthcheck，depends_on 沒有 condition → 冷開機與 Docker 更新後保證先崩一轮",
+ ev:"docker-compose.yml 全文 78 行零個 healthcheck；:37-38、:55-56 的 depends_on 只有 \"- redis\"（舊式寫法，不等就緒）；main.py:20 的 await r.ping() 是 lifespan 第一行，失敗就讓 uvicorn 退出（worker.py:478 同）；Redis 開 AOF（:6-9），實測 volume 76 MB、dump.rdb 36 MB，載入期間一定拒連",
+ im:"Mac 開機、Docker Desktop 自更新後 docker compose up -d，api／worker 會先 crash 幾次才靠 restart: unless-stopped 爬起來；這段期間手機連進來是 502、WS 連不上，而且沒有任何記錄告訴你剛才崩過。",
+ fx:"redis 加 healthcheck（redis-cli ping，interval 5s、start_period 20s）、valhalla 加 /status healthcheck（start_period 30m），api／worker 改 depends_on: {redis: {condition: service_healthy}}。"},
+{sev:3,ax:7,t:"備份存得起來卻還原不了：開著 AOF 時 dump.rdb 根本不會被讀，文件寫的備份目錄也不存在",
+ ev:"docs/部署.md:51 與 docs/繳交清單.md:28、tools/export_redis.py:133 都寫「改名 dump.rdb 放進 Redis 8 的資料目錄後啟動」；但 docker-compose.yml:6-7 是 --appendonly yes，實測 /data 裡 appendonlydir/ 與 dump.rdb 並存 —— appendonly=yes 時 Redis 以 AOF 為準，RDB 被整包忽略；實測 data/ 只有 export/ speedcam/ tracks/ valhalla/，沒有 backup/，照著文件打 docker cp 一定失敗",
+ im:"真正需要還原的那天（down -v、誤 FLUSHALL、磁碟壞）才發現備份是死的。而且備份只有手動、無排程、無離機副本（crontab 為空）：footprint:1 實測 165,323 點是全年足跡的唯一一份，原始 GPX 在 ~/Downloads 也不在備裡 —— Mac 壞軌或重建 Docker VM 就全部歸零。",
+ fx:"文件改成兩條明確路徑：(A) 純 RDB 還原要先確認目標資料目錄沒有 appendonlydir/；(B) 對運行中的 instance 用 redis-cli RESTORE／redis-shake。加一條 launchd／cron 每日 BGSAVE → docker cp 到另一顆碟並保留 7 天，把最近一次成功備份時間寫進 meta:backup 讓 /admin 看得到。"},
+{sev:3,ax:4,t:"沒有 maxmemory，又同時開 AOF everysec＋save 300 10：單向成長到 OOM-kill",
+ ev:"docker-compose.yml:4-13 只有 appendonly／appendfsync／save 300 10／notify-keyspace-events；全專案搜 maxmemory = 0 筆；實測 CONFIG GET maxmemory → 0、maxmemory_policy → noeviction",
+ im:"資料只增不減（前一條）時，Redis 會一路配置到被 cgroup OOM-kill 或主機開始 swap —— swap 期間單執行緒的每個命令都變幾十毫秒，BLOCK_MS=2000 的 XREADGROUP 開始 timeout，失聯偵測與推播全亂。同時 save 300 10 只是每 5 分鐘多一次 fork＋整份寫檔，和 AOF rewrite 搶同一個磁碟。另外若事後才補 maxmemory：預設 noeviction 會讓寫入開始回 OOM，而 ingest 的 pipeline 是 raise_on_error=False，錯誤只進 response 的 errors[:3] → 前端看不出來、資料就在丢。",
+ fx:"先收斂無界 key，再設 --maxmemory 1gb ＋明確保持 noeviction（不要用 eviction 當容量策略；hb:* 被提前踢掉還會誤觸 expired 事件 → 誤報失聯）；留 AOF、關自動 RDB（--save \"\"，export_redis 走 bgsave() 仍可用）＋--aof-use-rdb-preamble yes；/admin 顯示 maxmemory_human 與 mem_fragmentation_ratio，超過 80% 標紅，並註明目前的 est_bytes 是 MEMORY USAGE 抽樣、不含 RediSearch／TimeSeries 自己的記憶體。"},
+{sev:3,ax:1,t:"/api/routes/parse-gmaps 是 SSRF：host 用子字串比對又追重定向",
+ ev:"routes.py:78-87 if not any(h in host for h in (\"goo.gl\",\"google.\")): … 接著 httpx.AsyncClient(follow_redirects=True, timeout=10) 直接 get(url)；:100 把最終 URL 前 300 字元回傳給呼叫端",
+ im:"https://goo.gl.evil.example/ 這種 host 通過子字串檢查；follow_redirects=True 讓攻擊者用自家 server 一路導到 http://valhalla:8002/…、http://127.0.0.1:8750/api/…、雲端的 http://169.254.169.254/。回應內容雖不直接回傳，但 expanded 洩漏最終 URL = semi-blind SSRF，足以探內網存活服務。",
+ fx:"host 檢查改 host == \"goo.gl\" or host.endswith(\".goo.gl\")；follow_redirects=False，只手動讀一次 Location 再驗一次 host，並用 ipaddress.ip_address(...).is_global 擋 private／link-local。"},
+{sev:3,ax:1,t:"/api/push/subscribe 的 endpoint 沒有白名單 → worker 變成 SSRF 跳板",
+ ev:"push.py:191-193 只檢查 startswith(\"https://\") 就 HSET 進訂閱；push.py:110-112 webpush(subscription_info=sub, …) 會對任意 https 主機 POST",
+ im:"任何登入使用者都能讓 API／worker 容器對外部任意 https 主機送出 POST（還帶 VAPID JWT），或打自己內网的 https 服務。內容雖被端對端加密，仍是可用的出站請求。",
+ fx:"subscribe 加 host 白名單：fcm.googleapis.com ＋ *.push.apple.com ＋ *.push.services.mozilla.com，不在名單就 400。"},
+{sev:3,ax:8,t:"首屏 fetch 沒有 try／沒有錯誤畫面 → 後端重啟一次就停在「載入中…」的假裝畫面",
+ ev:"index.html:125 const me = await api('/api/me')（:163 loadTrips() 也沒 catch）；replay.js:22 const data = await api(...)，:29-31 沒有軌跡時 throw new Error('沒有軌跡') 中斷；footprint.js:304 侧欄一直「讀取中…」；me.js:105 loadTowns().then() 無 .catch；war.js 沒有初始 fetch，全靠 WS，掛掉時只顯示「連線中…」",
+ im:"任何一次後端重啟或網路抖動，使用者看到的是「假裝還在載入」的畫面：不知發生什麼事、也沒有重試入口。回放頁尤其糟——地圖出來了但時間軸與面板全空、播放鍵按了沒反應。",
+ fx:"common.js 加一支 fatal(el, msg)（訊息＋重新整理钮）；把上述 5 處的頂端 await 包起來 catch 呼叫它；replay.js:31 的 throw 改成顯示空狀態＋隱藏時間軸＋return。"},
+{sev:3,ax:8,t:"網頁定位送點失敗不落輪、不補傳：斷網就是軌跡斷圖、里程少算",
+ ev:"trip.js:424-435 onFix() 每 2.5 秒一點，api('/api/track') 一失敗就只把 #gpsInfo 改成「送出失敗：…」，那個點就直接不見（無佇列、無重試、無離線偵測；全專案搜不到 navigator.onLine）；handoff:106 自己把它列成使用者還沒決定的項目 B",
+ im:"山路斷網 3 分鐘 → 回放那一斷就是 3 分鐘直線、里程與爬升少算、落隊判斷在那段期間失效，而且使用者完全不知道少了資料。",
+ fx:"onFix 失敗時把點 push 進 S.queue（上限約 600 筆），成功時先清佇列（後端有 ts、亂序點會被略過）；#gpsInfo 顯示「離線暫存 N 筆」；加 offline／online 事件換文字。"},
+{sev:3,ax:9,t:"所有警示只有視覺 toast；SOS 只有 pointer 事件、長按 1.5 秒在手套／雨天情境不可靠",
+ ev:"common.js:50-62 zone() 只建 div.toasts、toast() 只寫 innerHTML，無 role／aria-live（app.css:66 還是 pointer-events:none）；全專案只有 login.html:95 有 aria-live；trip.js:385、trip-extra.js:217（測速）、:588（前方坑洞／落石）、:343（聊天）都用它。SOS 見 trip-extra.js:424-436：pointerdown＋pointerleave 取消、無 keyboard/click 路徑",
+ im:"螢幕閱讀器使用者對「前方 300 m 有落石」一无所知；事件清單 #events 也是每秒 innerHTML 重寫，讀屏同樣抓不到。SOS 那邊：手套指腹面積大、車身震動、雨水導電，指頭在 1.5 秒裡稍微滑動就觸發 pointerleave 而取消；鍵盤或開關切換（switch access）使用者永遠無法發 SOS。",
+ fx:"zone() 一次加上 role=status／aria-live=polite，sos 另用 role=alert；SOS 改用 pointerdown/up/cancel（pointercancel 取代 pointerleave，指頭滑出按鈕不應取消）並補 keydown Enter/Space 走「按兩次確認」，長按開始時 navigator.vibrate?.(30) 給回饋。"},
+{sev:3,ax:9,t:"完全沒有自動化測試與 CI；admin_test.py 不是測試而是線上維運工具",
+ ev:"glob **/{test_*,conftest}* 只出現 backend/app/admin_test.py（掛在 /api/admin/test/*、require_admin 的手動推播／事件觸發工具）；無 tests/、pyproject.toml:1-11 沒有任何測試相依、前端無 package.json、無 .github/；AGENTS.md:19 與 handoff:92 的驗證方式是人工 curl ＋無頭 Chrome 截圖",
+ im:"3,000 多行即時邏輯（含本次發現的落隊、亂序點、海拔、插入成本等邊界）全靠肉眼回歸；繳修期間改一版就可能悄悄弄壞寫入路徑，而且不會有人發現。",
+ fx:"兩步就好：(1) node --test 測純函式（common.js:21-38、replay.js:46-64、plan.js:86-91、trip-extra.js:509-517 抽成 helpers.js）；(2) 一支 smoke：起 compose（redis service container 就够，不需要 Valhalla），curl 打通 9 頁拿 200 ＋ register→開團→開始→POST /api/track→/snapshot，放進 .github/workflows/ci.yml。顺便把 admin_test.py 改名 admin_ops.py 免得下一个人誤會。"},
+{sev:2,ax:0,t:"裝置 ID 是 40 bit、無 TTL、無輪換、無限流，還明文顯示在螢幕上",
+ ev:"auth.py:151-156 tok = \"qj\"＋secrets.token_hex(5)（10 hex = 40 bit）、SET device:{tok} 無 TTL；ingest.py:163-166 /osmand 唯一的檢查就是查得到這個映射；trip.js:446 把 ID 顯示在行程頁「回報」分頁",
+ im:"任何看到過這組 ID 的人（舊同事、截過圖、讀過 access log）都能永久偽造那個人的位置：寫進 trip:{tid}:geo／track:*，觸發全隊落隊、失聯、異常久停、SOS 坐標與前方測速推播，還會永久污染 footprint 與熱力圖。反向也能持續探知此人是否在使用中。",
+ fx:"加 POST /api/me/device/rotate（DEL 舊 key → 產生新值）；device:{tok} 加長到 token_hex(8) 並設 TTL 90 天＋每次 ingest 續期；/osmand 依 device 節流（SET NX PX 500）並只接受 POST。"},
+{sev:2,ax:0,t:"除聊天與快速訊息外，所有寫入與重查詢端點都沒有限流",
+ ev:"全專案限流只有兩處：interact.py:64（2 秒）、chat.py:74（1 秒）。裸奔的包括：trips.py:45-47 邀請碼只有 6 碼、TTL 24 小時且 join_trip（:79-97）無計數；routes.py:358-361 /api/routes/preview 每次打 Valhalla；poi.py:105-125 /api/poi/along 一次最多 400 個 samples → 400 次 GEOSEARCH；footprint.py:126-127 /lines 單次掃 4 萬點；auth.py:82 /register 無限制",
+ im:"邀請碼 31^6 ≈ 8.9 億次可試，試中就拿到該行程即時位置；幾個併發的 preview 就能癱瘓路線引擎；大量建號塞爆 Redis。",
+ fx:"抽一個共用的 throttle(prefix, ms)（就是既有 SET NX PX 模式）做成 Depends，掛到 login／join／register／preview／along／lines／osmand；preview 與 lines 另加 per-uid 併發鎖 SET NX EX 60。"},
+{sev:2,ax:0,t:"沒有任何安全 HTTP 標頭；前端從第三方 CDN 載 script 且無 SRI／CSP",
+ ev:"main.py:27 app = FastAPI(...) 沒有任何 add_middleware、沒有 CSP；7 個 html 都載 unpkg 的 maplibre（plan.html:7,150）與 jsDelivr 的 qrcode-generator（trip.html:128）",
+ im:"unpkg／jsDelivr 任何一次被劫持或套錯版 = 完整 XSS。cookie 雖是 HttpOnly，攻擊者腳本在同源 fetch(credentials:'same-origin') 下照樣能讀 /api/footprint/lines（全年足跡）與 /api/trips/{id}/replay，并用受害者身份打任何 API。也沒有 X-Frame-Options／Referrer-Policy／nosniff。",
+ fx:"把 maplibre 的 js／css 與 qrcode-generator 放進 web/assets/vendor/（跟 /web:/web:ro 掛載走）；main.py 加 middleware 設 Content-Security-Policy: default-src 'self'、X-Content-Type-Options: nosniff、Referrer-Policy: same-origin、X-Frame-Options: SAMEORIGIN。"},
+{sev:2,ax:1,t:"地圖圖資請求會把你的即時視窗送到三家外部服務，而規則只管到「比對層」",
+ ev:"mapbase.js:9,19,21,23,105：wmts.nlsc.gov.tw（衛星圖）、tiles.openfreemap.org、s3.amazonaws.com/elevation-tiles-prod（地形）；行程頁與戰情室地圖會跟著騎士移動（trip.js:356-357 moveTo），足跡頁一開就画出全年路徑",
+ im:"每幾秒就向 NLSC／OpenFreeMap／AWS 送 z16～z18 的 x/y tile ＋ IP ＋ Referer。z17 一張 tile 約 150 m，等於把即時位置以 tile 序號的形式外洩；足跡頁一開更是把整年活動範圍交出去。AGENTS.md 只禁止「地圖比對用外部服務」，顯示層是被忽略的缺口，而且文件沒揭露。",
+ fx:"短期：展示版預設不用衛星圖，並在 README／docs/部署.md 老實寫一段「顯示層會把地圖視窗送到 NLSC／OpenFreeMap／AWS，比對層不會」；長期：把這幾個 URL 抽成 TILE_BASE 環境變數，改指本機 tileserver（Valhalla 同一個 image 就能配）。"},
+{sev:2,ax:1,t:"全程沒有座標降精度（存到 ≈1 cm），TimeSeries 又設永久保留",
+ ev:"ingest.py:81 存 round(v,7)；replay.py:87 輸出 round(...,6)（≈0.1 m）；footprint.py:145 與 longterm.py:108 是 round(...,5)（≈1.1 m）；ingest.py:17 TS_RETENTION_MS = 0 # 0 = 永久保存。相對地迷霧格子是唯一做了模糊化的東西（geo.py:6 CELL=0.0015 ≈150 m）",
+ im:"只要 RDB、匯出檔或回放 JSON 外流一檔，就是可定位到門牌的位置史，而且是永久保留。個資保護的「最小必要精度」與「必要期間」兩條都偏寬。",
+ fx:"任何要離開本機的輸出走統一的降精度函式（round(x,3) ≈ 100 m）；TS_RETENTION_MS 給有意義的值（例 400 天）；把原始 7 位精度與可分享的 5 位拆成兩層，分享路徑只讀後者。"},
+{sev:2,ax:3,t:"start_trip 的 WATCH 蓋不住 join_trip 的非事務寫入 → 新成員是成員卻不在 active",
+ ev:"trips.py:135-149 用 WATCH members→MULTI 寫 live＋SADD active；另一邊 trips.py:85-92 是 trip_or_404（讀到 status=planned 的舊快照）→ SADD members → 之後的 status==\"live\" 分支因為讀的是舊快照而不再走",
+ im:"C 在 members 但不在 active、也沒有 active_trip → 他完全沒紀錄（live=False，track／geo／stats 都不寫，只剩 footprint），waypoints.py:41 的 total 用 SCARD active → 人數顯示錯，trip_detail 顯示他 active: false。",
+ fx:"join_trip 把「讀 status＋SADD members＋若 live 就 SADD active＋SET active_trip」做成一支 Lua（讀 status 後分支），或讓 join_trip 走同樣的 WATCH＋重試。"},
+{sev:2,ax:2,t:"同一個里程／極速公式有四種寫法 → 同一趟在不同頁面是四個數字",
+ ev:"db.py:87-97（即時：haversine、250 km/h 上限、dt>3600 不算；max_kmh 是單調不减的瞬時上報值）；replay.py:36-39,61（回放：同上限但沒有 dt>3600 規則、極速取 p99）；geo.py:62-74（足跡：dt>3600 歸零、>250 歸零但點仍寫入）；import_gpx.py:86-89（匯入：不合理的點不寫入也不當前一點）",
+ im:"使用者一定會拿「行程頁 12.4 km」對「回放頁 12.9 km」問你哪個對；/me 的 total_km 又和兩者無關。極速一个是只要尖峰一次就永久留下、一個是 p99，更無法對照。",
+ fx:"閾值收斂到 geo.py 的三個常數，replay.summarize 與 segment_cells 直接共用，UPDATE_STATS_LUA 由 ARGV 接收（不要在 Lua 裡硬編碼）；極速統一命名，前端只顯示一個並註明口徑。"},
+{sev:2,ax:3,t:"check_stuck 的 stop_since 會被重送的舊點重新寫回 → 假「異常久停」推播",
+ ev:"worker.py:405-418：since 為空就 HSET stop_since=ts，沒有「只接受較新 ts」的保護；重新移動時 :399 會 HDEL",
+ im:"情境：停 12 分鐘 → 重新移動（HDEL）→ 此时 XAUTOCLAIM 重送那 12 分鐘裡的靜止舊點 → since 空 → 寫入 12 分鐘前的 ts → 下一個真實靜止點算出 mins≈12 → 立刻誤發異常久停並推播給隊友。",
+ fx:"stop_since 的寫入進上一條的 progress Lua（只有 ts 比已存值新才准寫），並在 :409 加 if ts < int(since): return。"},
+{sev:2,ax:3,t:"alerts group 不看行程狀態：已結束的行程照樣發警示與推播",
+ ev:"worker.py:421-435 只用 f.get(\"trip\") 判斷，完全沒查 trip:{tid}.status；check_trip_lag（:88-114）同；END_RECORD_LUA 改 ended 之後，PEL 裡還沒 ACK 的、或 60 秒後被 XAUTOCLAIM 重送的訊息照樣跑完 check_speedcam／check_trip_lag／check_weather／check_roadevent",
+ im:"行程結束後手機上跳「落隊」「前方測速」「前方降雨」「前方路況」推播（behind／roadevent／weather 都是 who=all）。",
+ fx:"handle_alerts 開頭拿批次內的 tid 一次 pipeline HMGET trip:{tid} status，非 live 的跳過全部 check_*（但仍 ACK），順便清掉該行程的 lagflag／gap／progress／stuck／offroute。"},
+{sev:2,ax:3,t:"落隊判斷只在「這批有該行程的訊息」時才跑，且 #R<2 會提前 return → 旗標與 gap 殘留",
+ ev:"worker.py:432-434（來源是批次內的 tid 集合）、db.py:133 if #R < 2 then return {}、worker.py:101-102 拿到空結果就 return（跳過後面的 delete／hset）、db.py:162-164 解除落隊旗標需要 moving",
+ im:"只剩一個人時 gap hash 保留舊值 → UI 顯示已經離開的人還落隊 3.2 km；全隊停車休息時落隊徽章永久挂著（解除需要有人在動）；有人不再回報時他那列 gap 永遠留在 hash 裡，regroup（已跟上）事件可能永遠不發。",
+ fx:"解除條件拿掉 moving 依賴（解除不需要有人在動）；check_trip_lag 改成 worker 排程每 2 秒掃所有 live 行程（與 sweep_lost 共用排程）而不是掛在訊息流上；res 為空時仍要 DEL gap ＋ HDEL 不在 active 的 lagflag。"},
+{sev:2,ax:3,t:"SOS 的 hexists → emit → hset 不是原子：連點兩次就是兩條事件、兩輪推播",
+ ev:"interact.py:154-160 if await r.hexists(K.sos(tid), uid): raise 409；接著 events.emit(...)；再 await r.hset(K.sos(tid), uid, ev[\"id\"])",
+ im:"兩次點按（或前端重試）都會通過 hexists → 兩條 sos 事件、兩輪推播（sw.js 對 sos 特意帶 eid，瀏覽器不會去重）；中問崩潰還會留下「有事件但 sos hash 沒記」的孤兒。",
+ fx:"收成一支小 Lua：if HEXISTS then return 0; local id = XADD events …; HSET sos uid id; return id；Pub/Sub 與推播仍留在 Python 用回傳的 id 發。"},
+{sev:2,ax:5,t:"回放與足跡是兩個「把整包資料搬回 client」的端點：單次回應可達 5～20 MB",
+ ev:"replay.py:80 rows = await r.xrange(K.track(tid,m[\"uid\"])) 無 count（10 人 × 7,200 點）、:98,101 events／chat 也無上限、:115 先做一次 TS.MRANGE \"-\" \"+\" 只為了抓 min/max 時間戳，:121 才帶 AGGREGATION 再查一次；footprint.py:126-152 while True: xrange(..., count=10_000) 逐點算，:155-158 讀完全部才算 stride；前端 footprint.js:166 預設就是全年範圍",
+ im:"Redis 單次要組出 5～6 MB 的 RESP（單執行緒一次生到底，其他命令全部排隊）；API 用 decode_responses=True parse 再 json 化，實測會吐 15～20 MB JSON，回放頁瀏覽器也吃不住。足跡頁第一次開全年 = 兩百多次串行 XRANGE、約 500 MB 過網线、Python list 裡幾百萬個點、單次請求幾十秒；MAX_LINE_POINTS=40,000 只限制回傳、沒限制過程。",
+ fx:"replay.py:115 改 TS.RANGE/TS.REVRANGE COUNT 1（或 TS.INFO 拿 first/last_timestamp，一次 pipeline）；:80 把降採樣下移到讀取迴圈（算 stride 後邊讀邊丢，response 帶 stride 給前端）；events／chat 加 COUNT；summarize() 在行程結束時算好存 trip:{tid}:summary。footprint.py 同樣把 stride 移進迴圈，範圍超過 N 天時只回迷霧格子不回線，並給 cache:lines 加 SET NX EX 60 預佔鎖。"},
+{sev:2,ax:5,t:"熱路徑上遍地 N+1：每一处都是現成 pipeline 招式就能收掉",
+ ev:"trips.py:106-124 trip_detail 逐個成員串行 3 次往返（10 人 = 30 次，而它每條 WS 連線都會跑一次，live.py:30）；trips.py:243-245 build_snapshot 逐人 xrevrange count=600；trips.py:63-71 my_trips 逐趟 hgetall＋scard（100 次）；longterm.py:121-129 my_stats 逐個 cell await town_of_cell（cache miss 時是 FT.SEARCH，最多 400 次；同檔的 tools/build_longterm.py:54 已示範正確做法）；interact.py:80-88 list_marks、push.py:78 prefs、waypoints.py:44-48、footprint.py:35-44、events.py:13-16",
+ im:"騎乘頁每次重連、每個 5 秒輪詢都在乘人數地打 Redis；這些延遲直接顯示成面板刷新變慢與镜头卡頓。",
+ fx:"統一改成一條 pipeline 批次讀（照 poi.py:41-44、speedcam.py:28-31、longterm.py:65-68 的既有寫法）；longterm.py:121 先一次 HMGET celltown，只對 miss 的批次 FT.SEARCH。"},
+{sev:2,ax:5,t:"每條 WebSocket 各佔一條 Redis Pub/Sub 連線，無背壓、連線池無上限",
+ ev:"live.py:27-28 每個 WS 都 ps = r.pubsub(); subscribe(...)（redis-py 的 PubSub 會獨佔一條連線）；db.py:8 from_url(...) 沒有 max_connections；live.py:32-36 pump() 直接 await ws.send_text，沒有檢查送出佇列、也不合併同一個人的新位置",
+ im:"Redis 要為每個訂閱者把同一條訊息序列化進各自的 output buffer → Redis 的 CPU 與出網流量乘上觀看人數（本專案規模：每趟約 18 msg/s，11 個觀看 ≈ 200 次投遞/s，目前沒問題；100 騎士／100 觀看就變成 18,000 次/s、3.3 MB/s）。慢的瀏覽器會讓 uvicorn 側的送出佇列線性吃記憶體；Redis 那邊則是 client-output-buffer-limit pubsub 觸發就直接踢掉那條 pubsub 連線 → WS 跟著斷。",
+ fx:"共用成 per-trip 一條訂閱（process 內維護 {tid: (pubsub, set[ws])} ＋ 引用計數），这一步就把 Redis 負載除以觀看人數；每條 ws 用 asyncio.Queue(maxsize=64) 只保留每個 uid 最新一筆 pos（事件類不丢）；db.py 加 max_connections=64。"},
+{sev:2,ax:5,t:"為了抓 hb 過期而訂閱「全 DB 所有過期事件」，在 Python 裡才過濾",
+ ev:"live.py:68 psubscribe(\"__keyevent@*__:expired\")；:74-76 到了 Python 才 if not key.startswith(\"hb:\") continue；會過期的 key 種類極多（push:sent 24h、camhit 900s、ratelimit、cache:* …）；這個 listener 掛在 main.py:22 的 lifespan",
+ im:"所有過期事件都要經 Pub/Sub 送到 API 再丢案，與 WS 共用同一個連線池。更隱藏的兩點：API 多副本時每個副本都收一份、都去試 emit，會重複發失聯；未來若改成有 eviction 的政策，被逐出的 hb 不會產生 expired 事件 → 失聯偵測直接失灵。",
+ fx:"首選：把失聯掃描搬進 worker（用 ZSET hb:index ＋每 5 秒 ZRANGEBYSCORE hb:index 0 now-90 COUNT 50，現有 hb TTL 留當兵），把 Redis 事件旁路完全去掉；次選：判定移進 worker 并用 SET lock:lost:{tid}:{uid} NX EX 120 去重，才能安全跑多副本。"},
+{sev:2,ax:4,t:"Stream 與行程 key 的修剪策略只有兩處；fog 每天長 key、celltown 永不淘汰、SUNION 一次搬 51 萬成員",
+ ev:"全專案只有 ingest.py:116（stream:ingest 100k）與 events.py:27（stream:notify 5000）有 maxlen，xtrim 出現 0 次；ingest.py:90-91 fog:{uid}:{日}:{時段} 每人每年多 730～1,460 個永不過期的 key；longterm.py:41 celltown 是跨使用者共用一把永不淘汰的大 hash；footprint.py:71-75 每 500 個 key 一條 SUNION（全年 ≈ 51 萬成員、≈18 MB RESP）；longterm.py:104 ZREVRANGE heat 0 34999（前端 me.js:86 送 limit=35000）",
+ im:"迷霧那個查詢是數百毫秒級的單執行緒阻塞（一條命令碰 500 個 key，Cluster 下根本不可行）；heat 35,000 個 cell 是 0.9 MB JSON 加前端逐筆算面積；key 數量每年净增幾千個。",
+fx:"fog 換成單一 ZSET（ZADD footprint:{uid}:fog <day> <cell>），迷霧查詢變 ZRANGEBYSCORE＋COUNT，一次連續讀、不再 SUNION、也不再長 key；heat 預設 limit 降到 3,000（上限 10,000）並同步 me.js:86；footprint.py:92 的 SMEMBERS fog:{uid}:all 改 SSCAN 分頁；celltown 視為可重建快取（丟了可從 idx:townshape 重算）並列入容量監控。"},
+{sev:2,ax:6,t:"stream:ingest 的 MAXLEN 是「筆數」不是「時間」，group 又從 $ 開始 → 落後會變成靜默丢資料",
+ ev:"ingest.py:115-117 maxlen=100_000 approximate=True，且所有新足跡點都進去（不只行程中的）；worker.py:41 xgroup_create(id=\"$\") → 新開的 worker 不回頭補；worker.py:451 已經在過濾 f is None（說明作者知道會被修剪），但沒有任何閾值告警；admin.py:106-112 只顯示 lag／pending 數字",
+ im:"10 Hz 時 100k 筆 ≈ 2.8 小時存量，100 Hz 時只剩 17 分鐘。alerts 是較慢的那個 group，所以它最先落後、最先被修剪 —— 里程／極速／熱力圖／點亮鄉鎮就少了，而被修剪的訊息不計入 lag，XINFO 也看不出來。",
+ fx:"拆兩條 stream：stream:fix（只有 live and fresh，給 alerts／stats）與 stream:fp（足跡點，給 heat／點亮鄉鎮）；更省的版本是把 ZINCRBY heat 與 HGET celltown 直接併進 ingest.py:84 那條既有 pipeline（同 key、不需 worker）。同時 maxlen 調高、ensure_group 改 id=\"0\"，並在 /admin 對 lag 超過 2 萬標紅。"},
+{sev:2,ax:6,t:"Valhalla 掛掉時規劃頁 100% 不能用，也沒有直線距離降級（行中功能倒是安全的）",
+ ev:"全 app 只有 routes.py:186 打 Valhalla（admin.py:119 只查 /status 且吞掉例外）；行中判斷只讀 RedisJSON（worker.py:320-332 load_route → json().get(K.route(rid))），行程頁顯示路線也是純 RedisJSON（routes.py:371-387）；Valhalla 不可用時 routes.py:187-188 直接 503",
+ im:"好消息是進度條、落隊、偏離路線、轉彎提示、回放全都不受影響（設計正確）；壞消息是 /plan 整頁壞掉（預覽、選方案、存路線），也沒有「Valhalla 不在，先給你起終點直線距離＋預估時間」的降級，/admin 也只是一個小欄位變 false。",
+ fx:"valhalla_routes() 抓 503 時回一份直線距離的結果並明確標 \"degraded\": true，前端把「依你的速度／路權檢查」灰掉；compose 給 valhalla 加 /status healthcheck；/admin 的 valhalla.ok=false 升級成紅 banner。"},
+{sev:2,ax:8,t:"每秒用 innerHTML 重寫隊友清單與橫幅：焦點每秒被消滅、二次確認被重置、可能吞掉點擊",
+ ev:"trip.js:324 setInterval(() => { renderHeader(); renderTeam(); … }, 1000)；renderTeam（:256-273）整個 #team 重建 → :278 的二次確認 k.dataset.confirm='1'（「確定移出？」）1 秒內就被還原；renderHeader（:232-244）每秒重建 #banner；同模式在 trip-extra.js:580、war.js:251；:283-284 是用 DOM 索引找人",
+ im:"鍵盤／讀屏使用者在隊友清單裡無法停留（WCAG 2.4.3）；戴手套按得慢一點，第二次按就落在一顆剛被重建的钮上（按錯列會誤跟錯人）；「確定移出？」跳回「移出」看起來像壞了。",
+ fx:"改成只改動過的欄位（m.el.querySelector('.t2').textContent = …）；#team 只在成員增删或狀態改變時重建；#banner 用 lastStatus 對照，只在 status 改變時重建。"},
+{sev:2,ax:8,t:"手機觸控目標系統性小於 44px（是刻意縮小的）",
+ ev:"trip.html:68 .tools .tool{min-width:44px;height:34px}；:62 .back{30×30}；:57 .seg button{padding:7px 0;font-size:13.5px}（≈32px）；:29 .li .kick{32px}；trip-extra.css:90 .qx-bar .tool{height:36px}；:91 .qx-sos{height:36px}；:18 .qx-x{padding:6px 8px;font-size:12px}；app.css:61 .seg button{34px}；app.css:95 .rider{34×34}（地圖上是可點的）",
+ im:"騎車戴手套、陽光直射、車身震動的情境下，最常按的「跟我／全隊／訊息／返回」就是最容易按錯的。只有回放頁的刻度點認真處理過（replay.html:42-43 視覺 9px、可點 29×28）——證明作者知道这件事，只是沒全面做。",
+ fx:"把手機版的 height:34/36px 統一回到 min-height:44px（.tool、.seg button、.back、.qx-x），用 padding 撐而不是改字級。"},
+{sev:2,ax:8,t:"沒有任何離線快取；9 頁裡只有 2 頁有 manifest 與 apple-touch-icon",
+ ev:"web/sw.js:1-4 註解就寫明不攔截 fetch、全文只做 push；SW 只在開推播時才註冊（push.js:19）；grep manifest.webmanifest *.html 只有 index.html:7 與 trip.html:7；manifest.webmanifest:6 start_url:\"/\"、:9 background_color:\"#000000\"",
+ im:"「加入主畫面」在離線／無訊號時打開就是瀏覽器錯誤頁（山区最常见的场景）；從 /footprint 或 /trip 加入主畫面時 iOS 抓不到圖示會拿網頁截圖頂替，Android 也不會跳出安裝提示；淺色使用者啟動時會先閃一下黑底。",
+ fx:"sw.js 加最小策略：install 時 cache.addAll 殼層檔案、fetch 用 network-first、離線回落 cache.match('/offline')（tile 不快取）；其餘 7 頁補上 <link rel=\"manifest\"> 與 apple-touch-icon（複製 index.html:7-8 兩行）；start_url 改深連結、background_color 跟主題。"},
+{sev:2,ax:9,t:"表單控件多數只有 placeholder 沒有名字；可點擊的都是 div，鍵盤完全不可及",
+ ev:"trip.js:315 <select id=\"lagKm\"> 夾在句子裡無 label／aria-label；trip-extra.js:125,127-128,230-233,381、plan.html:109 #q、:139 #gUrl、footprint.html:77 兩個 type=date 只有旁邊一個非關聯的 .label div；plan.js:118 搜尋結果是 div＋click、:232-234 沿路線找的 data-add/data-go；trip-extra.js:115-118,374,238；me.js:72；footprint.js:239-251 月曆是 400 多個 rect 的 click 且整張 SVG 標 role=img（內部 title 也不會被唸），:247-251 的 Shift+選區間是滑鼠專屬",
+ im:"螢幕閱讀器使用者無法知道欄位在問什麼（placeholder 輸入後就消失，WCAG 1.3.5／3.3.2）；只用鍵盤就無法搜尋地點、選日期範圍、看集合點。",
+ fx:"補 <label for> 或 aria-label（placeholder 留當提示）；那些列改成 <button>（保留 class，flex 佈局不受影響）；月曆保留 #from/#to 兩個 date input 當替代入口並標清楚，SVG 的 role=img 拿掉；錯誤訊息 #err 補 aria-describedby／aria-invalid。"},
+{sev:2,ax:9,t:"戰情室無條件自轉鏡頭＋SOS 卡片每秒閃爍，prefers-reduced-motion 只蓋了一半",
+ ev:"war.js:73 map.setBearing((map.getBearing()+dt*2)%360) 沒有任何 reduce 判斷（同專案的 login-stage.js:11 已經有）；war.html:19,21,45 @keyframes blink、:32,36 事件進場、:40 .pdot transition；trip-extra.css:60,66,75；app.css:72,90 與 homebg.js、login-stage.js 倒是都處理了",
+ im:"設了「減少動態效果」的使用者在戰情室仍會看到整張 3D 地圖不斷自轉＋紅色 SOS 卡片每秒閃（閃爍也碰 WCAG 2.3.1 的門檻）。",
+ fx:"war.js 沿用 login-stage.js 的 reduce 判斷，if (!reduce) 才轉；CSS 在 app.css 補一條全域 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}，比逐條補便宜也涵蓋未來。"},
+{sev:2,ax:9,t:"跨頁重複實作已經開始漂移；除錯用 window 全域正是當掉的連鎖點",
+ ev:"事件顏色表三份且內容不同（trip.js:12-29 無 chat、replay.js:12 有 chat、war.js:15-19 另一套 hex）；fmtKm 三份；statusOf 兩份且邊界不同（trip.js:42-49 用 state.lat != null，war.js:84-91 用 !s.lat）；nameOf 四份；WS connect() 兩份；距離／內插工貝四份；搬 DOM 用了三種機制（common.js:41 dock()、replay.js:303 placeCamRow()、trip-extra.js:32-47 setInterval(400ms) 輪詢 getBoundingClientRect）",
+ im:"改事件類型要改 3 處，少一處就是黑點或灰字；war／trip 對「失聯」的判定已經不一致；每 400ms 的量測是無謂的 forced layout。而 window.qijiM 這條跨模組相依就是前面那條「CDN 一掉連 SOS 一起炸」的成因。",
+ fx:"新增 assets/shared.js：EV_COLOR、fmtKm、statusOf、nameOf、createSocket(tid, onmsg)（内含連線狀態）；trip-extra 的 placeDock 改用 ResizeObserver($('#panel')) ＋ matchMedia，拿掉 400ms 輪詢；把 window.qiji* 收進單一視窗物件或改 import。"},
+{sev:2,ax:7,t:"鏡像重建不可重現：Dockerfile 用 pip install \"fastapi>=…\"，已入版控的 uv.lock 完全沒用上",
+ ev:"backend/Dockerfile:1-3 FROM python:3.12-slim ＋ pip install \"fastapi>=0.115\" \"uvicorn[standard]>=0.32\" \"redis>=5.2\" \"httpx>=0.27\" \"pywebpush>=2.0\"；pyproject.toml:6-11 全是 >= 寬容約束；uv.lock（149 KB）在也進了 git，但 Dockerfile 一行都沒用到；也沒有釘 base tag／--platform",
+ im:"繳交後任何一天 --build 都可能拿到新版 FastAPI／redis-py，行為與展示當天不同，也沒有 lock 可回溯。另外 data/valhalla 990 MB、taiwan-latest.osm.pbf 328 MB，force_rebuild:\"False\" 只在目錄還在時有效 —— 換機器重建要重抓。",
+ fx:"uv export --frozen > requirements.txt（或 Dockerfile 直接 uv sync --frozen）後 pip install -r；base 釘死 python:3.12.11-slim-bookworm；README 標明 osmium／shapely 的版號（現在是 uv run --with，不在 lock 裡）。"},
+{sev:2,ax:7,t:"兩份含家址級座標的 Traccar log 躺在 repo 根目錄，而且沒被 .gitignore 蓋住",
+ ev:"logs.txt:2-4 內容含 Tracker start http://demo.traccar.org:5055 （裝置ID已遮蔽） 與 Location accepted （座標已遮蔽）；.gitignore 全文只擋 data/、*.gpx、.env、.venv/、__pycache__/、.DS_Store、web/assets/_*、*.egg-info/；git status 現在就是 ?? logs.txt、?? logs-2.txt；prototype.html（93 KB）則已經在版控裡",
+ im:"AGENTS.md 靠 data/ 這條規則守「位置資料絕不進版控」，這兩份在規則邊界外；一次 git add -A（AGENTS.md 明令禁止，但繳交清單.md:12 證明發生過）就把真實軌跡推上 GitHub，收不回來。",
+ fx:".gitignore 加 logs*.txt（並把兩檔移進 data/ 或刪掉）；上傳前順手把 prototype.html 移出或進 docs/archive。"},
+{sev:2,ax:7,t:"容器 log 沒有 rotation，access log 會完整記下 /osmand 的座標；展示腳本還教你跑 MONITOR",
+ ev:"docker inspect qiji-api-1 LogConfig = json-file 無 max-size；~/.docker/daemon.json 沒有 log-driver 設定；Dockerfile:7 uvicorn 預設開 access log，而 /osmand 是 GET query（ingest.py:133-162）→ 整列 id＋lat＋lon 進 log；docs/展示影片腳本.md:15 教人 redis-cli MONITOR | grep -E \"GEOADD|XADD|…\"（MONITOR 會把每一筆 GPS 點印出來，還會錄進影片）；handoff:104 同樣在教抓 api log 與 HGETALL",
+ im:"位置資料從 app log、Docker json log driver（通常沒加密也沒輪替）、影片音軌三條路徑擴散；funnel 公開展示期間 log 一天可以長到 GB 級吃掉 Mac 的碟。LOG_LEVEL 也沒有環境變數，想調 DEBUG 要改 code 重建鏡像。",
+ fx:"compose 每個服務加 logging:{driver:json-file, options:{max-size:\"10m\", max-file:\"5\"}}；/osmand 改 POST-only（Traccar 支援）一次解掉 access log 那條；main.py:14 與 worker.py:485 的 level 改讀 os.environ.get(\"LOG_LEVEL\",\"INFO\")；展示腳本加一句「MONITOR 輸出含本人座標，錄影用範例資料，录完即清」。"},
+{sev:2,ax:8,t:"对比不合格與字級過小：深色模式琥珀按鈕白字只有 4.1:1（地圖頁預設就是深色）",
+ ev:"app.css:18,25 --accent-fill:#d9500f ＋ :40 .btn.primary{color:#fff}、:85 .tool.on{...font-size:12px} → 實算 4.11:1（未達 AA 正文 4.5:1；mapbase.js:115 把地圖頁一律設成 dark 主題，所以這是預設路徑；淺色 #c2410c 是 5.18:1 合格）；app.css:47 .chip 對 surface-2 是 4.31:1；:86 .maplibregl-ctrl-attrib{font-size:10px}",
+ im:"陽光直射＋手機最低亮度時，11px 的 chip 與 10px 的地圖來源列基本不可讀；琥珀按鈕上的字在地圖上會發灰。",
+ fx:"深色模式 --accent-fill 加深到 #b93d0b（≈5.0:1）或主按鈕改深底；--muted 淺色改 #5d5d63；attrib 至少 11px（或改成 ⓘ 圖示＋展開後 12px，mapbase.js:135 已經在做收合）。"},
+{sev:1,ax:0,t:"完全沒有安全 HTTP 標頭之外，還把內部結構摊在公网",
+ ev:"main.py:27 沒關 docs_url／openapi_url／redoc_url；:32-35 /api/health 免登入回 redis_version；system.py:10-11 /api/system/streams 只要登入就能看到內部 stream 名稱、consumer 名稱、游標與 PEL 深度（實測 web/ 裡沒有任何地方 call /api/system → 死路徑）",
+ im:"funnel 公開時任何人都能列出全部端點與參數；redis_version 等於洩漏確切版本方便對上已知漏洞；一般使用者不需要（也不該拿到）內部佇列結構。",
+ fx:"FastAPI(..., docs_url=None, redoc_url=None, openapi_url=None)；/api/health 只回 {\"ok\": true}；system.streams 改 Depends(require_admin) 或直接刪掉。"},
+{sev:1,ax:0,t:"錯誤訊息把例外 repr、Valhalla 內部錯誤、Redis 原始例外原封不動回給前端",
+ ev:"routes.py:188 HTTPException(503, f\"路線引擎沒有回應：{e!r}\")（含內部主機名 http://valhalla:8002 與 socket 細節）；:320 f\"算不出路線：{d.get('error', d)}\"；ingest.py:121-125 errors = [str(x) for x in results if isinstance(x, Exception)] 再回 errors[:3]",
+ im:"洩漏內部拓撲與依賴版本，也常把冗長例外直接蓋在使用者的錯誤提示位置。",
+ fx:"對 client 只回固定字串（「路線引擎暫時不可用」），細節 log.warning；ingest 的 errors 只回計數或移除。"},
+{sev:1,ax:0,t:"/login?next= 未驗證 → open redirect（釣魚放大器）",
+ ev:"login.html:156,197 const next = new URLSearchParams(location.search).get('next') || '/' … location.href = next",
+ im:"/login?next=https://evil.example/ 登入成功後直接跳出去。session 在 HttpOnly cookie 裡所以拿不到憑證，但能拿到「剛登入」的信任狀態。",
+ fx:"跳之前 if (!next.startsWith('/') || next.startsWith('//')) next = '/'。"},
+{sev:1,ax:6,t:"Traccar 送進來的怪資料會變 500，Traccar 就會無限重送同一包",
+ ev:"ingest.py:150-153 c[\"latitude\"] KeyError、:159 float(q[\"lat\"]) ValueError、:152 float(lvl) ValueError 都在 try 外，只有 lat/lon 缺不缺有檢查（:156-157）；git log 48cc102「fix: Traccar iOS 表單格式回報不再 500」說明這類已經踩過一次；log 實測一路 500 且退避到 5m",
+ im:"一包格式怪的位置 → 500＋traceback → Traccar 照退避規則重送（最多 5 分鐘一次）一路都 500，log 被洗，而且那段時間的位置全部堆在手機端。",
+ fx:"osmand() 的資料轉換整段包 except (KeyError, TypeError, ValueError) → HTTPException(400, \"位置格式不正確\")（400 時 Traccar 會丟棄該包不再重送）。"},
+{sev:1,ax:7,t:"月份用量計數用容器時間（UTC），與台灣的「本月」會差一天以內",
+ ev:"traffic.py:49、weather.py:58、admin.py:155,166、admin_test.py:70 都是 time.strftime(\"%Y-%m\")；handoff:86 已經記過容器的 UTC 這個坑（天氣顯示另有 weather.tw() 固定 +8，但月份沒處理）",
+ im:"每月 1 號 UTC 00:00–08:00（= 台灣 08:00–16:00）的呼叫會算進上個月，/admin 的「TDX 本月呼叫 N 次（約 x 點）」會偏低或偏高。寫入與讀取用同一個來源所以不會自相矛盾，只是不對應台灣月曆。",
+ fx:"月份改用 geo.local_dt(now).strftime(\"%Y-%m\")，或乾脆把欄位語義改成「最近 30 天呼叫」。"},
+{sev:1,ax:7,t:"consumer 名稱用 container id 而且永不回收（實測 stats group 有 24 個死名字）",
+ ev:"worker.py:32 CONSUMER = f\"{socket.gethostname()}-{os.getpid()}\"；實測 XINFO CONSUMERS stream:ingest stats → 24 個、alerts → 22 個、push → 9 個，idle 最大約 19.6 小時；docker compose ps 目前只有 qiji-worker-2 一支",
+ im:"XAUTOCLAIM 每輪都要走過一疊死名字；/admin 的 consumers 清單完全不可讀，想靠它判斷「现在有幾個 worker 在跑」會看錯。",
+ fx:"worker 啟動時先 XINFO CONSUMERS，把 idle > 1 小時且 pending = 0 的 XGROUP DELCONSUMER 掉（在 ensure_group() 裡加一行就行）。"},
+{sev:1,ax:7,t:"/api/health 太薄，不能當健康檢查",
+ ev:"main.py:32-35 只 r.info(\"server\") 回 redis 版本",
+ im:"redis 活著但 worker 全死、Valhalla 掛、金鑰沒設 —— health 照样 ok:true；就算照 healthcheck 那條加了探測也照樣綠燈。",
+ fx:"加 XINFO GROUPS stream:ingest 的 consumers 數與 lag（超閾值回 503）＋ VALHALLA_URL/status（timeout 1 秒，失敗只在 body 標 degrade）。"},
+{sev:1,ax:6,t:"沒有任何閾值告警：ts:sys:*、consumer lag、pending 都只是後台的數字",
+ ev:"ts:sys:writes／pubsub／push 只在 ingest.py:108,118、events.py:36、push.py:141 寫、admin.py:141 讀；repo 內 grep threshold／alert 除 TDX 型別名外無一筆判斷式，也沒有 /metrics；log format 無 request id（main.py:14、worker.py:485 都是 \"%(asctime)s %(name)s %(message)s\"），worker 的 log 只帶 group 名（:465,468）不帶 tid／uid／stream id",
+ im:"出事只能開著 /admin 盯數字；「這一次落隊為什麼沒推播」要靠自己拿時間去對 uvicorn access log 與 worker log。",
+ fx:"在 /admin 的輪詢裡加一條檢查（lag>500、pending>50、writes 掉到 0、valhalla.ok=false、aof_last_bgrewrite_status!=ok）→ 寫進 alert:active 並在頁面紅 banner（要推就順手用現成的推播管線推給自己）；worker log 前綴加 tid=%s uid=%s；API 加一個 X-Request-Id middleware。"},
+{sev:1,ax:8,t:"後台斷線後數字凍結，看起來還像即時；keys() 沒有 catch",
+ ev:"admin.js:20-22 失敗時顯示 #denied 那張卡並填錯誤訊息（第二次以後的失敗也走這裡），下方全是舊數字；:42 「更新於…」只在成功時更新，失敗清成空字串；:46-55 keys() 完全無 catch → 每 60 秒一次可能的未抓 rejection，#types/#groups 静止不动",
+ im:"展示或口試時 Redis 或 worker 掛了，畫面仍顯示漂亮的舊數字，講到一半才發現是假的。",
+ fx:"tick() 失敗時把 #upd 改成「已停止更新（HH:MM:SS）」並給儀表板加一層 opacity:.5；keys() 包 try/catch 寫進 #kAt。"},
+{sev:1,ax:8,t:"戰情室手機版剛修好，但鏡頭 padding 還是寫死桌面面板寬 640",
+ ev:"war.js:51 const pad = () => ({ top:110, bottom:230, left:40, right:640 })，沒有 innerWidth 判斷（其他 6 頁都有：trip.js:129-136、plan.js:23、replay.js:125、footprint.js:171、me.js:9、login-stage.js:72）",
+ im:"在 390px 寬的手機開 /war，右邊 padding 640 > 螢幕寬 → cameraForBounds 回傳壞值，自動運鏡會拉到錯誤的縮放並偏向一邊。",
+ fx:"pad = () => innerWidth <= 760 ? {top:20,bottom:20,left:20,right:20} : {…}。"},
+{sev:1,ax:8,t:"「還沒有足跡」時足跡頁的控制項沒關，按任何篩選就 TypeError",
+ ev:"footprint.js:304-306 無資料時只設一句 #overall 文字就結束；但 :199-200 syncChips() 的 const { first, last } = F.summary 會因 F.summary undefined 而炸，於是 :73-74 的時間範圍、:80-81 的時段、:265-266 的日期輸入全部按了沒反應",
+ im:"新使用者（還沒有足跡）進 /footprint，控制台一片紅、看起來像壞掉 —— 這正好是老師或同學第一次開你專案的常見情境。",
+ fx:"無資料時把 #presets,#months,#buckets,#cal,#play 設 hidden（或 disabled），並顯示「先匯入一趟 GPX 或開始一趟行程」。"},
+{sev:1,ax:9,t:"api() 沒有 timeout／AbortController；背景輪詢遇到 401 會把整頁跳走",
+ ev:"common.js:2-16 純 fetch，無 AbortSignal.timeout、無離線判斷；輪詢點 trip.js:393-397（每 5 秒 /nearby）、admin.js:60-61、trip-extra.js:207-212（每 2 秒 loadCams）；401 一律整頁導向 /login?next=",
+ im:"弱網下 fetch 可能掛著不回來，定時器持續疊加等待中的連接，介面長時間無回應卻不報錯；萬一 cookie 被清掉，正在騎的行程頁會被背景 /nearby 的一次 401 直接帶到登入頁 —— 網頁定位就此中斷、軌跡斷圖。",
+ fx:"api(path, opts) 內加 signal: AbortSignal.timeout(10000)；401 導向只在使用者主動操作或頁面初次載入時做（給輪詢傳 silent401，或只在 document.visibilityState === 'visible' 時導向）。"},
+{sev:0,ax:0,t:"--forwarded-allow-ips * 讓任何人都能偽造來源 IP（是埋雷，不是現况）",
+ ev:"Dockerfile:7 CMD uvicorn … --proxy-headers --forwarded-allow-ips \"*\"",
+ im:"目前專案沒有任何依 IP 的判定，所以當下影響為零；但一旦照前面那條加了 per-IP 限流，任何人加一個 X-Forwarded-For: 1.2.3.4 就能繞掉。",
+ fx:"改成只信任 Tailscale／本機網段：--forwarded-allow-ips 127.0.0.1,100.64.0.0/10。"},
+{sev:0,ax:1,t:"鎖螢幕推播以明文帶聊天與訊息內容",
+ ev:"push.py:95-101 if etype in (\"msg\",\"chat\"): title = f\"{nick}・{trip_name}\", body = text[:160]；傳輸面本身是安全的（pywebpush 用訂閱的 p256dh/auth 端對端加密，Apple／Google／Mozilla 看不到內容）",
+ im:"問題在终端：聊天原文與誰發的會直接顯示在鎖螢幕上，共乘或借用手機時可見。",
+ fx:"payload 加 preview: etype not in (\"chat\",\"msg\")，web/sw.js 依此決定 body，聊天類顯示「你有一則新訊息」。"},
+{sev:0,ax:4,t:"几个小衛生項：手做 gauge、永不修剪的 ZSET、沒必要的 1000 km GEOSEARCH",
+ ev:"live.py:25,54 stat:ws 用 INCR/DECR 當 gauge（進程被 kill 就高估，只在 main.py:21 啟動歸零）；live.py:26 ZADD online:viewer 全專案無任何修剪（對比 online:report 至少在 admin.py:97 有被動修剪）；trips.py:55,89 user:{uid}:trips 只有 kick 會 ZREM；trips.py:228 GEOSEARCH radius=1000, unit=\"km\"（等於全台＝把整個 trip:{tid}:geo 掃一遍）",
+ im:"單筆都很小，屬於長期衛生問題；1000 km 半徑在車隊規模無所謂，但是一個沒必要的放大。",
+ fx:"gauge 改用 INFO clients／commandstats；online:viewer 補一句 zremrangebyscore(..., 0, now-86400000)；my_trips 之後 ZREMRANGEBYRANK 保留最近 500 趟；半徑改 50 km。"},
+{sev:0,ax:8,t:"小東西：無 SRI／preconnect、無 noscript、push.js 失敗就整塊消失、wakelock 釋放後不重拿",
+ ev:"全案 grep preconnect = 0；9 頁皆無 <noscript>（只有「載入中…」）；push.js:38 catch { return; } → 「回報」分頁的通知區整块不見且無說明；trip.js:403-406 wakelock 只在 visibilitychange→visible 時重拿",
+ im:"弱網下多一次 DNS＋TCP RTT；JS 掛掉時使用者永遠看到「載入中」；通知設定載入失敗看起來像功能不存在。",
+ fx:"加 <link rel=\"preconnect\"> 給 tile 網域；每頁加一行 <noscript>這個網站需要 JavaScript</noscript>；push.js 的 catch 顯示「通知設定載入失敗，重新整理看看」；S.wake 加 release 事件重新.request()。"},
+{sev:0,ax:9,t:"除錯用全域旗標與 HTML sink 慣例留在正式版",
+ ev:"trip.js:36-39 qijiMap/qijiM/qijiState、plan.js:12,14、war.js:10,13、replay.js:20、footprint.js:14、me.js:7、trip-extra.js:601；--c:${m.u.color} 直插未 esc（trip-extra.js:541,572、war.js:159，而同檔 :101 有 esc）；admin-test.js:8-14 log(html) 呼叫端要自己 esc（:36 <option>${c}</option> 未 esc）",
+ im:"目前不可利用：顏色欄位由 auth.py:93 的 PALETTE 白名單擋掉了。但這是深度防禦的缺口，也是新接手的人最容易照抄的壞慣例。",
+ fx:"顏色走 esc() 或 style.setProperty()；admin-test.js 的 log(text, bad) 改用 textContent；window.qiji* 收進單一命名空間。"}
+];
+const MUST=[
+ "把 Redis 收起來：加 --requirepass，ports 改 127.0.0.1:6390／127.0.0.1:8752（同網段現在能直接讀走整個資料庫）",
+ "推 GitHub 前：改 .env 的 SIM_BOT_PASSWORD、重建 sim_* 帳號、git filter-repo 清掉 （已遮蔽），並刪掉根目錄的 logs*.txt（內含家址級座標）",
+ "補 export_redis 的排除清單（user:*:push、trip:*:chat／progress、stream:notify ＋ 依私人 uid 清洗 events 裡的 lat/lon），才產生要上傳公開 Drive 連結的匯出檔",
+ "把 MapLibre 放進 web/assets/vendor/ 並把 SOS 掛載從地圖相依裡拆出來 —— 現在 CDN 一掉，行程頁的 SOS 按鈕是按了沒反應的",
+ "給里程加最低位移與精度門檻（MIN_STEP_M／MIN_STEP_KMH，三處消費端共用），否則展示的里程數字是含水的",
+ "先補真機實測：現在那份 log 證明手機送到 demo.traccar.org，自己的 /osmand 寫入路徑與 SOS 都還沒測過（alarm 也沒接）"
+];
+const GOOD=[
+ "Redis 功能選得準、理由也寫得下來：GEO／Streams＋Consumer Group／Pub/Sub／Lua／TimeSeries／RediSearch（含 GEOSHAPE）／RedisJSON／Keyspace Notification／SET NX／HSETNX 全部用在对的地方，README 那张「SQL 為什麼不方便」的表本身就是報告亮點。",
+ "授權覆蓋率：逐端點核對後，trip id／uid 可猜的讀寫端點全部有 require_member 或 owner 檢查，/me 系列一律用 current_uid() 自己的 uid，查不到 IDOR。",
+ "注入面乾淨：五支 Lua 全部走 KEYS／ARGV，零字串拼接；FT.SEARCH 有 clean() 且數值／座標由 Pydantic 型別擋死；前端使用者文字一律過 esc()，查不到可利用的 XSS；也没有 console.log 殘留。",
+ "寫入路徑的 pipeline 與原子手法是教科書級：一筆 GPS 一條 pipeline 寫完十六個指令；測速／坑洞／路況／降雨／推播用 SET NX EX，偏離路線與久停用 HSETNX／HDEL，抵達用 SADD 回傳值，全員到齊用 SDIFF＋SET NX —— 多 worker 併發下不會重複通知。",
+ "TTL 覆蓋率意外地好：hb、session、invite、push:sent、camhit、camevt、hazhit、roadevt、wxevt、lagchk、lock:tdx、cache:tdx、cache:cwa、cache:lines 都有明確生命週期（缺的主要是行程級 key 與 TimeSeries）。",
+ "at-least-once 的冪等設計大多正確：所有會 emit 的判斷都先把「只發一次」的依據寫進 Redis，所以 worker 死在 XADD 與 XACK 之間不會產生第二條事件或第二次推播。",
+ "「位置不外送」的核心宣稱經查屬實：TDX 只拉全台省道事件（請求裡沒有任何位置參數）、氣象署只要求整個縣市的預報（鄉鎮換算是本機 GEOSHAPE 在算），比對層完全走本機 Valhalla，沒有任何公開 OSRM／Google Directions。",
+ "cache-aside 與防 stampede 的寫法完整：TDX 用暫存 key＋MULTI／RENAME 原子換替、SET NX EX 鎖、token 提前過期與 401 主動清除，每月 3 點的預算控制得住，也看得见。",
+ "前端的地圖層抽得很乾淨：一支 createMap() 給 7 頁共用，樣式切換／地形／onStyle 鉤子都處理了 MapLibre 換樣式後圖層消失的坑；搜尋與路線預覽都用序號防 race（很容易寫錯的地方）。",
+ "時區這種坑已經吃過一次並系統性修掉：日切、時段分桶、天氣時間顯示一律固定 +8（geo.py、weather.tw()），UTC 容器不會把足跡與降雨時段弄錯。",
+ "危險操作一致有二次確認（移出、結束行程、清除路線、刪集合點／標註、解除 SOS）；網頁定位的不支援／非 HTTPS／拒絕授權／精度顯示／變頻送點／wakelock 防呆完整；README 的 port、掛載、指令與 compose 內容互relative一致、可重現。"
+];
+const $=s=>document.querySelector(s);
+const sevName=s=>SEV[s];
+// 資料裡含 <script src=…>、<link …> 等原始 HTML 字串（證據本身就是程式碼），一律跳脫後才進 innerHTML
+const esc=s=>String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+function render(){
+  const q=($("#q").value||"").toLowerCase();
+  const sevs=new Set([...document.querySelectorAll("[data-sev-btn][aria-pressed=true]")].map(b=>+b.dataset.sevBtn));
+  const axs=new Set([...document.querySelectorAll("[data-ax-btn][aria-pressed=true]")].map(b=>+b.dataset.axBtn));
+  const list=F.map((f,i)=>({f,i})).filter(({f})=>sevs.has(f.sev)&&axs.has(f.ax)&&
+    (!q||[f.t,f.ev,f.im,f.fx,AX[f.ax]].join(" ").toLowerCase().includes(q)))
+    .sort((a,b)=>b.f.sev-a.f.sev||a.f.ax-b.f.ax||a.i-b.i);
+  $("#list").innerHTML=list.map(({f})=>`<article class="f" data-sev="${f.sev}">
+    <div class="fhead"><span class="sev">${sevName(f.sev)}</span><span class="ax">${AX[f.ax]}</span><h3>${esc(f.t)}</h3></div>
+    <div class="lbl">證據</div><div class="ev"><code>${esc(f.ev)}</code></div>
+    <div class="lbl">影響</div><p>${esc(f.im)}</p>
+    <div class="lbl">修法</div><p>${esc(f.fx)}</p></article>`).join("")||
+    '<p style="color:var(--muted)">這個篩選條件下沒有項目。</p>';
+  $("#count").textContent=`顯示 ${list.length} / ${F.length} 項`;
+}
+function init(){
+  const tally=AX.map((_,a)=>[4,3,2,1,0].map(s=>F.filter(f=>f.ax===a&&f.sev===s).length));
+  const sums=tally.map(t=>t.reduce((x,y)=>x+y,0));
+  const smax=Math.max(1,...sums);           // 條的總長＝該軸發現數，色段＝嚴重度占比
+  $("#axes").innerHTML=AX.map((n,a)=>{const t=tally[a],sum=sums[a]||1;
+    const cols=["var(--s4)","var(--s3)","var(--s2)","var(--s1)","var(--s0)"];
+    return `<tr><td class="axis">${n}</td><td class="verdict">${esc(VERDICT[a])}</td>
+      ${t.map(v=>`<td class="n">${v||""}</td>`).join("")}
+      <td><div class="bar" style="width:${Math.max(8,Math.round(sum/smax*168))}px" role="img" aria-label="${esc(n)}：共 ${sum} 項">${t.map((v,i)=>v?`<i style="width:${v/sum*100}%;background:${cols[i]}"></i>`:"").join("")}</div></td></tr>`}).join("");
+  $("#must").innerHTML=MUST.map(m=>`<li>${esc(m)}</li>`).join("");
+  $("#goods").innerHTML=GOOD.map(g=>`<li><span class="pill">OK</span> ${esc(g)}</li>`).join("");
+  const cols=["var(--s4)","var(--s3)","var(--s2)","var(--s1)","var(--s0)"];
+  $("#sevbtns").innerHTML=[4,3,2,1,0].map(s=>
+    `<button data-sev-btn="${s}" aria-pressed="true"><span class="sev" style="background:${cols[s]};${s===2?'color:#17171a':''}">${SEV[s]}</span> ${F.filter(f=>f.sev===s).length}</button>`).join("");
+  $("#axbtns").innerHTML=AX.map((n,a)=>
+    `<button data-ax-btn="${a}" aria-pressed="true">${n} ${F.filter(f=>f.ax===a).length}</button>`).join("");
+  $("#total").textContent=F.length;
+  $("#sevbtns").addEventListener("click",e=>{const b=e.target.closest("[data-sev-btn]");if(b){b.setAttribute("aria-pressed",b.getAttribute("aria-pressed")!=="true");render();}});
+  $("#axbtns").addEventListener("click",e=>{const b=e.target.closest("[data-ax-btn]");if(b){b.setAttribute("aria-pressed",b.getAttribute("aria-pressed")!=="true");render();}});
+  $("#q").addEventListener("input",render);
+  const root=document.documentElement;
+  $("#theme").onclick=()=>{const c=getComputedStyle(root).getPropertyValue("--bg").trim();
+    root.dataset.theme=(c==="#f7f7f8"||c==="rgb(247, 247, 248)")?"dark":"light";};
+  render();
+}
+init();
+</script>
+</body>
+</html>
