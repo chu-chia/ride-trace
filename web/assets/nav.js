@@ -15,7 +15,7 @@ const S = window.qijiState, X = window.qijiExtra, M = window.qijiM, map = M.map;
 
 /* ───── 設定（設定頁「導航」那一組） ───── */
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
-const NAV_PITCH = +pref('qiji:nav:pitch', '45');
+const NAV_PITCH = +pref('qiji:nav:pitch', '60');  // 預設照原型 60°
 const SHOW_LIMIT = pref('qiji:nav:limit', '1') === '1';
 
 /* ───── 幾何 ───── */
@@ -316,7 +316,7 @@ function cluster() {
   for (const m of list) {
     const p = map.project(m.pos), el = m.el;
     const nearMe = meP && Math.hypot(p.x - meP.x, p.y - meP.y) < 30;
-    const lead = !nearMe && kept.find((k) => Math.hypot(k.p.x - p.x, k.p.y - p.y) < 30);
+    const lead = false;  // 隊友之間疊到就直接疊上去（不合併）
     el.classList.toggle('nv-nearme', !!nearMe);
     el.classList.toggle('nv-merged', !!lead);
     if (lead) lead.n += 1; else if (!nearMe) kept.push({ m, p, n: 0 });
@@ -351,7 +351,7 @@ function edges() {
       el = document.createElement('button'); el.type = 'button'; el.className = 'nv-edge';
       el.innerHTML = `${avHtml(m)}<svg viewBox="0 0 16 16"><path d="M8 1l6 13-6-3.5L2 14z" fill="currentColor"/></svg>`;
       el.setAttribute('aria-label', `${m.u.nickname}，在畫面外，點一下看他在哪`);
-      el.onclick = () => { if (el.dataset.group) setSheet(true); else focusMate(uid); };  // 合併的那顆：打開隊伍清單
+      el.onclick = () => focusMate(uid);
       $('#nvEdges').append(el); edgeEls.set(uid, el);
     }
     el.style.display = '';
@@ -370,17 +370,10 @@ function edges() {
       if (!hit) break;
       y = hit.top < (top + bot) / 2 && hit.bottom < innerHeight / 2 ? hit.bottom + h / 2 + 6 : hit.top - h / 2 - 6;
     }
-    // 跟已經放好的邊緣頭像疊到：不另外排開（太佔空間），合併到那一顆，數字 +1
-    const lead = placed.find((q) => Math.abs(x - q.x) < w && Math.abs(y - q.y) < h);
-    if (lead) { lead.n += 1; lead.uids.push(uid); el.style.display = 'none'; continue; }
-    placed.push({ x, y, w, el, n: 0, uids: [uid] });
+    // 跟別的邊緣頭像疊到就直接疊上去（不排開、不合併）
+    placed.push({ x, y, w });
     el.style.transform = `translate(${Math.round(x - 17)}px,${Math.round(y - 17)}px)`;
     el.querySelector('svg').style.transform = `rotate(${Math.round(rel)}deg) translateY(-22px)`;
-  }
-  for (const q of placed) {
-    const av = q.el.querySelector('.nv-av'), v = q.n ? `+${q.n}` : '';
-    if (av.dataset.more !== v) av.dataset.more = v;
-    q.el.dataset.group = q.n ? q.uids.join(',') : '';
   }
   for (const [uid, el] of edgeEls) if (!seen.has(uid)) { el.remove(); edgeEls.delete(uid); }
 }
@@ -429,7 +422,12 @@ function frame(now) {
   st.camZoom += (tz - st.camZoom) * Math.min(1, dt * 1.5);
   st.camBearing = lerpAngle(st.camBearing, st.northUp ? 0 : st.heading, Math.min(1, dt * 3));
   st.camPitch += ((st.northUp ? 0 : NAV_PITCH) - st.camPitch) * Math.min(1, dt * 3);
-  if (st.follow && st.pos) M.follow(st.pos, { padding: camPad(true), zoom: st.camZoom, bearing: st.camBearing, pitch: st.camPitch });
+  // 地形高度用自己腳下的（平滑），不用周圍平均：山路上平均常比路面低，鏡頭會對到路面下方、自己跑到畫面上半部
+  if (st.pos && map.getTerrain()) {
+    const e = map.queryTerrainElevation(st.pos);
+    if (e != null) st.elev = st.elev == null ? e : st.elev + (e - st.elev) * Math.min(1, dt * 2);
+  } else st.elev = null;
+  if (st.follow && st.pos) M.follow(st.pos, { padding: camPad(true), zoom: st.camZoom, bearing: st.camBearing, pitch: st.camPitch, ...(st.elev != null ? { elevation: st.elev } : {}) });
   // 路線進度：走過的灰色、前面的藍色
   if (P && map.getLayer('nv-line') && now - (st.lastGrad || 0) > 500) {
     st.lastGrad = now;
