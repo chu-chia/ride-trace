@@ -2,7 +2,7 @@
 // 不另開一頁：GPS 回報、WebSocket、偏離重算、SOS 都沿用行程頁（trip.js／trip-extra.js）。
 // 資料：window.qijiState（成員、位置）、window.qijiExtra（全隊路線 route、個人路線 nav、進度 prog、SOS）。
 // /nav?id=… 或「開始導航」進來；?preview=1＝從規劃頁預覽，沿路線模擬騎一遍（不回報位置）。
-import { api, $, esc, initialOf, sheetDrag, clock, dur } from '/assets/common.js';
+import { api, $, esc, initialOf, sheetDrag, clock, dur, swipeAway } from '/assets/common.js';
 
 const Q = new URLSearchParams(location.search);
 const tid = Q.get('id');
@@ -80,7 +80,7 @@ const ICO = {
 };
 document.body.insertAdjacentHTML('beforeend', `
 <section class="nv nv-turn" id="nvTurn" aria-live="polite"><div class="nv-track" id="nvTrack"></div></section>
-<div class="nv nv-free nv-hidden" id="nvFree"><span style="font-size:20px">🏍</span><span>自由騎乘<br><small>這趟沒有規劃路線，只跟著你和隊友</small></span><a id="nvPlan" href="/plan?trip=${tid}">規劃路線</a></div>
+<div class="nv nv-free nv-hidden" id="nvFree"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5l4-7h5l4 7M9.5 9.5L8 6H5M14.5 9.5l1.5-3h3"/></svg><span>自由騎乘<br><small>這趟沒有規劃路線，只跟著你和隊友</small></span><a id="nvPlan" href="/plan?trip=${tid}">規劃路線</a></div>
 <div class="nv nv-banner nv-hidden" id="nvBanner" role="status"></div>
 <div class="nv-fabs" id="nvFabs">
   <button class="nv-fab" id="nvCompass" aria-label="切換車頭朝上／北方朝上">${ICO.needle}</button>
@@ -177,6 +177,9 @@ function showBanner(kind, html, act, ms, onAct) {
   layout(); clearTimeout(bannerT);
   if (ms !== 0) bannerT = setTimeout(hide, ms || 4000);
 }
+
+// 橫幅也可以往上滑掉（SOS 那種一直留著的也一樣，滑掉就是「知道了」）
+swipeAway($('#nvBanner'), () => { clearTimeout(bannerT); $('#nvBanner').classList.add('nv-hidden'); layout(); });
 
 /* ───── 轉彎卡輪播：左右滑看上一個／下一個路口（像 Google Maps） ───── */
 const track = $('#nvTrack'), cards = [];
@@ -540,7 +543,7 @@ addEventListener('qiji:msg', (e) => {
   const uid = String(msg.uid || ''), mine = uid === String(S.me), who = nameOf(uid);
   const g = () => { const m = S.members.get(uid), gp = m && gapOf(m); return gp != null ? ` · ${fmtGap(gp)}` : ''; };
   switch (msg.type) {
-    case 'sos': if (!mine) { showBanner('sos', `🆘 ${esc(who)} 發出 SOS${g()}`, '查看', 0, () => focusMate(uid)); say(`${who}發出求救`); } break;
+    case 'sos': if (!mine) { showBanner('sos', `${esc(who)} 發出 SOS${g()}`, '查看', 0, () => focusMate(uid)); say(`${who}發出求救`); } break;
     case 'sos_off': if (!mine) showBanner('info', `${esc(who)} 解除了 SOS`, null, 5000); break;
     case 'lost': if (!mine) { showBanner('warn', `${esc(who)} 失聯${g()}`, '查看', 6000, () => focusMate(uid)); say(`${who}失聯`); } break;
     case 'stuck': if (!mine) { showBanner('info', `${esc(who)} 停車很久了${g()}`, '查看', 5000, () => focusMate(uid)); say(`${who}停車了`); } break;
@@ -600,7 +603,7 @@ async function setMeet() {
   if (!pt) { showBanner('info', '還沒有你的位置，不能設集合點', null, 4000); return; }
   try {
     await api(`/api/trips/${tid}/waypoints`, { method: 'POST', body: { name: `集合點 ${clock(Date.now())}`, lat: pt[1], lon: pt[0], kind: 'meet', radius_m: 150 } });
-    showBanner('info', `🚩 已${P && myKm != null ? '在前方 1.5 公里' : '在你的位置'}設集合點，全隊都會收到`, null, 4000);
+    showBanner('info', `已${P && myKm != null ? '在前方 1.5 公里' : '在你的位置'}設集合點，全隊都會收到`, null, 4000);
     say(P && myKm != null ? '已設定集合點，在前方一點五公里' : '已設定集合點');
   } catch (err) { showBanner('warn', `設集合點失敗：${esc(err.message)}`, null, 4000); }
 }
@@ -616,7 +619,7 @@ $('#nvFuel').onclick = async () => {
     const x = items.filter((i) => i.route_km * 1000 >= st.s - 50).sort((a, b) => a.route_km - b.route_km)[0];
     if (!x) { showBanner('info', '前方 60 公里內路線附近沒有加油站', null, 5000); return; }
     const d = x.route_km * 1000 - st.s;
-    showBanner('info', `⛽ 前方 ${fmtDist(Math.max(0, d))}：${esc(x.name)}${x.off_m > 150 ? `<br><small>離路線 ${x.off_m} 公尺</small>` : ''}`, '看位置', 10000, () => { stopFollow(); map.easeTo({ center: [x.lon, x.lat], zoom: 16, padding: { top: 0, bottom: 0, left: isLand() ? panelR() : 0, right: 0 }, duration: 900 }); });
+    showBanner('info', `前方加油站 ${fmtDist(Math.max(0, d))}：${esc(x.name)}${x.off_m > 150 ? `<br><small>離路線 ${x.off_m} 公尺</small>` : ''}`, '看位置', 10000, () => { stopFollow(); map.easeTo({ center: [x.lon, x.lat], zoom: 16, padding: { top: 0, bottom: 0, left: isLand() ? panelR() : 0, right: 0 }, duration: 900 }); });
     say(`前方${fmtDist(Math.max(0, d))}有加油站`);
   } catch (err) { showBanner('warn', `查不到加油站：${esc(err.message)}`, null, 4000); }
 };
