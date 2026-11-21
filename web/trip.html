@@ -197,7 +197,7 @@
     .followPill.show{display:flex}
     .followPill .avatar{width:28px;height:28px;font-size:12px}
     .followPill button{border:0;background:var(--solid-2);color:var(--fg);width:32px;height:32px;border-radius:50%;font:inherit;cursor:pointer}
-    body:has(#panel.small) .followPill{left:calc((var(--panel-mini-w) + var(--edge) * 2 + 100vw - 70px) / 2)}
+    body:has(#panel.small) .followPill{left:calc((max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge) + 100vw - 70px) / 2)}
   }
 </style>
 </head>

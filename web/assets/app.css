@@ -262,7 +262,7 @@ a.li{color:inherit}
 
 /* 地圖右下角的比例尺與來源，避開側欄 */
 body:has(.panel) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-w) + var(--edge) * 2)}
-body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-mini-w) + var(--edge) * 2)}
+body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge))}
 
 /* 底部抽屜（common.js sheetDrag）：不是 peek 的內容跟著開合程度淡入，收合時看不到露出的半截 */
 .sheetx.sx-on>.sx-rest{opacity:clamp(0,calc(var(--sx-t,1) * 4 - .4),1)}
