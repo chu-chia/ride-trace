@@ -176,23 +176,27 @@ a.li{color:inherit}
   --r-panel:24px; --r-card:16px; --r-ctl:12px;
   --ctl-h:44px; --tool:48px; --edge:12px; --panel-w:380px; --panel-mini-w:300px;
   --fs-xs:12px; --fs-s:12.5px; --fs-m:14px; --fs-l:17px;
-  /* 液態玻璃（參考北商美食地圖）：有文字的面板底色不透明度 0.9（UX-18），保留圓角、陰影和模糊，地圖上的地名、測速數字才不會透上來跟面板文字疊在一起 */
-  --lg-tint:rgba(255,255,255,.9); --lg-float:rgba(255,255,255,.9);
+  /* 液態玻璃：照 Apple HIG 的 regular 玻璃（地圖是雜的背景，不用 clear）——底色中等透明、模糊加大。
+     模糊 20px 會把地圖上的地名糊掉，所以底色不必像舊版那樣 0.9（UX-18 的顧慮是 8px 模糊擋不住地名）。
+     --lg-a 是小按鈕的不透明度，設定頁可以調（common.js 寫在 <html> 上）；大面板（抽屜、戰情室面板）自動再濃 0.12 */
+  --lg-a:.72; --lg-rgb:255 255 255; --lg-rgb-float:255 255 255;
+  --lg-tint:rgb(var(--lg-rgb) / var(--lg-a)); --lg-float:rgb(var(--lg-rgb-float) / var(--lg-a));
+  --lg-big:rgb(var(--lg-rgb) / min(1, calc(var(--lg-a) + .12)));
   --lg-edge:rgba(255,255,255,.55); --lg-inner:rgba(255,255,255,.6);
-  --lg-blur:8px; --lg-sat:190%; --lg-shadow:0 10px 36px rgba(0,0,0,.22);
+  --lg-blur:20px; --lg-sat:180%; --lg-shadow:0 10px 36px rgba(0,0,0,.22);
   /* 玻璃裡的卡片、分段按鈕：半透明，整片看起來是同一塊玻璃 */
   --lg-surface:rgba(255,255,255,.5); --lg-surface-2:rgba(118,118,128,.14);
   /* 面板（改版原型）：不透明的三階灰 */
   --solid-2:#ececf0; --solid-3:#e1e1e6;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --lg-tint:rgba(22,22,28,.9); --lg-float:rgba(30,30,36,.9);
+  --lg-rgb:22 22 28; --lg-rgb-float:30 30 36;
   --lg-edge:rgba(255,255,255,.2); --lg-inner:rgba(255,255,255,.22); --lg-sat:170%; --lg-shadow:0 10px 36px rgba(0,0,0,.4);
   --lg-surface:rgba(255,255,255,.07); --lg-surface-2:rgba(255,255,255,.1);
   --solid-2:#2c2c2e; --solid-3:#3a3a3c;
 }}
 :root[data-theme="dark"]{
-  --lg-tint:rgba(22,22,28,.9); --lg-float:rgba(30,30,36,.9);
+  --lg-rgb:22 22 28; --lg-rgb-float:30 30 36;
   --lg-edge:rgba(255,255,255,.2); --lg-inner:rgba(255,255,255,.22); --lg-sat:170%; --lg-shadow:0 10px 36px rgba(0,0,0,.4);
   --lg-surface:rgba(255,255,255,.07); --lg-surface-2:rgba(255,255,255,.1);
   --solid-2:#2c2c2e; --solid-3:#3a3a3c;
@@ -202,19 +206,38 @@ a.li{color:inherit}
 .glass{
   --surface:var(--lg-surface); --surface-2:var(--lg-surface-2);
   background:var(--lg-tint); border:1px solid var(--lg-edge);
-  box-shadow:inset 0 1px 0 var(--lg-inner),var(--lg-shadow);
+  /* 上緣亮、下緣淡的內高光，加細邊框和陰影，讓按鈕在地圖上有輪廓（HIG Maps：控制項和地圖要有對比） */
+  box-shadow:inset 0 1px 0 var(--lg-inner),inset 0 -1px 0 rgba(255,255,255,.08),var(--lg-shadow);
   -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat));
   backdrop-filter:var(--liquid-filter,) blur(var(--lg-blur)) saturate(var(--lg-sat));
 }
+/* 大面板：字多，底色再濃一點 */
+:is(.war-panel,.mobile-sheet).glass{background:var(--lg-big)}
+/* 玻璃底樣式給不能加 .glass class 的元件用（導航模式、抽屜、通知），跟 .glass 同一套數值 */
+.toast{
+  background:var(--lg-float)!important; box-shadow:inset 0 1px 0 var(--lg-inner),var(--lg-shadow)!important;
+  -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)); backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
+.wsheet,.psheet{
+  background:var(--lg-big)!important;
+  -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)); backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
+/* 導航模式的浮鈕、抽屜在 nav.css（跟著導航自己的深淺色） */
+
+/* 關掉玻璃的情況都退回不透明底色：瀏覽器不支援、系統「降低透明度」、設定頁關閉玻璃 */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .glass{background:var(--glass)}
+  :root{--lg-a:.94}
 }
 @media (prefers-reduced-transparency: reduce){
-  .glass{background:var(--glass);-webkit-backdrop-filter:none;backdrop-filter:none}
+  :root{--lg-a:1!important}
+  .glass,.toast,.nv-fab,.nv-cur,.nv-recenter,.nv-focus,.nv-sheet,.wsheet,.psheet{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 }
-/* 省電模式：不做背景模糊（地圖每重畫一格就要重算一次模糊），改用比較不透明的底色 */
-.low-power .glass{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--glass)}
-.low-power .tool.glass{background:var(--glass)}
+.no-glass{--lg-a:1!important}
+.no-glass :is(.glass,.toast,.nv-fab,.nv-cur,.nv-recenter,.nv-focus,.nv-sheet,.wsheet,.psheet){-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+/* 系統「增加對比」：底色更濃、邊框更明顯 */
+@media (prefers-contrast: more){
+  :root:not(.no-glass){--lg-a:.92!important;--lg-edge:rgba(128,128,128,.7)!important}
+}
+/* 省電模式：小按鈕照樣是玻璃（實測 4 顆按鈕負擔很小），大面板不做背景模糊（地圖每重畫一格就要重算一次整片模糊） */
+.low-power :is(.panel,.war-panel,.mobile-sheet).glass,.low-power :is(.nv-sheet,.wsheet,.psheet){-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:var(--glass)!important}
 .liquid-glass-filter{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
 
 /* 圖示按鈕（返回、收合）：所有頁同一個尺寸 */

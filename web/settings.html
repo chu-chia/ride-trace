@@ -44,6 +44,21 @@
   .sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .seg button{font-weight:600;color:var(--muted);min-height:36px;padding:4px 6px}.seg button.on{color:var(--fg)}
   .list .li.wrap .seg{margin-top:8px}
+  /* 玻璃濃淡：滑桿＋預覽（預覽用真的 .glass 樣式，疊在假地圖上） */
+  .glass-adj{width:100%;display:flex;align-items:center;gap:10px;margin-top:8px}
+  .glass-adj input{flex:1;min-width:0;accent-color:var(--accent)}
+  .glass-adj output{min-width:44px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .glass-adj .btn{min-height:36px;padding:4px 12px}
+  .glass-demo{position:relative;width:100%;height:92px;margin-top:10px;border-radius:14px;overflow:hidden;
+    background:repeating-linear-gradient(35deg,transparent 0 22px,rgba(255,255,255,.55) 22px 27px),repeating-linear-gradient(-55deg,transparent 0 40px,rgba(0,0,0,.08) 40px 44px),#cfe3c4}
+  :root[data-theme="dark"] .glass-demo{background:repeating-linear-gradient(35deg,transparent 0 22px,rgba(255,255,255,.12) 22px 27px),repeating-linear-gradient(-55deg,transparent 0 40px,rgba(255,255,255,.05) 40px 44px),#1f2a24}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .glass-demo{background:repeating-linear-gradient(35deg,transparent 0 22px,rgba(255,255,255,.12) 22px 27px),repeating-linear-gradient(-55deg,transparent 0 40px,rgba(255,255,255,.05) 40px 44px),#1f2a24}}
+  .gd-road{position:absolute;left:-10%;right:-10%;top:52%;height:10px;background:#4c8dff;transform:rotate(-8deg);border-radius:5px}
+  .gd-name{position:absolute;left:18px;top:14px;font-weight:700;font-size:15px;color:var(--fg)}
+  .gd-name.n2{left:auto;right:96px;top:auto;bottom:10px;font-size:13px}
+  .gd-btn{position:absolute;right:14px;top:14px;width:44px;height:44px;font-size:12px}
+  .gd-pill{position:absolute;left:44px;bottom:12px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600}
+  #glassRow.off .glass-adj,#glassRow.off .glass-demo{opacity:.45;pointer-events:none}
   form{display:flex;flex-direction:column;gap:10px}
   form label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
   form input{font:inherit;font-size:15px;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
@@ -97,7 +112,16 @@
   <div class="sec-t">地圖</div>
   <div class="list">
     <div class="li wrap"><span class="m"><b>拖曳地圖後自動回到跟隨</b><span>行程頁、戰情室適用；回放不會自動回去。縮放、旋轉不會離開跟隨</span></span><div class="seg" id="resume" role="group" aria-label="自動回到跟隨"><button type="button" data-v="0">不自動</button><button type="button" data-v="10">10 秒</button><button type="button" data-v="15">15 秒</button><button type="button" data-v="30">30 秒</button></div></div>
-    <label class="li"><span class="m"><b>省電模式</b><span>地圖 30 fps、解析度最多 2 倍、面板不做背景模糊、戰情室不自動旋轉（手機預設開啟）</span></span><input type="checkbox" class="sw" id="lowPower"></label>
+    <label class="li"><span class="m"><b>省電模式</b><span>地圖 30 fps、解析度最多 2 倍、大面板和抽屜不做背景模糊（小按鈕照樣是玻璃）、戰情室不自動旋轉（手機預設開啟）</span></span><input type="checkbox" class="sw" id="lowPower"></label>
+    <label class="li"><span class="m"><b>玻璃效果</b><span>地圖上的按鈕、抽屜透出後面的地圖；關掉改成不透明底色</span></span><input type="checkbox" class="sw" id="glassOn"></label>
+    <div class="li wrap" id="glassRow"><span class="m"><b>玻璃濃淡</b><span>往右越不透明、字越清楚；抽屜和大面板會自動比按鈕濃一點</span></span>
+      <div class="glass-adj">
+        <input type="range" id="glassA" min="40" max="95" step="1" aria-label="玻璃不透明度" aria-describedby="glassVal">
+        <output id="glassVal" for="glassA"></output>
+        <button type="button" class="btn" id="glassReset">預設</button>
+      </div>
+      <div class="glass-demo" aria-hidden="true"><span class="gd-road"></span><span class="gd-name">坪林</span><span class="gd-name n2">北宜公路</span><span class="tool glass gd-btn">3D</span><span class="glass gd-pill">12.4 km · 28 分</span></div>
+    </div>
     <label class="li"><span class="m"><b>立體地形</b><span>按 3D 時把山立起來；關掉時只傾斜。較耗電，手機可能會卡（手機預設關閉）</span></span><input type="checkbox" class="sw" id="terrain3d"></label>
     <label class="li"><span class="m"><b>效能量測浮層</b><span>開發用：在地圖頁左上角顯示 FPS、掉格與地圖重畫次數（只影響這台裝置）</span></span><input type="checkbox" class="sw" id="perfHud"></label>
   </div>
@@ -130,13 +154,22 @@
   </div>
 </main>
 <script type="module">
-import { api, $, esc, avatar, LOW_POWER, PERF } from '/assets/common.js';
+import { api, $, esc, avatar, LOW_POWER, PERF, glassPrefs, applyGlass, GLASS_DEFAULT_A } from '/assets/common.js';
 import { terrainPref, TERRAIN_KEY } from '/assets/mapbase.js';
 import { resumeMs } from '/assets/gestures.js';
 import { mountPushCard, pushEndpoint, dropLocalPush } from '/assets/push.js';
 import { clearSwrCache } from '/assets/swr.js';
 mountPushCard($('#pushCard'));  // 和行程頁同一張推播卡（UX-08）
 $('#lowPower').checked = LOW_POWER;
+// 玻璃效果：開關＋濃淡滑桿，改了立刻套用到整個網站（只存在這台裝置）
+{
+  const g = glassPrefs(), show = () => { $('#glassVal').textContent = `${g.a}%`; $('#glassRow').classList.toggle('off', !g.on); };
+  $('#glassOn').checked = g.on; $('#glassA').value = g.a; show();
+  const save = () => { try { localStorage.setItem('qiji:glass', g.on ? '1' : '0'); localStorage.setItem('qiji:glass-a', String(g.a)); } catch { /* 私密模式 */ } applyGlass(g); show(); };
+  $('#glassOn').onchange = (e) => { g.on = e.target.checked; save(); };
+  $('#glassA').oninput = (e) => { g.a = Number(e.target.value); save(); };
+  $('#glassReset').onclick = () => { g.a = GLASS_DEFAULT_A; g.on = true; $('#glassA').value = g.a; $('#glassOn').checked = true; save(); };
+}
 $('#perfHud').checked = PERF;
 $('#terrain3d').checked = terrainPref();
 $('#terrain3d').onchange = (e) => { try { localStorage.setItem(TERRAIN_KEY, e.target.checked ? '1' : '0'); } catch { /* 私密模式 */ } };
