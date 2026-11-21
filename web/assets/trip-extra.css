@@ -117,8 +117,9 @@
 /* 全隊進度、轉彎提示：放在側欄右邊的地圖區（跟著側欄寬度走） */
 .qx-prog{position:fixed;z-index:8;left:calc(50% + (var(--panel-w) + var(--edge)) / 2);bottom:max(var(--edge),env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(420px,calc(100vw - var(--panel-w) - 160px))}
 .qx-turn{left:calc(var(--panel-w) + var(--edge) * 2);top:max(var(--edge),env(safe-area-inset-top,0px));max-width:min(360px,calc(100vw - var(--panel-w) - 120px))}
-body:has(#panel.small) .qx-prog{left:calc(50% + (var(--panel-mini-w) + var(--edge)) / 2);width:min(420px,calc(100vw - var(--panel-mini-w) - 160px))}
-body:has(#panel.small) .qx-turn{left:calc(var(--panel-mini-w) + var(--edge) * 2)}
+body:has(#panel.small) .qx-prog{left:calc(50% + (max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w)) / 2);width:min(420px,calc(100vw - var(--panel-mini-w) - 160px))}
+/* 收合膠囊的左邊是 max(邊距, 瀏海安全區)：手機橫向時要一起算進去，轉彎卡才不會被膠囊蓋住 */
+body:has(#panel.small) .qx-turn{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge))}
 @media(max-width:760px){
   /* 全隊進度貼在抽屜上方、跟著抽屜高度走；抽屜往上拉時逐漸淡出，展開後完全藏起 */
   .qx-prog,body:has(#panel.small) .qx-prog{left:10px;right:10px;bottom:calc(var(--sheet-h,176px) + 8px);transform:none;width:auto;opacity:calc(1 - var(--sheet-t,0) * 4)}

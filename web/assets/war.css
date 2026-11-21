@@ -54,7 +54,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .ev time{font-size:12px;color:var(--muted)}.ev i{width:7px;height:7px;border-radius:50%;background:var(--c)}.ev.sos span{color:var(--crit-ink);font-weight:700}
 .prog{left:.8%;top:77.9%;width:55.6%;height:16.2%;min-height:120px}
 /* 寬螢幕：剖面標題放左邊、圖表佔右側全高，面板矮也看得到起伏 */
-@media(min-width:1101px){.prog:not(.small){flex-direction:row}.prog:not(.small) .panel-top{width:270px;align-items:flex-start}.prog:not(.small) .progress-body{padding:10px 52px 10px 0}.prog:not(.small) .profile-wrap{margin:14px 0 0}}
+@media all{.prog:not(.small){flex-direction:row}.prog:not(.small) .panel-top{width:270px;align-items:flex-start}.prog:not(.small) .progress-body{padding:10px 52px 10px 0}.prog:not(.small) .profile-wrap{margin:14px 0 0}}
 .progress-body{position:relative;flex:1;display:flex;flex-direction:column;padding:2px 16px 12px;overflow:hidden!important}
 .profile-wrap{position:relative;flex:1;min-height:0;margin:12px 12px 0}
 .profile-wrap svg{position:absolute;inset:0;width:100%;height:100%}
@@ -68,12 +68,12 @@ html,body{width:100%;height:100%;overflow:hidden}
 .panel-toggle{position:absolute;top:var(--sp-3);right:var(--sp-3)}
 .war-panel.small .panel-body{display:none!important}.war-panel.small{height:60px!important;min-height:60px!important}
 /* 收合＝只有標題的膠囊，寬度跟著標題（位置由 war.js dock() 貼到最近的邊） */
-@media(min-width:1101px){.war-panel.small{width:max-content!important;max-width:min(440px,45vw);min-width:0}.war-panel.small .head-copy b{max-width:260px}}
+@media all{.war-panel.small{width:max-content!important;max-width:min(440px,45vw);min-width:0}.war-panel.small .head-copy b{max-width:260px}}
 /* 騎士清單不要外框和底色，直接浮在地圖上（文字加陰影才讀得清楚） */
 .war-panel.cards{background:none;border-color:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;text-shadow:0 1px 3px rgba(0,0,0,.9)}
 :root[data-theme="light"] .war-panel.cards{text-shadow:0 0 4px rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.95)}
 /* 騎士清單（電腦版）：不要標題列（編輯版面時才出現，拖曳用）、整體縮小；跟隨中的人不用底色，右邊一個小箭頭（暫離時變淡） */
-@media(min-width:1101px){
+@media all{
   .war-stage:not(.editing) .war-panel.cards>.panel-top,.war-panel.cards>.panel-toggle{display:none}
   /* 清單本身有一塊玻璃底（高度跟著人數），列才不會看起來像散落在地圖上、跑到面板外（UX-29）；面板外框照舊透明 */
   .war-panel.cards .card-list.team-rows{flex:0 1 auto;padding:4px 8px;border-radius:16px;background:var(--lg-tint);border:1px solid var(--lg-edge);box-shadow:inset 0 1px 0 var(--lg-inner),var(--lg-shadow);-webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat));backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
@@ -94,29 +94,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .war-stage.editing .panel-grip{cursor:grab;touch-action:none;user-select:none}.war-stage.editing .panel-resize{display:block}.war-stage.editing .war-panel{outline:1px dashed var(--accent)}
 .war-panel.dragging{box-shadow:0 18px 50px #0008;z-index:12!important}
 .mobile-sheet{display:none}
-@media(max-width:1100px){
-  .war-stage{display:none}
-      .mobile-sheet{display:flex;position:fixed;z-index:5;left:0;right:0;bottom:0;height:min(76dvh,650px);border-radius:20px 20px 0 0;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);
-    transform:translateY(var(--sheet-off,0px));transition:transform .28s cubic-bezier(.2,.8,.2,1);will-change:transform;
-    --surface:var(--solid);--surface-2:var(--solid-2);--surface-3:var(--solid-3);background:var(--solid);border:0;box-shadow:0 -2px 16px rgba(0,0,0,.35);-webkit-backdrop-filter:none;backdrop-filter:none}
-  /* 抽屜高度固定，開合用 transform 整塊推（common.js sheetDrag），收合時內容照樣在，只是推到畫面外 */
-  .mobile-sheet.dragging{transition:none}
-  .sheet-handle{border:0;background:none;min-height:44px;cursor:pointer;touch-action:none;flex:none}
-  .sheet-handle::before{content:"";display:block;width:40px;height:5px;border-radius:4px;background:var(--muted);margin:0 auto}
-  .sheet-summary{display:flex;align-items:center;gap:9px;padding:2px 14px 10px;min-height:45px;flex:none}
-  .sheet-summary b{font-size:15px;white-space:nowrap}.sheet-summary span{font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .sheet-tabs{margin:0 12px 8px;flex:none}.sheet-tabs button{padding:8px 3px;min-height:44px;font-size:12px}
-  .sheet-content{padding:0 12px 12px;overflow:auto;flex:1;min-height:0}
-  .sheet-content .war-panel{position:static!important;width:100%!important;height:auto!important;max-height:none;border:0;box-shadow:none;background:none;backdrop-filter:none;overflow:visible}
-  .sheet-content .war-panel .panel-top{padding:5px 2px 10px}.sheet-content .panel-toggle,.sheet-content .panel-resize{display:none}
-  .sheet-content .war-panel .panel-body{display:block!important;overflow:visible!important;max-height:none}
-  .sheet-content .feed-filters{display:flex!important;margin:0 2px 8px}
-  .sheet-content .card-list{padding:0 0 10px}.sheet-content .conditions-body,.sheet-content .feed-list{padding:0 2px 12px}
-  .sheet-content .progress-body{height:225px;padding:0 2px 12px}.sheet-content .profile-wrap{min-height:165px;margin:12px 8px 0}
-  .sheet-content .head{display:none}
-  .sosbar{top:58px;max-width:calc(100vw - 24px)}.sosbar div{font-size:15px}
-  .maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{bottom:calc(var(--sheet-h,172px) + 4px)}
-}
+
 @media(prefers-reduced-motion:reduce){.pdot,.mobile-sheet{transition:none}}
 .card-list.team-rows{gap:0;padding:2px 8px 10px}
 
@@ -124,18 +102,3 @@ html,body{width:100%;height:100%;overflow:hidden}
 .tools{right:var(--tools-right,calc(22.3% + var(--edge)))}
 /* 手機抽屜：把手、圓角和其他頁的底部抽屜一樣 */
 .sheet-handle::before{width:38px!important;opacity:.65}
-@media(max-width:1100px){
-  .tools{right:max(var(--edge),env(safe-area-inset-right,0px))}
-  .mobile-sheet{border-radius:var(--r-panel) var(--r-panel) 0 0;border-bottom:0}
-  .sheet-summary{padding:2px var(--sp-3) var(--sp-2) var(--sp-2)}
-}
-
-/* 手機直拿看「電腦版」：上面約 45% 是地圖，下面兩欄放分析圖表（war.js 加 html.desk-portrait；不能自訂版面） */
-.desk-portrait .war-panel{transition:none}
-.desk-portrait .head{left:.8%!important;top:.6%!important;width:34%!important;height:auto!important;min-height:0}
-.desk-portrait .cards{left:.8%!important;top:46%!important;width:48.8%!important;height:26%!important}
-.desk-portrait .conditions{left:auto!important;right:.8%!important;top:46%!important;width:48.8%!important;height:26%!important}
-.desk-portrait .prog{left:.8%!important;top:72.8%!important;width:98.4%!important;height:12.6%!important}
-.desk-portrait .feed{left:.8%!important;right:auto!important;top:86.2%!important;width:98.4%!important;height:13%!important}
-.desk-portrait .war-panel.small{height:auto!important}
-.desk-portrait #editLayout,.desk-portrait #resetLayout{display:none}

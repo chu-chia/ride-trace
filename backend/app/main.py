@@ -112,6 +112,14 @@ async def me_page():
     return RedirectResponse("/#trips", status_code=302)
 
 
+@app.get("/w/{tok}", include_in_schema=False)
+async def watch_page(tok: str):
+    """觀看連結（免登入看戰情室）：換成戰情室網址；連結失效時戰情室會顯示說明"""
+    from .trips import watch_tid
+    tid = await watch_tid(tok)
+    return RedirectResponse(f"/war?id={tid or 0}&watch={quote(tok)}", status_code=302)
+
+
 PAGES = {"/war": "war.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html", "/about": "about.html", "/settings": "settings.html", "/nav": "trip.html"}  # /nav＝行程頁的導航模式
 for path, file in PAGES.items():
     app.add_api_route(path, page(file), include_in_schema=False)

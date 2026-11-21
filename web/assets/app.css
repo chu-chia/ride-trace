@@ -116,6 +116,7 @@ a.li{color:inherit}
 .rider .arrow::before{content:"";position:absolute;left:-6px;top:-29px;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:9px solid var(--c)}
 .rider .name{position:absolute;top:38px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:12px;font-weight:600;padding:1px 7px;border-radius:9px;background:var(--glass);color:var(--fg)}
 .rider.me .dot{box-shadow:0 0 0 7px color-mix(in srgb,var(--c) 25%,transparent),0 2px 8px rgba(0,0,0,.35)}
+.rider.car .dot{border-radius:9px;background:var(--solid-3,#3a3a3c);font-size:16px}  /* 後援車：方塊＋車子圖示 */
 .rider.lost .dot{background:#8e8e93;color:#fff;border-style:dashed}
 .rider.lost .arrow,.rider.rest .arrow,.rider.done .arrow{display:none}
 .rider.lost .name{color:var(--crit-ink)}
@@ -262,7 +263,7 @@ a.li{color:inherit}
 
 /* 地圖右下角的比例尺與來源，避開側欄 */
 body:has(.panel) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-w) + var(--edge) * 2)}
-body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-mini-w) + var(--edge) * 2)}
+body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge))}
 
 /* 底部抽屜（common.js sheetDrag）：不是 peek 的內容跟著開合程度淡入，收合時看不到露出的半截 */
 .sheetx.sx-on>.sx-rest{opacity:clamp(0,calc(var(--sx-t,1) * 4 - .4),1)}

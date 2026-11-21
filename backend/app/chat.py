@@ -15,7 +15,7 @@ from . import events
 from .auth import current_uid
 from .db import r
 from .interact import event_ts
-from .trips import require_member
+from .trips import reader, require_member
 
 router = APIRouter(prefix="/api/trips")
 UNREAD_CAP = 99
@@ -57,8 +57,7 @@ class ReadIn(BaseModel):
 
 @router.get("/{tid}/chat")
 async def history(tid: str, before: str | None = Query(None, pattern=r"^\d+-\d+$"), limit: int = Query(40, ge=1, le=100),
-                  uid: str = Depends(current_uid)):
-    await require_member(tid, uid)
+                  uid: str = Depends(reader)):  # 成員或觀看連結
     rows = await r.xrevrange(chat_key(tid), max=f"({before}" if before else "+", min="-", count=limit + 1)
     more = len(rows) > limit
     items = [item(i, f) for i, f in rows[:limit]][::-1]  # 舊 → 新

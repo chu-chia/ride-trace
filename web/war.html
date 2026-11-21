@@ -3,8 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<script>/* 手機選了「電腦版」：版面寬度改成 1280，整頁照電腦版排、縮小顯示（要在第一次排版前設定） */
-try { if (localStorage.getItem('qiji:war:desk') === '1' && matchMedia('(pointer: coarse)').matches) document.querySelector('meta[name=viewport]').content = 'width=1280,user-scalable=no,viewport-fit=cover'; } catch (e) {}</script>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <meta name="theme-color" content="#d9500f">
@@ -17,9 +15,23 @@ try { if (localStorage.getItem('qiji:war:desk') === '1' && matchMedia('(pointer:
 <title>戰情室｜騎跡 RideTrace</title>
 <link rel="stylesheet" href="/vendor/maplibre-gl-5.24.0/maplibre-gl.css">
 <link rel="stylesheet" href="/assets/app.css">
-<link rel="stylesheet" href="/assets/war.css">
+<script>
+/* 兩種版面：手機直拿＝全螢幕地圖＋底部抽屜（war-m.*）；電腦與手機橫向＝可自由編輯排版的浮動面板（war.*）。
+   轉向或視窗寬度跨過界線就重新載入，換成另一種版面 */
+(() => {
+  // 手機（觸控、螢幕短邊 ≤ 820）：直拿用手機版；橫拿把版面寬度設成 1280（和以前的「電腦版」鈕一樣），整頁照電腦版排、縮小顯示（要在第一次排版前設定）
+  const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 820;
+  const portrait = matchMedia('(orientation: portrait)');
+  const narrow = matchMedia('(max-width:899px)');  // 電腦瀏覽器視窗拉很窄時也用手機版
+  window.WAR_MODE = (phone ? portrait.matches : narrow.matches) ? 'm' : 'd';
+  if (phone && window.WAR_MODE === 'd') document.querySelector('meta[name=viewport]').content = 'width=1280,user-scalable=no,viewport-fit=cover';
+  document.write(`<link rel="stylesheet" href="/assets/war${window.WAR_MODE === 'm' ? '-m' : ''}.css">`);
+  (phone ? portrait : narrow).addEventListener('change', () => location.reload());
+})();
+</script>
 </head>
 <body>
+<template id="warD">
 <div class="mapwrap"><div id="map"></div></div>
 <div class="war-stage" id="stage">
   <header class="war-panel glass head" data-panel="head">
@@ -45,10 +57,49 @@ try { if (localStorage.getItem('qiji:war:desk') === '1' && matchMedia('(pointer:
     <div class="progress-body panel-body"><div class="profile-wrap" id="pwrap"><svg id="profile" preserveAspectRatio="none"></svg></div><div class="pmeta" id="pmeta"></div></div><button class="icon-btn panel-toggle" data-icon="collapse" aria-label="收合全隊進度" aria-expanded="true" type="button"></button><div class="panel-resize" role="button" aria-label="縮放全隊進度面板"></div>
   </section>
 </div>
-<div class="tools" id="tools"><button class="tool glass on" id="centerTeam" data-icon="team" aria-pressed="true" type="button">全隊</button><button class="tool glass" id="mapStyle" data-icon="layers" type="button">深色</button><button class="tool glass" id="deskView" data-icon="screen" type="button" style="display:none">電腦版</button></div>
+<div class="tools" id="tools"><button class="tool glass on" id="centerTeam" data-icon="team" aria-pressed="true" type="button">全隊</button><button class="tool glass" id="mapStyle" data-icon="layers" type="button">深色</button></div>
 <div class="mobile-sheet glass small" id="mobileSheet"><button id="sheetHandle" class="sheet-handle" type="button" aria-label="展開戰情室資訊" aria-expanded="false"></button><div class="sheet-summary"><a class="icon-btn" href="/" data-icon="back" aria-label="回首頁"></a><b>戰情室</b><span id="sheetBrief" class="muted">載入中…</span></div><nav class="seg sheet-tabs" aria-label="戰情室資訊"><button class="on" data-tab="cards">騎士</button><button data-tab="progress">進度</button><button data-tab="conditions">天氣路況</button><button data-tab="feed">事件</button></nav><div class="sheet-content" id="sheetContent"></div></div>
 <div class="sosbar" id="sosbar"></div>
+</template>
+<template id="warM">
+<div id="map" role="region" aria-label="地圖"></div>
+<header class="whd">
+  <a class="icon-btn" id="back" href="/" data-icon="back" aria-label="回行程頁"></a>
+  <div class="wttl"><h1 id="name">戰情室</h1><div class="live" id="live"><i></i><span id="hT">連線中…</span></div></div>
+  <span class="watch hidden" id="watch"></span>
+</header>
+<div class="tools" role="toolbar" aria-label="地圖工具">
+  <button class="tool on" id="centerTeam" data-icon="team" aria-pressed="true" type="button">全隊</button>
+  <button class="tool on" id="b3d" data-icon="cube" aria-pressed="true" type="button">3D</button>
+  <button class="tool" id="mapStyle" data-icon="layers" type="button">深色</button>
+</div>
+<div class="sosbars" id="sosbar"></div>
+<div class="wnote" id="note" role="status" aria-live="polite"></div>
+<section class="wsheet small" id="sheet" aria-label="戰情室資訊">
+  <button class="handle" type="button" aria-label="展開或收合"></button>
+  <div class="peek">
+    <div class="strip" id="strip" aria-label="全隊在路線上的位置"></div>
+    <div class="kpi num" id="kpi"></div>
+    <nav class="mtabs" id="mt" aria-label="戰情室資訊"><button data-m="l" class="on" type="button">騎士</button><button data-m="w" type="button">路線</button><button data-m="r" type="button">事件</button><button data-m="p" type="button">剖面</button></nav>
+  </div>
+  <div class="sheet-body">
+    <div class="pane" data-p="l"><div class="sec-t"><span id="teamT">騎行順序</span><span class="gm" id="gm" role="group" aria-label="差距顯示"><button type="button" data-g="time">時間</button><button type="button" data-g="km">距離</button></span></div><div id="cards"></div></div>
+    <div class="pane" data-p="w"><div class="lin" id="lin"></div><div class="sec-t">沿途天氣與路況</div><div class="wx" id="wx"><p class="empty">讀取沿途資訊…</p></div></div>
+    <div class="pane" data-p="r"><div class="sec-t">事件<span class="wchips" id="feedF"></span></div><div id="feed"></div></div>
+    <div class="pane" data-p="p"><div class="prof" id="prof"><canvas id="pc" aria-label="全隊進度與海拔剖面"></canvas></div></div>
+  </div>
+</section>
+</template>
 <script src="/vendor/maplibre-gl-5.24.0/maplibre-gl.js"></script>
-<script type="module" src="/assets/war.js"></script>
+<script>
+{
+  const m = window.WAR_MODE === 'm';
+  document.body.prepend(document.getElementById(m ? 'warM' : 'warD').content.cloneNode(true));
+  const s = document.createElement('script');
+  s.type = 'module';
+  s.src = m ? '/assets/war-m.js' : '/assets/war.js';
+  document.body.append(s);
+}
+</script>
 </body>
 </html>

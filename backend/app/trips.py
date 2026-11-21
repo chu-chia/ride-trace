@@ -4,12 +4,14 @@ import secrets
 import time
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import Literal
+
 from pydantic import BaseModel
 from redis.exceptions import ResponseError, WatchError
 
 from . import events
-from .auth import PALETTE, current_uid, public_user
+from .auth import PALETTE, current_uid, public_user, uid_from_token, token_from
 from .db import K, end_record, r
 from .geo import is_rough
 from .worker import LAG_DEFAULT_KM, stats_dict
@@ -30,6 +32,53 @@ async def trip_or_404(tid: str) -> dict:
         raise HTTPException(404, "找不到這個行程")
     t["id"] = tid
     return t
+
+
+Role = Literal["rider", "viewer", "car"]
+ROLE_NAME = {"rider": "騎士", "viewer": "只看", "car": "後援車"}
+
+
+async def riders_of(tid: str, members) -> set[str]:
+    """會回報位置的人（騎士＋後援車）：只看的人不進 active、不分享位置"""
+    roles = await r.hgetall(K.role(tid))
+    return {m for m in members if roles.get(m) != "viewer"}
+
+
+WATCH_TTL = 7 * 24 * 3600  # 觀看連結最長 7 天（行程結束就提早失效）
+
+
+def watch_token(request: Request) -> str | None:
+    return request.headers.get("x-qiji-watch") or request.query_params.get("watch")
+
+
+async def watch_tid(tok: str | None) -> str | None:
+    """觀看連結對應的行程；連結不存在、被換掉、或行程已結束都回 None"""
+    if not tok or len(tok) > 64:
+        return None
+    tid = await r.get(K.watch(tok))
+    if not tid or await r.hget(K.trip(tid), "watch") != tok or await r.hget(K.trip(tid), "status") == "ended":
+        return None
+    return tid
+
+
+async def reader(tid: str, request: Request) -> str:
+    """看得到這個行程的人：登入的成員回 uid；拿觀看連結的人回空字串（不登入、只能看）"""
+    tok = watch_token(request)
+    if tok:
+        if await watch_tid(tok) == tid:
+            return ""
+        raise HTTPException(403, "觀看連結已失效")
+    uid = await current_uid(request)
+    await trip_or_404(tid)
+    await require_member(tid, uid)
+    return uid
+
+
+async def uid_or_watch(request: Request) -> str:
+    """不綁行程的查詢（沿途天氣路況）：登入的人或拿有效觀看連結的人都可以"""
+    if await watch_tid(watch_token(request)):
+        return ""
+    return await current_uid(request)
 
 
 async def require_member(tid: str, uid: str):
@@ -107,6 +156,7 @@ async def my_trips(uid: str = Depends(current_uid)):
 
 class JoinIn(BaseModel):
     code: str
+    role: Role = "rider"
 
 
 @router.post("/join")
@@ -121,7 +171,12 @@ async def join_trip(body: JoinIn, uid: str = Depends(current_uid)):
     new = await r.sadd(K.members(tid), uid)
     await r.srem(K.kicked(tid), uid)  # 被移出後又用邀請碼加回來
     await r.zadd(K.user_trips(uid), {tid: now_ms()})
-    if t["status"] == "live":
+    if new:  # 已經是成員又點一次邀請連結：不改原本的身分
+        if body.role == "rider":
+            await r.hdel(K.role(tid), uid)
+        else:
+            await r.hset(K.role(tid), uid, body.role)
+    if t["status"] == "live" and await r.hget(K.role(tid), uid) != "viewer":
         await leave_old_active(uid, await r.get(K.active_trip(uid)), tid)
         await r.sadd(K.active(tid), uid)
         await r.set(K.active_trip(uid), tid)
@@ -130,7 +185,8 @@ async def join_trip(body: JoinIn, uid: str = Depends(current_uid)):
         team = [await public_user(m) for m in sorted(await r.smembers(K.members(tid)), key=int)]
         dedupe_colors(team)
         u = next((m for m in team if m["uid"] == uid), u)
-        await events.emit(tid, "join", uid, "加入行程")
+        u["role"] = await r.hget(K.role(tid), uid) or "rider"
+        await events.emit(tid, "join", uid, "加入行程" if u["role"] == "rider" else f"加入行程（{ROLE_NAME[u['role']]}）")
         await events.publish(tid, {"kind": "member", "user": u})
     return await trip_detail(tid, uid)
 
@@ -149,28 +205,64 @@ async def invite_preview(code: str):
 
 
 @router.get("/{tid}")
-async def get_trip(tid: str, uid: str = Depends(current_uid)):
-    await trip_or_404(tid)  # 先分出「行程不存在」（404）和「不是成員」（403），前端顯示不同的錯誤畫面
-    await require_member(tid, uid)
+async def get_trip(tid: str, uid: str = Depends(reader)):
+    # reader 先分出「行程不存在」（404）和「不是成員」（403），前端顯示不同的錯誤畫面；觀看連結 uid＝""
     return await trip_detail(tid, uid)
+
+
+@router.post("/{tid}/watch")
+async def new_watch(tid: str, uid: str = Depends(current_uid)):
+    """建立者產生（或換一條新的）觀看連結：知道連結就能免登入看戰情室，舊連結立刻失效；行程結束也失效"""
+    t = await trip_or_404(tid)
+    if t.get("owner") != uid:
+        raise HTTPException(403, "只有建立者可以產生觀看連結")
+    if t.get("status") == "ended":
+        raise HTTPException(409, "行程已經結束")
+    tok = secrets.token_urlsafe(12)
+    async with r.pipeline(transaction=True) as p:
+        if t.get("watch"):
+            p.delete(K.watch(t["watch"]))
+        p.set(K.watch(tok), tid, ex=WATCH_TTL)
+        p.hset(K.trip(tid), "watch", tok)
+        await p.execute()
+    return {"watch": tok}
+
+
+@router.delete("/{tid}/watch")
+async def stop_watch(tid: str, uid: str = Depends(current_uid)):
+    t = await trip_or_404(tid)
+    if t.get("owner") != uid:
+        raise HTTPException(403, "只有建立者可以停用觀看連結")
+    if t.get("watch"):
+        await r.delete(K.watch(t["watch"]))
+        await r.hdel(K.trip(tid), "watch")
+    return {"watch": None}
 
 
 async def trip_detail(tid: str, uid: str) -> dict:
     t = await trip_or_404(tid)
     member_ids = sorted(await r.smembers(K.members(tid)), key=int)
     active = await r.smembers(K.active(tid))
+    roles = await r.hgetall(K.role(tid))
     members = []
     for m in member_ids:
         u = await public_user(m)
         u["active"] = m in active
+        u["role"] = roles.get(m, "rider")
         u["state"] = await r.hgetall(K.state(tid, m))
         u["stats"] = stats_dict(await r.hmget(K.stats(tid, m), "km", "max_kmh", "moving_s"))
         members.append(u)
     dedupe_colors(members)
     t["members"] = members
     t["me"] = uid
-    t["is_owner"] = t.get("owner") == uid
-    t["invite_valid"] = bool(await r.exists(K.invite(t.get("invite", ""))))
+    t["is_owner"] = bool(uid) and t.get("owner") == uid
+    if not uid:  # 觀看連結：只能看，不給邀請碼（不然拿到觀看連結的人可以自己加入）
+        t.pop("invite", None)
+    if not t["is_owner"]:
+        t.pop("watch", None)
+    elif t.get("watch") and not await r.exists(K.watch(t["watch"])):
+        t.pop("watch", None)  # 7 天到期
+    t["invite_valid"] = bool(t.get("invite")) and bool(await r.exists(K.invite(t["invite"])))
     t["lag_km"] = float(t.get("lag_km") or LAG_DEFAULT_KM)
     t["gaps"] = {k: float(v) for k, v in (await r.hgetall(K.gap(tid))).items()}
     t["flags"] = await r.hgetall(K.lagflag(tid))
@@ -193,7 +285,9 @@ async def start_trip(tid: str, uid: str = Depends(current_uid)):
                     raise HTTPException(403, "只有建立者可以開始行程")
                 if status != "planned":
                     raise HTTPException(409, "行程已經開始或結束了")
-                members = await p.smembers(K.members(tid))
+                members = await riders_of(tid, await p.smembers(K.members(tid)))  # 只看的人不開始紀錄
+                if not members:
+                    raise HTTPException(409, "至少要有一位騎士才能開始")
                 olds = {m: await r.get(K.active_trip(m)) for m in members}
                 p.multi()
                 p.hset(key, mapping={"status": "live", "started": now_ms()})
@@ -305,6 +399,57 @@ async def finish_record(tid: str, uid: str, text: str = "結束自己的紀錄")
     return {"left": left, "ended": bool(ended)}
 
 
+class RoleIn(BaseModel):
+    role: Role
+
+
+@router.post("/{tid}/role")
+async def set_role(tid: str, body: RoleIn, uid: str = Depends(current_uid)):
+    """改自己的身分：騎士／只看（後援、家人，不出現在地圖和名單上）／後援車（分享位置，但不算名次、落隊、到齊）。
+    進行中改成「只看」＝停止自己的紀錄；從「只看」改回騎士或後援車＝加入 active 開始回報。"""
+    t = await trip_or_404(tid)
+    await require_member(tid, uid)
+    old = await r.hget(K.role(tid), uid) or "rider"
+    if body.role == old:
+        return await trip_detail(tid, uid)
+    if body.role == "viewer" and t.get("status") == "live" and await r.sismember(K.active(tid), uid):
+        rest = await riders_of(tid, await r.smembers(K.active(tid)) - {uid})
+        if not rest:
+            raise HTTPException(409, "你是最後一位在騎的人，改成只看行程就會結束；要結束請按「結束行程」")
+    if body.role == "rider":
+        await r.hdel(K.role(tid), uid)
+    else:
+        await r.hset(K.role(tid), uid, body.role)
+    if t.get("status") == "live":
+        if body.role == "viewer":
+            async with r.pipeline(transaction=True) as p:
+                p.srem(K.active(tid), uid)
+                p.zrem(K.geo(tid), uid)
+                p.hdel(K.lagflag(tid), uid)
+                p.hdel(K.gap(tid), uid)
+                p.delete(K.hb(tid, uid))
+                await p.execute()
+            if await r.get(K.active_trip(uid)) == tid:
+                await r.delete(K.active_trip(uid))
+        elif old == "viewer":
+            await leave_old_active(uid, await r.get(K.active_trip(uid)), tid)
+            await r.sadd(K.active(tid), uid)
+            await r.set(K.active_trip(uid), tid)
+        if body.role == "car":
+            await r.hdel(K.lagflag(tid), uid)
+            await r.hdel(K.gap(tid), uid)
+    elif body.role == "viewer":
+        await r.zrem(K.geo(tid), uid)  # 開始前分享的即時位置也拿掉
+    await events.emit(tid, "role", uid, f"身分改成「{ROLE_NAME[body.role]}」")
+    team = [await public_user(m) for m in sorted(await r.smembers(K.members(tid)), key=int)]
+    dedupe_colors(team)
+    u = next(m for m in team if m["uid"] == uid)
+    u["role"] = body.role
+    u["active"] = await r.sismember(K.active(tid), uid)
+    await events.publish(tid, {"kind": "member", "user": u})
+    return await trip_detail(tid, uid)
+
+
 class SettingsIn(BaseModel):
     lag_km: float
 
@@ -339,6 +484,7 @@ async def kick(tid: str, body: KickIn, uid: str = Depends(current_uid)):
         p.zrem(K.geo(tid), body.uid)
         p.hdel(K.lagflag(tid), body.uid)
         p.hdel(K.gap(tid), body.uid)
+        p.hdel(K.role(tid), body.uid)
         p.delete(K.hb(tid, body.uid))
         p.zrem(K.user_trips(body.uid), tid)
         p.sadd(K.kicked(tid), body.uid)   # 被移出的人重開行程頁時，錯誤畫面寫「你已被移出」而不是「不是成員」

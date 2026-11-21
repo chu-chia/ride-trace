@@ -113,7 +113,9 @@ async def check_trip_lag(tid: str):
     """判斷一個行程的落隊。2 秒節流：用 SET NX PX 當鎖，多個 worker 只會有一個去算。"""
     if not await r.set(K.lagchk(tid), CONSUMER, nx=True, px=LAG_EVERY_MS):
         return
-    uids = sorted(await r.smembers(K.active(tid)), key=int)
+    # 後援車不算落隊（它本來就跟在最後面）
+    cars = {u for u, v in (await r.hgetall(K.role(tid))).items() if v == "car"}
+    uids = sorted((u for u in await r.smembers(K.active(tid)) if u not in cars), key=int)
     if len(uids) < 2:
         return
     thr_km = float(await r.hget(K.trip(tid), "lag_km") or LAG_DEFAULT_KM)
@@ -143,6 +145,8 @@ WP_SEARCH_M = 2000  # 集合點半徑上限，GEOSEARCH 先用這個範圍撈，
 
 async def check_arrival(tid: str, uid: str, lat: float, lon: float, ts: int):
     """GEOSEARCH 找我附近的集合點，進入半徑就算抵達（每人每點只通知一次）。"""
+    if await r.hget(K.role(tid), uid) == "car":  # 後援車經過集合點不算抵達
+        return
     near = await r.geosearch(K.waypoints(tid), longitude=lon, latitude=lat, radius=WP_SEARCH_M, unit="m",
                              withdist=True, sort="ASC")
     changed = False
@@ -150,7 +154,7 @@ async def check_arrival(tid: str, uid: str, lat: float, lon: float, ts: int):
         w = await r.hmget(K.wp(tid, wid), "name", "kind", "radius_m")
         if w[0] is None or float(dist) > float(w[2] or 150):
             continue
-        new, all_in = await arrive(keys=[K.arrived(tid, wid), K.active(tid), K.allin(tid, wid)], args=[uid])
+        new, all_in = await arrive(keys=[K.arrived(tid, wid), K.active(tid), K.allin(tid, wid), K.role(tid)], args=[uid])
         place = "休息點" if w[1] == "rest" else "集合點"
         if new:
             changed = True

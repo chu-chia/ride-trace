@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter } from '/assets/common.js';
+import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter, WATCH } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -17,23 +17,10 @@ const LAYOUT_KEY = `qiji:war:layout:v6:${tid}`;  // 改了預設版面就升版�
 const FEED_FILTER_KEY = 'qiji:war:feed-filter:v2';  // v2：預設改成「全部」（UX-29），舊的「重要」不沿用
 const panels = [...document.querySelectorAll('.war-panel')];
 const stage = $('#stage');
-const mobile = matchMedia('(max-width:1100px)');
-// 手機（觸控、螢幕窄）才出現「電腦版／手機版」切換鈕；切換後重新載入，讓整頁用新的版面寬度重排
-// 直拿手機看電腦版：版面是 1280 寬、2700 多高的直長畫面，改用「上面地圖、下面分析圖表」的固定排法（html.desk-portrait）
-const deskPortrait = () => document.documentElement.classList.contains('desk-portrait');
-{
-  const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 820;
-  let desk = false;
-  try { desk = localStorage.getItem('qiji:war:desk') === '1'; } catch { /* 私密模式 */ }
-  const b = $('#deskView');
-  if (phone) {
-    b.style.display = '';
-    setLabel(b, desk ? '手機版' : '電腦版');
-    b.onclick = () => { try { localStorage.setItem('qiji:war:desk', desk ? '0' : '1'); } catch { /* 私密模式 */ } location.reload(); };
-    const portrait = () => document.documentElement.classList.toggle('desk-portrait', desk && innerHeight > innerWidth * 1.2);
-    portrait(); addEventListener('resize', portrait);
-  }
-}
+// 這個檔只在「電腦版排版」載入（war.html 依螢幕選版面）：電腦與手機橫向都用可編輯的浮動面板；手機直拿另用 war-m.js。
+// 舊的手機抽屜、直式電腦版的程式還留著，但 mobile／deskPortrait 永遠是 false，不會啟用
+const mobile = matchMedia('not all');
+const deskPortrait = () => false;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const snap = (v) => Math.round(v / 12) * 12;
 let editing = false, topLayer = 5;
@@ -157,6 +144,8 @@ $('#resetLayout').onclick = () => {
 restoreLayout();
 window.addEventListener('resize', () => { if (!mobile.matches) restoreLayout(); else setEditing(false); map.resize(); });
 $('#tripLink').href = `/trip?id=${encodeURIComponent(tid)}`;
+// 觀看連結：沒有行程頁、首頁可以回，也不能編輯版面以外的事
+if (WATCH) { $('#tripLink').hidden = true; document.querySelectorAll('.head .icon-btn[href="/"]').forEach((a) => { a.hidden = true; }); }
 $('#mapStyle').onclick = () => setLabel($('#mapStyle'), M.nextStyle());
 panels.forEach((el) => liquidGlass(el));
 // 工具列放在右上、右側面板的左邊；面板被拖動或縮放後重新計算
@@ -204,7 +193,13 @@ const EV = {
 };
 
 /* ---------- 標記與軌跡 ---------- */
+// 身分：只看的人（role＝viewer）不畫、不列；後援車（car）圖釘是方塊＋車子
 function upsert(u, state = {}) {
+  if (u.role === 'viewer') {
+    const old = S.members.get(u.uid);
+    if (old) { old.marker.remove(); S.members.delete(u.uid); }
+    return null;
+  }
   let m = S.members.get(u.uid);
   if (!m) {
     const el = document.createElement('div');
@@ -216,6 +211,8 @@ function upsert(u, state = {}) {
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
+  m.el.classList.toggle('car', m.u.role === 'car');
+  m.el.querySelector('.dot').textContent = m.u.role === 'car' ? '🚐' : initialOf(m.u.nickname);
   m.el.style.setProperty('--c', m.u.color);
   m.el.style.setProperty('--ink', inkOn(m.u.color));
   m.state = { ...m.state, ...state };
@@ -568,14 +565,14 @@ function renderProgress() {
 /* ---------- WebSocket ---------- */
 // 自動重連＋斷線橫幅在 livesock.js（和行程頁共用）
 function connect() {
-  liveSocket(`/ws/trips/${tid}`, { onMessage: handle, onForbidden: () => { tripGate(tid, { fresh: true }); } });
+  liveSocket(`/ws/trips/${tid}${WATCH ? `?watch=${encodeURIComponent(WATCH)}` : ''}`, { onMessage: handle, onForbidden: () => { tripGate(tid, { fresh: true }); } });
 }
 function handle(msg) {
   switch (msg.kind) {
     case 'snapshot': {
       const t = msg.trip;
       S.trip = t;
-      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); m.trail = (t.trails[u.uid] || []).slice(); if (u.state?.pre) m.lastRough = true; if (numeric(u.state?.route_km)) S.prog[u.uid] = { km: +u.state.route_km }; });
+      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); if (!m) return; m.trail = (t.trails[u.uid] || []).slice(); if (u.state?.pre) m.lastRough = true; if (numeric(u.state?.route_km)) S.prog[u.uid] = { km: +u.state.route_km }; });
       S.events = t.events; S.gaps = t.gaps || {}; S.flags = t.flags || {};
       $('#name').textContent = t.name;
       document.title = `戰情室 · ${t.name}`;

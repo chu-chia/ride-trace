@@ -32,6 +32,9 @@
   .skipLink:focus{transform:none}
   .srOnly{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
   .teamHint{padding:0 2px}
+  .watchCard{display:flex;flex-direction:column;gap:10px;margin-top:12px}.watchCard .r{display:flex;gap:8px;flex-wrap:wrap}.watchCard .r .btn{flex:1}
+  .watchCard .wlink{font-size:12.5px;word-break:break-all;background:var(--surface-2);padding:8px 10px;border-radius:10px;user-select:all}
+  .myRole{display:grid;gap:6px;margin:0 0 12px}.myRole .seg button{min-height:38px}.myRole .viewers{margin-top:2px}
   .bannerBtns{display:flex;gap:8px;flex-wrap:wrap}.bannerBtns .btn{flex:1 1 auto}
   .gpsBar{margin:0 var(--sp-4) var(--sp-3);padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--warn,#ff9f0a) 18%,var(--surface));font-size:13px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
   .gpsBar[hidden]{display:none}
@@ -197,7 +200,7 @@
     .followPill.show{display:flex}
     .followPill .avatar{width:28px;height:28px;font-size:12px}
     .followPill button{border:0;background:var(--solid-2);color:var(--fg);width:32px;height:32px;border-radius:50%;font:inherit;cursor:pointer}
-    body:has(#panel.small) .followPill{left:calc((var(--panel-mini-w) + var(--edge) * 2 + 100vw - 70px) / 2)}
+    body:has(#panel.small) .followPill{left:calc((max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge) + 100vw - 70px) / 2)}
   }
 </style>
 </head>
@@ -230,7 +233,7 @@
   <nav class="seg peek" id="tabs" aria-label="行程功能"><button class="on" data-t="team">隊伍</button><button data-t="route">路線</button><button data-t="msg">訊息</button><button data-t="more">更多</button></nav>
   <!-- 定位權限的提示放在分頁下面：晚一點才出現時不會把分頁擠出收合區塊 -->
   <div class="gpsBar" id="gpsBar" role="alert" hidden></div>
-  <div class="panel-body" data-b="team"><div class="small muted teamHint" id="teamHint">依加入順序排列，點一下鏡頭跟著他</div><div id="team"></div><button class="btn block" id="teamInvite" hidden>＋ 邀請隊友</button><div id="teamAdmin"></div></div>
+  <div class="panel-body" data-b="team"><div class="myRole" id="myRole"></div><div class="small muted teamHint" id="teamHint">依加入順序排列，點一下鏡頭跟著他</div><div id="team"></div><button class="btn block" id="teamInvite" hidden>＋ 邀請隊友</button><div id="teamAdmin"></div></div>
   <div class="panel-body" data-b="route" hidden><div class="qx-pop" id="routeContent"></div></div>
   <div class="panel-body" data-b="wp" hidden><button class="subBack" data-back-more>‹ 返回更多</button><div class="qx-pop" id="wpContent"></div></div>
   <div class="panel-body" data-b="msg" hidden><div class="qx-pop" id="msgContent"></div></div>
@@ -247,6 +250,7 @@
       <button class="btn primary" id="shareLink" hidden>分享邀請連結</button>
       <button class="btn" id="copyLink">複製邀請連結</button>
     </div>
+    <div class="card watchCard" id="watchCard" hidden></div>
     </section>
     <section class="moreSection" data-more="report" hidden>
     <div class="card" style="display:flex;flex-direction:column;gap:10px">
