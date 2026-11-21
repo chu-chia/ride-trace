@@ -37,8 +37,10 @@ async def planned_trips(uid: str) -> list[str]:
         for t in ids:
             p.hmget(K.trip(t), "status", "demo")
             p.sismember(K.members(t), uid)
+            p.hget(K.role(t), uid)
         res = await p.execute()
-    return [t for t, (st, demo), mem in zip(ids, res[::2], res[1::2]) if st == "planned" and not demo and mem]
+    # 只看的人（viewer）不分享位置
+    return [t for t, (st, demo), mem, role in zip(ids, res[::3], res[1::3], res[2::3]) if st == "planned" and not demo and mem and role != "viewer"]
 
 
 class Fix(BaseModel):

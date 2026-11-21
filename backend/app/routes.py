@@ -21,7 +21,7 @@ from .auth import current_uid
 from .db import K, r
 from .geo import haversine_m, project_on_route
 from .pace import category, curvy_flags, get_pace, kmh_for
-from .trips import require_member, trip_or_404
+from .trips import reader, require_member, trip_or_404
 
 router = APIRouter(prefix="/api")
 VALHALLA = os.environ.get("VALHALLA_URL", "http://localhost:8752")
@@ -389,8 +389,7 @@ async def get_route_doc(tid: str):
 
 
 @router.get("/trips/{tid}/route")
-async def trip_route(tid: str, uid: str = Depends(current_uid)):
-    await require_member(tid, uid)
+async def trip_route(tid: str, uid: str = Depends(reader)):  # 成員或觀看連結
     doc = await get_route_doc(tid)
     return doc or {}
 

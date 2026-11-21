@@ -9,7 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from . import events
 from .auth import COOKIE, uid_from_token
 from .db import K, r
-from .trips import build_snapshot
+from .trips import build_snapshot, watch_tid
 
 router = APIRouter()
 log = logging.getLogger("qiji.live")
@@ -19,12 +19,16 @@ PING_S = 15
 @router.websocket("/ws/trips/{tid}")
 async def trip_ws(ws: WebSocket, tid: str):
     tok = ws.cookies.get(COOKIE) or ws.query_params.get("token")
-    uid = await uid_from_token(tok)
+    watch = ws.query_params.get("watch")  # 觀看連結：免登入、只能看（uid＝""）
+    uid = "" if watch else await uid_from_token(tok)
     # 先 accept 再 close：握手階段就 close 的話，瀏覽器只會收到 1006（看不到原因），前端會一直重連。
     # 4401＝沒登入、4404＝行程不存在、4403＝不是成員（含被移出），前端收到就停止重連並顯示錯誤畫面。
     await ws.accept()
     code = None
-    if not uid:
+    if watch:
+        if await watch_tid(watch) != tid:
+            code = 4403
+    elif not uid:
         code = 4401
     elif not await r.exists(K.trip(tid)):
         code = 4404
@@ -34,7 +38,8 @@ async def trip_ws(ws: WebSocket, tid: str):
         await ws.close(code=code)
         return
     await r.incr("stat:ws")                       # 後台：目前的 WebSocket 連線數
-    await r.zadd("online:viewer", {uid: int(time.time() * 1000)})
+    if uid:
+        await r.zadd("online:viewer", {uid: int(time.time() * 1000)})
     ps = r.pubsub()
     await ps.subscribe(K.live(tid))
     try:
@@ -48,6 +53,10 @@ async def trip_ws(ws: WebSocket, tid: str):
                     await ws.send_text(msg["data"])
                     last = time.monotonic()
                 elif time.monotonic() - last >= PING_S:
+                    # 觀看連結被停用、換掉或行程結束：關掉連線（前端顯示「連結已失效」）
+                    if watch and await watch_tid(watch) != tid:
+                        await ws.close(code=4403)
+                        return
                     # 心跳：前端超過 40 秒沒收到任何訊息就顯示「連線中斷」並重連；送不出去也讓這端及早發現斷線
                     await ws.send_text('{"kind":"ping"}')
                     last = time.monotonic()

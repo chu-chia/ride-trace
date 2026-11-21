@@ -94,6 +94,14 @@
   .join{display:flex;gap:8px;margin-top:10px}
   .join input{flex:1;min-width:0;height:46px;border-radius:12px;border:0;background:var(--surface);color:var(--fg);padding:0 14px;font-size:16px;letter-spacing:2px;text-transform:uppercase}
   .join .btn{min-height:46px}
+  .roleDlg{border:0;border-radius:20px;padding:20px;width:min(420px,calc(100vw - 32px));background:var(--surface);color:var(--fg);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .roleDlg::backdrop{background:rgba(0,0,0,.55)}
+  .roleDlg h2{margin:0 0 4px;font-size:20px}
+  .roleDlg form{display:grid;gap:10px}
+  .roleDlg p{margin:0}
+  .roleDlg .rb{display:grid;gap:3px;text-align:left;padding:13px 14px;border-radius:14px;border:0;background:var(--surface-2);color:var(--fg);font:inherit;cursor:pointer}
+  .roleDlg .rb b{font-size:16px}.roleDlg .rb span{font-size:13px;color:var(--muted)}
+  .roleDlg .rb:hover,.roleDlg .rb:focus-visible{outline:2px solid var(--accent)}
   .err:empty{display:none}
   .err{margin-top:8px}
 
@@ -147,6 +155,17 @@
     <button class="btn primary">加入</button>
   </form>
   <div class="err" id="err" role="alert"></div>
+  <dialog class="roleDlg" id="roleDlg" aria-labelledby="roleT">
+    <form method="dialog">
+      <h2 id="roleT">你要怎麼參加？</h2>
+      <p class="muted" id="roleSub"></p>
+      <button class="rb" value="rider"><b>🏍 我要騎</b><span>分享位置，出現在地圖和名單上</span></button>
+      <button class="rb" value="viewer"><b>👀 只看</b><span>後援、家人：看得到大家，但自己不會出現在畫面上</span></button>
+      <button class="rb" value="car"><b>🚐 後援車</b><span>分享位置，地圖上是車子，不算名次和落隊</span></button>
+      <button class="btn block" value="">取消</button>
+      <p class="muted small">之後可以在行程頁「隊伍」裡改</p>
+    </form>
+  </dialog>
 
   <div class="sec-t">我的行程</div>
   <div class="list tl" id="trips"><div class="li"><span class="muted">載入中…</span></div></div>
@@ -285,8 +304,17 @@ async function loadTrips() {
 }
 
 /* ---------- 開新的一趟、加入 ---------- */
+// 加入前先選身分（騎士／只看／後援車）；行程名稱從邀請預覽拿（拿不到就不寫）
 async function join(code) {
-  try { const t = await api('/api/trips/join', { method: 'POST', body: { code } }); location.href = '/trip?id=' + t.id; }
+  $('#err').textContent = '';
+  const d = $('#roleDlg');
+  $('#roleSub').textContent = '';
+  api(`/api/trips/invite/${encodeURIComponent(code)}`).then((p) => { $('#roleSub').textContent = `加入「${p.name}」${p.owner ? `（${p.owner} 開的團）` : ''}`; }).catch(() => {});
+  d.returnValue = '';
+  d.showModal();
+  const role = await new Promise((ok) => d.addEventListener('close', () => ok(d.returnValue), { once: true }));
+  if (!role) return;
+  try { const t = await api('/api/trips/join', { method: 'POST', body: { code, role } }); location.href = '/trip?id=' + t.id; }
   catch (e) { $('#err').textContent = e.message; }
 }
 async function create(name, then) {

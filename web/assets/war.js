@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter } from '/assets/common.js';
+import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter, WATCH } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -144,6 +144,8 @@ $('#resetLayout').onclick = () => {
 restoreLayout();
 window.addEventListener('resize', () => { if (!mobile.matches) restoreLayout(); else setEditing(false); map.resize(); });
 $('#tripLink').href = `/trip?id=${encodeURIComponent(tid)}`;
+// 觀看連結：沒有行程頁、首頁可以回，也不能編輯版面以外的事
+if (WATCH) { $('#tripLink').hidden = true; document.querySelectorAll('.head .icon-btn[href="/"]').forEach((a) => { a.hidden = true; }); }
 $('#mapStyle').onclick = () => setLabel($('#mapStyle'), M.nextStyle());
 panels.forEach((el) => liquidGlass(el));
 // 工具列放在右上、右側面板的左邊；面板被拖動或縮放後重新計算
@@ -191,7 +193,13 @@ const EV = {
 };
 
 /* ---------- 標記與軌跡 ---------- */
+// 身分：只看的人（role＝viewer）不畫、不列；後援車（car）圖釘是方塊＋車子
 function upsert(u, state = {}) {
+  if (u.role === 'viewer') {
+    const old = S.members.get(u.uid);
+    if (old) { old.marker.remove(); S.members.delete(u.uid); }
+    return null;
+  }
   let m = S.members.get(u.uid);
   if (!m) {
     const el = document.createElement('div');
@@ -203,6 +211,8 @@ function upsert(u, state = {}) {
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
+  m.el.classList.toggle('car', m.u.role === 'car');
+  m.el.querySelector('.dot').textContent = m.u.role === 'car' ? '🚐' : initialOf(m.u.nickname);
   m.el.style.setProperty('--c', m.u.color);
   m.el.style.setProperty('--ink', inkOn(m.u.color));
   m.state = { ...m.state, ...state };
@@ -555,14 +565,14 @@ function renderProgress() {
 /* ---------- WebSocket ---------- */
 // 自動重連＋斷線橫幅在 livesock.js（和行程頁共用）
 function connect() {
-  liveSocket(`/ws/trips/${tid}`, { onMessage: handle, onForbidden: () => { tripGate(tid, { fresh: true }); } });
+  liveSocket(`/ws/trips/${tid}${WATCH ? `?watch=${encodeURIComponent(WATCH)}` : ''}`, { onMessage: handle, onForbidden: () => { tripGate(tid, { fresh: true }); } });
 }
 function handle(msg) {
   switch (msg.kind) {
     case 'snapshot': {
       const t = msg.trip;
       S.trip = t;
-      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); m.trail = (t.trails[u.uid] || []).slice(); if (u.state?.pre) m.lastRough = true; if (numeric(u.state?.route_km)) S.prog[u.uid] = { km: +u.state.route_km }; });
+      t.members.forEach((u) => { const m = upsert(u, { ...u.state }); if (!m) return; m.trail = (t.trails[u.uid] || []).slice(); if (u.state?.pre) m.lastRough = true; if (numeric(u.state?.route_km)) S.prog[u.uid] = { km: +u.state.route_km }; });
       S.events = t.events; S.gaps = t.gaps || {}; S.flags = t.flags || {};
       $('#name').textContent = t.name;
       document.title = `戰情室 · ${t.name}`;

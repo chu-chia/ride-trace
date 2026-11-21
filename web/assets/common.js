@@ -1,10 +1,13 @@
 // 共用：API、通知、小工具
+// 觀看連結（/w/{tok} 轉到 /war?id=…&watch=tok）：免登入看戰情室，每個 API 都帶著它
+export const WATCH = new URLSearchParams(location.search).get('watch') || '';
+const watchHdr = () => (WATCH ? { 'x-qiji-watch': WATCH } : {});
 export async function api(path, opts = {}) {
   let res;
   try {
     res = await fetch(path, {
       credentials: 'same-origin',
-      headers: opts.body ? { 'content-type': 'application/json' } : {},
+      headers: { ...(opts.body ? { 'content-type': 'application/json' } : {}), ...watchHdr() },
       ...opts,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
@@ -62,9 +65,10 @@ export function tripGate(tid, { fresh = false } = {}) {
 async function checkTrip(tid) {
   if (!tid || !/^\d+$/.test(tid)) return fatal(404, '找不到這個行程', '網址裡的行程編號不對，可能是連結複製不完整。');
   let res;
-  try { res = await fetch(`/api/trips/${tid}`, { credentials: 'same-origin' }); }
+  try { res = await fetch(`/api/trips/${tid}`, { credentials: 'same-origin', headers: watchHdr() }); }
   catch { return fatal(0, '連不到伺服器', navigator.onLine === false ? '沒有網路，請檢查手機訊號後再試一次。' : '請稍後再試一次。', true); }
   if (res.ok) return res.json();
+  if (WATCH && (res.status === 403 || res.status === 404)) return fatal(0, '觀看連結已失效', '行程可能已經結束，或建立者停用、換了新的連結。請向建立者要新的連結。');
   if (res.status === 401) { toLogin(); return new Promise(() => {}); }
   const detail = (await res.json().catch(() => ({}))).detail || '';
   if (res.status === 404) return fatal(404, '找不到這個行程', '行程可能已經被刪除，或網址打錯了。');
@@ -83,11 +87,11 @@ export function fatal(code, title, msg, retry = false) {
   el.className = 'qx-fatal';
   el.setAttribute('role', 'alert');
   el.innerHTML = `<section class="card">${code ? `<div class="code">${code}</div>` : ''}<h1>${esc(title)}</h1><p>${esc(msg)}</p>
-    <div class="acts">${retry ? '<button type="button" class="btn" data-reload>重新整理</button>' : ''}<a class="btn primary" href="/">回首頁</a></div></section>`;
+    <div class="acts">${retry ? '<button type="button" class="btn" data-reload>重新整理</button>' : ''}${WATCH ? '' : '<a class="btn primary" href="/">回首頁</a>'}</div></section>`;
   el.querySelector('[data-reload]')?.addEventListener('click', () => location.reload());
   document.body.append(el);
   document.title = `${title}｜騎跡`;
-  el.querySelector('.btn.primary').focus();
+  el.querySelector('.btn.primary')?.focus();  // 觀看連結失效時沒有按鈕
   return new Promise(() => {});
 }
 

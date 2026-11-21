@@ -40,7 +40,7 @@ const map = M.map;
 map.setPitch(55);
 window.qijiMap = map; // 方便在主控台除錯
 window.qijiM = M; // trip-extra.js（M3 互動功能）用
-const S = { trip: null, me: null, members: new Map(), events: [], follow: 'all', away: false, awayAt: 0, lastInteract: 0, nearby: {}, nearbyFail: 0, gps: null, wake: null, trailDirty: true };
+const S = { trip: null, me: null, members: new Map(), viewers: new Map(), events: [], follow: 'all', away: false, awayAt: 0, lastInteract: 0, nearby: {}, nearbyFail: 0, gps: null, wake: null, trailDirty: true };
 window.qijiState = S; // 除錯用
 
 /* ---------- 成員與標記 ---------- */
@@ -56,7 +56,16 @@ function statusOf(m) {
   return (+s.speed || 0) * 3.6 < 5 ? 'rest' : 'ride';
 }
 
+// 身分：只看的人（role＝viewer）不畫在地圖、不列在隊伍裡，只在隊友分頁寫「觀看中」；自己是只看時照樣留著（畫面很多地方要用到我）
+// 後援車（car）圖釘是方塊＋車子
 function upsertMember(u, state) {
+  if (u.role === 'viewer' && u.uid !== S.me) {
+    S.viewers.set(u.uid, u);
+    const old = S.members.get(u.uid);
+    if (old) { old.marker.remove(); S.members.delete(u.uid); }
+    return null;
+  }
+  S.viewers.delete(u.uid);
   let m = S.members.get(u.uid);
   if (!m) {
     const el = document.createElement('div');
@@ -69,6 +78,8 @@ function upsertMember(u, state) {
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
+  m.el.classList.toggle('car', m.u.role === 'car');
+  m.el.querySelector('.dot').textContent = m.u.role === 'car' ? '🚐' : initialOf(m.u.nickname);
   if (state) m.state = { ...m.state, ...state };
   if (!m.pos && m.state.lat != null && m.state.lat !== '') {
     m.pos = [+m.state.lon, +m.state.lat];
@@ -363,7 +374,7 @@ const sharing = () => [...S.members.values()].filter((m) => statusOf(m) !== 'non
 function stageOf() {
   const t = S.trip, me = S.members.get(S.me);
   if (t.status === 'ended') return 'done';
-  if (t.status === 'live') return me && !me.u.active ? 'done' : 'ride';  // 自己結束紀錄了：自己這邊算結束
+  if (t.status === 'live') return me && !me.u.active && me.u.role !== 'viewer' ? 'done' : 'ride';  // 只看的人本來就不在紀錄裡，照樣看騎乘畫面  // 自己結束紀錄了：自己這邊算結束
   // 集合：至少兩個人在分享位置，或有人已經到集合點（只有自己一直開著 Traccar 不算，不然每趟準備中的行程都會變集合）
   const meet = (S.wps || []).find((w) => w.kind === 'meet') || (S.wps || [])[0];
   const atMeet = meet && [...S.members.values()].some((m) => statusOf(m) !== 'none' && statusOf(m) !== 'done' && hav(meet.lat, meet.lon, +m.state.lat, +m.state.lon) <= (meet.radius_m || 150) + 50);
@@ -526,7 +537,8 @@ document.addEventListener('click', (e) => { if (e.target.closest('[data-invite],
 
 function renderTeam() {
   // 固定順序：我在最上面，其他人依加入順序（uid），不會因為狀態變化跳來跳去（UX-60）
-  const list = [...S.members.values()].sort((a, b) => (b.u.uid === S.me) - (a.u.uid === S.me) || (+a.u.uid - +b.u.uid));
+  // 自己是「只看」時不列在隊伍裡、不算人數（S.members 裡還留著我，畫面其他地方要用）
+  const list = [...S.members.values()].filter((m) => m.u.role !== 'viewer').sort((a, b) => (b.u.uid === S.me) - (a.u.uid === S.me) || (+a.u.uid - +b.u.uid));
   const online = list.filter((m) => ['ride', 'rest', 'weak'].includes(statusOf(m))).length;
   $('#sOnline').textContent = `${online}/${list.length}`;
   const me = S.members.get(S.me);
@@ -548,16 +560,21 @@ function renderTeam() {
   $('#rideLag').textContent = lagging ? `・${lagging} 人落隊` : '';
   renderRideB();
   const rg = $('#rideGps'), on = meSharing();
-  rg.textContent = S.gps ? '● 網頁 GPS 回報中' : on ? '● 位置回報中' : '開始回報我的位置';
-  rg.classList.toggle('on', on); rg.classList.toggle('primary', !on);
+  const viewer = me?.u.role === 'viewer';
+  rg.textContent = viewer ? '👀 只看中（不回報位置）' : S.gps ? '● 網頁 GPS 回報中' : on ? '● 位置回報中' : '開始回報我的位置';
+  rg.disabled = viewer;
+  rg.classList.toggle('on', on && !viewer); rg.classList.toggle('primary', !on && !viewer);
+  $('#gpsBtn').hidden = viewer;
+  $('#goNav').hidden = viewer;  // 只看的人不導航
   if (S.trip.status === 'planned') renderStage();  // 有人開始分享位置：準備 → 集合
+  renderRole();
   // 和回放頁同一種隊員表：名字＋狀態、速度、海拔、已騎、距離我；點一下鏡頭跟著他
   teamTable($('#team'), list.map((m) => {
     const st = statusOf(m), [label, cls] = STATUS[st], s = m.state;
     const isMe = m.u.uid === S.me, km = S.nearby[m.u.uid];
     const gap = S.trip.gaps?.[m.u.uid], flag = S.trip.flags?.[m.u.uid];
     const moving = st === 'ride' || st === 'rest' || st === 'weak';
-    const sub = [label, flag && st !== 'done' ? `${flag === 'behind' ? '落隊' : '超前'}${gap != null ? ' ' + fmtKm(gap) : ''}` : '',
+    const sub = [m.u.role === 'car' ? '後援車' : m.u.role === 'viewer' ? '只看' : '', label, flag && st !== 'done' ? `${flag === 'behind' ? '落隊' : '超前'}${gap != null ? ' ' + fmtKm(gap) : ''}` : '',
                  !moving && (s.seen || s.ts) ? ago(+s.seen || +s.ts) : ''].filter(Boolean).join(' · ');
     return {
       uid: m.u.uid, name: isMe ? `${m.u.nickname}（我）` : m.u.nickname, color: m.u.color, on: S.follow === m.u.uid && !S.away, away: S.follow === m.u.uid && S.away,
@@ -577,6 +594,21 @@ function renderTeam() {
     if (open && $('#teamAdmin details')) $('#teamAdmin details').open = true;
   }
 }
+// 我的身分：騎士／只看（後援、家人：不出現在地圖和名單上）／後援車（分享位置，但不算名次、落隊、到齊）
+const ROLES = [['rider', '騎士'], ['viewer', '只看'], ['car', '後援車']];
+function renderRole() {
+  const me = S.members.get(S.me), role = me?.u.role || 'rider';
+  const html = `<div class="small muted">我的身分</div><div class="seg" role="group" aria-label="我的身分">${ROLES.map(([k, n]) => `<button type="button" data-role="${k}" class="${k === role ? 'on' : ''}" aria-pressed="${k === role}">${n}</button>`).join('')}</div>`
+    + `<div class="small muted">${role === 'viewer' ? '只看：你不會出現在地圖和名單上，也不會回報位置' : role === 'car' ? '後援車：分享位置，地圖上是車子圖示，不算名次、落隊、到齊' : '騎士：分享位置，算進名次、落隊和到齊'}</div>`
+    + (S.viewers.size ? `<div class="small muted viewers">👀 ${S.viewers.size} 人只看：${[...S.viewers.values()].map((u) => esc(u.nickname)).join('、')}</div>` : '');
+  if ($('#myRole').dataset.html !== html) { $('#myRole').dataset.html = html; $('#myRole').innerHTML = html; }
+}
+$('#myRole').onclick = async (e) => {
+  const b = e.target.closest('[data-role]');
+  if (!b || b.classList.contains('on')) return;
+  try { await api(`/api/trips/${tid}/role`, { method: 'POST', body: { role: b.dataset.role } }); }
+  catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+};
 $('#teamAdmin').onclick = (e) => {
   const k = e.target.closest('[data-kick]');
   if (!k) return;
@@ -600,6 +632,7 @@ function renderEvents() {
 
 function renderInvite() {
   const t = S.trip;
+  renderWatch();
   $('#code').textContent = t.invite;
   $('#codeNote').textContent = t.invite_valid ? '朋友掃 QR 或在首頁輸入邀請碼加入（24 小時內有效）' : '邀請碼已過期';
   const link = `${location.origin}/?join=${t.invite}`;
@@ -617,6 +650,38 @@ function renderInvite() {
     try { await navigator.clipboard.writeText(link); toast('已複製邀請連結'); } catch { prompt('複製這個連結', link); }
   };
 }
+
+// 觀看連結（建立者）：不用登入、不用加入，知道連結就能看戰情室；只能看，不出現在名單上。
+// 行程結束自動失效；可以換一條新的（舊的立刻失效）或停用
+function renderWatch() {
+  const t = S.trip, card = $('#watchCard');
+  card.hidden = !t.is_owner || t.status === 'ended';
+  if (card.hidden) return;
+  const link = t.watch ? `${location.origin}/w/${t.watch}` : '';
+  const html = `<div class="eyebrow">觀看連結（免登入）</div>
+    <div class="small muted">家人、後援不用註冊也能看戰情室（只能看）。知道連結的人都看得到大家的即時位置，行程結束後自動失效。</div>
+    ${link ? `<div class="wlink num">${esc(link)}</div><div class="r"><button class="btn primary" type="button" data-w="copy">複製連結</button><button class="btn" type="button" data-w="new">換新連結</button><button class="btn" type="button" data-w="off">停用</button></div>`
+      : '<button class="btn primary" type="button" data-w="new">產生觀看連結</button>'}`;
+  if (card.dataset.html !== html) { card.dataset.html = html; card.innerHTML = html; }
+}
+$('#watchCard').onclick = async (e) => {
+  const b = e.target.closest('[data-w]');
+  if (!b) return;
+  const link = () => `${location.origin}/w/${S.trip.watch}`;
+  if (b.dataset.w === 'copy') {
+    try { await navigator.clipboard.writeText(link()); toast('已複製觀看連結'); } catch { prompt('複製這個連結', link()); }
+    return;
+  }
+  const go = async () => {
+    try {
+      const r = await api(`/api/trips/${tid}/watch`, { method: b.dataset.w === 'off' ? 'DELETE' : 'POST' });
+      S.trip.watch = r.watch || null; renderWatch();
+      toast(r.watch ? '觀看連結已產生' : '觀看連結已停用', { sub: r.watch && b.dataset.w === 'new' && b.textContent.includes('換') ? '舊的連結已經失效' : '' });
+    } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+  };
+  if (b.dataset.w === 'new' && !S.trip.watch) go();
+  else armConfirm(b, b.dataset.w === 'off' ? '再按一次停用' : '再按一次換新（舊的失效）', go);
+};
 
 // 落隊門檻：建立者可以調整，其他人只看得到
 function renderLag() {
@@ -666,6 +731,7 @@ function handle(msg) {
       ensureQueue();  // 上次沒補完的位置（例如在山上重新整理過）接著補
       t.members.forEach((u) => {
         const m = upsertMember(u, { ...u.state });
+        if (!m) return;  // 只看的人
         m.trail = t.trails[u.uid] || [];
         if (m.pos) m.trail = m.trail.slice(0, -1); // 最後一點就是目前位置，由 m.pos 接上
         if (u.state?.pre) m.lastRough = true;  // 開始前的即時位置不接進軌跡（開始後第一點從這裡另起）
@@ -693,11 +759,15 @@ function handle(msg) {
     case 'gap': S.trip.gaps = msg.gaps; S.trip.flags = msg.flags; S.trip.lag_km = msg.lag_km; S.members.forEach(placeMarker); break;
     case 'settings': S.trip.lag_km = msg.lag_km; renderLag(); break;
     case 'stats': { const m = S.members.get(msg.uid); if (m) m.u.stats = msg; break; } // 每秒的 renderTeam 會畫出來
-    case 'member': upsertMember(msg.user, {}); renderTeam(); break;
+    case 'member':
+      upsertMember(msg.user, {});
+      // 自己改成只看：停止網頁回報位置
+      if (msg.user.uid === S.me && msg.user.role === 'viewer' && S.gps) stopGps('你改成「只看」，已停止回報位置');
+      renderTeam(); break;
     case 'trip':
       S.trip.status = msg.status;
       if (msg.status === 'ended') { S.trip.ended_at = Date.now(); toast('行程結束了', { icon: '騎', sub: '下面是這趟的摘要，可以看回放' }); setCollapsed(false); }
-      if (msg.status === 'live') { S.trip.started = Date.now(); S.members.forEach((m) => (m.u.active = true)); }
+      if (msg.status === 'live') { S.trip.started = Date.now(); S.members.forEach((m) => (m.u.active = m.u.role !== 'viewer')); }
       renderHeader();
       break;
     case 'kicked':

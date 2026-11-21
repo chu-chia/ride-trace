@@ -24,7 +24,9 @@ class K:
 
     trip = staticmethod(lambda tid: f"trip:{tid}")
     invite = staticmethod(lambda code: f"invite:{code}")
+    watch = staticmethod(lambda tok: f"watch:{tok}")             # 觀看連結（免登入看戰情室）→ tid；行程結束就失效
     members = staticmethod(lambda tid: f"trip:{tid}:members")
+    role = staticmethod(lambda tid: f"trip:{tid}:role")          # Hash：uid → viewer（只看）／car（後援車）；沒有＝騎士
     kicked = staticmethod(lambda tid: f"trip:{tid}:kicked")      # Set：被建立者移出的人（錯誤畫面分辨「被移出」和「不是成員」）
     active = staticmethod(lambda tid: f"trip:{tid}:active")
     geo = staticmethod(lambda tid: f"trip:{tid}:geo")
@@ -198,13 +200,18 @@ check_lag = r.register_script(LAG_LUA)
 # Worker（alerts group）：某人進入集合點半徑。
 # SADD 回傳 1 才是「第一次抵達」；再檢查 active 的人是不是都在 arrived 裡（SDIFF 為空），
 # 是的話用 SET NX 搶「全員到齊」旗標。全部在一個 script 裡，兩個 worker 同時處理最後兩個人也只會發一次。
-# KEYS: arrived, active, allin    ARGV: uid
+# 後援車（身分 Hash 裡是 car）不用等：SDIFF 剩下的人如果都是後援車也算到齊。
+# KEYS: arrived, active, allin, role    ARGV: uid
 # 回傳：{是否第一次抵達, 是否剛好全員到齊}
 ARRIVE_LUA = """
 local new = redis.call('SADD', KEYS[1], ARGV[1])
 local all = 0
-if redis.call('SCARD', KEYS[2]) > 0 and #redis.call('SDIFF', KEYS[2], KEYS[1]) == 0 then
-  if redis.call('SET', KEYS[3], '1', 'NX') then all = 1 end
+if redis.call('SCARD', KEYS[2]) > 0 then
+  local left = 0
+  for _, u in ipairs(redis.call('SDIFF', KEYS[2], KEYS[1])) do
+    if redis.call('HGET', KEYS[4], u) ~= 'car' then left = left + 1 end
+  end
+  if left == 0 and redis.call('SET', KEYS[3], '1', 'NX') then all = 1 end
 end
 return {new, all}
 """

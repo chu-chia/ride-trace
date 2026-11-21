@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from . import events
 from .auth import current_uid
 from .db import K, r
-from .trips import require_member
+from .trips import reader, require_member
 
 router = APIRouter(prefix="/api/trips")
 KINDS = {"meet": "集合點", "rest": "休息點"}
@@ -38,7 +38,9 @@ async def list_waypoints(tid: str) -> list[dict]:
     ids = sorted(await r.zrange(K.waypoints(tid), 0, -1), key=int)  # GEO 依 geohash 排序，改回建立順序
     live = await r.hget(K.trip(tid), "status") == "live"
     # 進行中：要等「還在騎的人」到齊；結束後：顯示「全部成員」裡有幾個到過
-    total = await r.scard(K.active(tid) if live else K.members(tid))
+    # 只看的人、後援車不算在要到齊的人數裡
+    roles = await r.hgetall(K.role(tid))
+    total = len([u for u in await r.smembers(K.active(tid) if live else K.members(tid)) if u not in roles])
     out = []
     for wid in ids:
         async with r.pipeline(transaction=False) as p:
@@ -59,8 +61,7 @@ async def broadcast(tid: str):
 
 
 @router.get("/{tid}/waypoints")
-async def get_waypoints(tid: str, uid: str = Depends(current_uid)):
-    await require_member(tid, uid)
+async def get_waypoints(tid: str, uid: str = Depends(reader)):  # 成員或觀看連結
     return await list_waypoints(tid)
 
 

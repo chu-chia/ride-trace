@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from .auth import current_uid
+from .trips import uid_or_watch
 from .db import r
 from .geo import haversine_m
 
@@ -205,7 +206,7 @@ class AlongIn(BaseModel):
 
 
 @router.post("/along")
-async def along(body: AlongIn, uid: str = Depends(current_uid)):
+async def along(body: AlongIn, uid: str = Depends(uid_or_watch)):  # 戰情室的觀看連結也要看沿途天氣路況
     """沿路線找：一次 Pipeline 送出每個取樣點的 GEOSEARCH，回傳依「沿路線里程」排序。
     SQL 要做「離這條線 800 m 內的加油站」通常得靠 PostGIS 的緩衝區運算。"""
     if body.kind == "roadevent":

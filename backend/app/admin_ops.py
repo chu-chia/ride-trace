@@ -76,7 +76,8 @@ async def restart_trip(tid: str):
     trip = await get_trip(tid)
     if trip.get("status") != "ended":
         raise HTTPException(409, "只有已結束行程可以重新開始")
-    members = await r.smembers(K.members(tid))
+    from .trips import riders_of
+    members = await riders_of(tid, await r.smembers(K.members(tid)))  # 只看的人不開始紀錄
     if not members:
         raise HTTPException(409, "行程沒有成員")
     conflicts = [uid for uid in members if (await r.get(K.active_trip(uid))) not in (None, tid)]

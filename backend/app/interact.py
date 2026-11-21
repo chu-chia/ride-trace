@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from . import events
 from .auth import current_uid
 from .db import K, r
-from .trips import require_member
+from .trips import reader, require_member
 
 router = APIRouter(prefix="/api/trips")
 PRESETS = ["加油", "休息一下", "等我", "有狀況", "我先走"]
@@ -154,8 +154,7 @@ async def active_sos(tid: str) -> list[dict]:
 
 
 @router.get("/{tid}/sos")
-async def get_sos(tid: str, uid: str = Depends(current_uid)):
-    await require_member(tid, uid)
+async def get_sos(tid: str, uid: str = Depends(reader)):  # 成員或觀看連結
     return await active_sos(tid)
 
 
