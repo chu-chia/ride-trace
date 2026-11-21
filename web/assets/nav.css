@@ -162,3 +162,9 @@ body.nav .rider.nv-merged{display:none}
 body.nav .rider .dot[data-more]:not([data-more=""])::after{content:attr(data-more);position:absolute;top:-8px;right:-12px;min-width:20px;height:18px;padding:0 4px;border-radius:9px;background:#1a73e8;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center;border:1.5px solid #fff}
 .nv-edge .nv-av{position:relative}
 .nv-edge .nv-av[data-more]:not([data-more=""])::after{content:attr(data-more);position:absolute;top:-8px;right:-12px;min-width:20px;height:18px;padding:0 4px;border-radius:9px;background:#1a73e8;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center;border:1.5px solid #fff}
+.nv-focus{position:fixed;left:50%;transform:translateX(-50%);z-index:12;background:var(--nv-sheet);color:var(--nv-ink);box-shadow:var(--nv-shadow);border-radius:999px;padding:5px 5px 5px 5px;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;white-space:nowrap}
+.nv-focus .nv-av{width:28px;height:28px;font-size:12px}
+.nv-focus button{width:30px;height:30px;border-radius:50%;background:var(--nv-sheet-2)!important}
+body.nav .rider.nv-target .dot{box-shadow:0 0 0 4px #4c8dff,0 2px 8px rgba(0,0,0,.35)}
+body.nav .nv-focus{display:flex}
+body.nav .nv-focus.nv-hidden{display:none}

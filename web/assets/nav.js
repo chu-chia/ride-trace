@@ -89,6 +89,7 @@ document.body.insertAdjacentHTML('beforeend', `
   <button class="nv-fab sos" id="nvSos" aria-label="開啟緊急求救選單">SOS</button>
 </div>
 <div class="nv-speed" id="nvSpeed"><div class="nv-limit nv-hidden" id="nvLimit"></div><div class="nv-cur" id="nvCur"><b id="nvSpd">0</b><small>km/h</small></div></div>
+<div class="nv nv-focus nv-hidden" id="nvFocus" role="status"></div>
 <button class="nv-recenter nv-hidden" id="nvRecenter">${ICO.nav}返回目前位置</button>
 <div class="nv nv-edges" id="nvEdges"></div>
 <section class="nv-sheet small" id="nvSheet">
@@ -114,7 +115,7 @@ document.body.insertAdjacentHTML('beforeend', `
 /* ───── 狀態 ───── */
 const st = {
   s: 0, off: 0, pos: null, heading: 0, v: 0, follow: true, northUp: false, muted: pref('qiji:nav:voice', '1') !== '1',
-  peek: null, view: null, camZoom: 16.5, camBearing: 0, camPitch: NAV_PITCH, hint: null, routeObj: null, gradF: null, lastUi: 0, safeTop: 120, simS: 0,
+  peek: null, view: null, camZoom: 16.5, camBearing: 0, camPitch: NAV_PITCH, navPitch: NAV_PITCH, zoomOff: 0, tzBase: 17.6, focus: null, hint: null, routeObj: null, gradF: null, lastUi: 0, safeTop: 120, simS: 0,
 };
 const spoken = new Set();
 /* ───── 地圖上的東西：我的箭頭、終點、轉彎箭頭、路線（進度漸層） ───── */
@@ -252,12 +253,24 @@ function camPad(follow = true) {
 }
 const lerpAngle = (a, b, t) => { const d = ((b - a + 540) % 360) - 180; return (a + d * t + 360) % 360; };
 function stopFollow() { if (!st.follow) return; st.follow = false; M.unfollow(); $('#nvRecenter').classList.remove('nv-hidden'); layout(); }
-['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((ev) => map.on(ev, (e) => { if (S.navMode && e.originalEvent) stopFollow(); }));
+// 拖曳、旋轉＝離開跟隨（像 Google 地圖）；傾斜、縮放不離開，放開後就固定用那個角度／縮放（傾斜會記住，設定頁也看得到）
+['dragstart', 'rotatestart'].forEach((ev) => map.on(ev, (e) => { if (S.navMode && e.originalEvent) stopFollow(); }));
+map.on('pitchend', (e) => {
+  if (!S.navMode || !e.originalEvent || st.northUp) return;
+  st.navPitch = st.camPitch = Math.round(map.getPitch());
+  try { localStorage.setItem('qiji:nav:pitch', String(st.navPitch)); } catch { /* 私密模式 */ }
+});
+map.on('zoomend', (e) => {
+  if (!S.navMode || !e.originalEvent) return;
+  st.camZoom = map.getZoom(); st.zoomOff = Math.max(-4, Math.min(3, map.getZoom() - st.tzBase));
+});
 function resume() {
+  setFocus(null);
   st.peek = null; clearArrow(); st.follow = true; $('#nvRecenter').classList.add('nv-hidden'); layout();
   st.view = Math.min(nextIdx(st.s), manS.length - 1); placeTrack(true);
 }
 $('#nvRecenter').onclick = resume;
+$('#nvFocus').addEventListener('click', (e) => { if (e.target.closest('button')) resume(); });
 $('#nvCompass').onclick = () => { st.northUp = !st.northUp; $('#nvCompass').classList.toggle('on', st.northUp); if (!st.follow) resume(); };
 $('#nvOverview').onclick = () => {
   const R = active(); if (!R) return;
@@ -283,10 +296,20 @@ function gapOf(m) {
   return null;
 }
 const others = () => [...S.members.values()].filter((m) => m.u.uid !== S.me && m.pos && m.u.active !== false);
+// 點隊友（隊伍列表、地圖上的頭像、畫面邊緣的頭像）：鏡頭一直跟著他，「返回目前位置」回到自己
 function focusMate(uid) {
-  const m = S.members.get(uid); if (!m?.pos) return;
-  setSheet(false); stopFollow();
-  map.easeTo({ center: m.pos, zoom: 16, pitch: 40, padding: { top: 0, bottom: 0, left: isLand() ? panelR() : 0, right: 0 }, duration: 900 });
+  const m = S.members.get(String(uid)); if (!m?.pos || String(uid) === String(S.me)) return;
+  setSheet(false); clearArrow(); st.peek = null;
+  setFocus(String(uid)); st.follow = true;
+}
+function setFocus(uid) {
+  st.focus = uid;
+  const m = uid && S.members.get(uid), pill = $('#nvFocus');
+  pill.classList.toggle('nv-hidden', !m);
+  if (m) pill.innerHTML = `${avHtml(m)}<span>跟隨 ${esc(m.u.nickname)}</span><button type="button" aria-label="回到自己">✕</button>`;
+  $('#nvRecenter').classList.toggle('nv-hidden', !uid && st.follow);
+  for (const x of S.members.values()) x.el?.classList.toggle('nv-target', x.u.uid === uid);
+  layout();
 }
 const avHtml = (m, cls = '') => `<div class="nv-av ${cls}" style="background:${esc(m.u.color)}">${esc(initialOf(m.u.nickname))}</div>`;
 function renderMates() {
@@ -325,11 +348,12 @@ function cluster() {
   for (const k of kept) { const d = k.m.el.querySelector('.dot'); const v = k.n ? `+${k.n}` : ''; if (d.dataset.more !== v) d.dataset.more = v; }
   for (const m of list) if (m.el.classList.contains('nv-merged') || m.el.classList.contains('nv-nearme')) { const d = m.el.querySelector('.dot'); if (d.dataset.more) d.dataset.more = ''; }
 }
-// 點合併的頭像：打開隊伍清單
+// 點地圖上的隊友頭像：跟隨他（導航時不走行程頁的跟隨）
 document.addEventListener('click', (e) => {
   if (!S.navMode) return;
-  const r = e.target.closest('.rider'); if (!r || !r.querySelector('.dot[data-more]:not([data-more=""])')) return;
-  e.stopPropagation(); setSheet(true);
+  const r = e.target.closest('.rider'); if (!r) return;
+  const m = [...S.members.values()].find((x) => x.el === r); if (!m) return;
+  e.stopPropagation(); e.preventDefault(); focusMate(m.u.uid);
 }, true);
 
 /* A｜畫面外的隊友：貼在畫面邊緣，小箭頭指向他的方向 */
@@ -337,11 +361,13 @@ const edgeEls = new Map();
 function edges() {
   const land = isLand(), XL = land ? panelR() : 8, XR = innerWidth - (land ? 62 : 8);
   const top = land ? 8 : st.safeTop, bot = land ? innerHeight - 8 : $('#nvSheet').getBoundingClientRect().top - 12;
-  const mePos = st.pos; if (!mePos) return;
+  const fm = st.focus && S.members.get(st.focus), mePos = fm?.pos || st.pos; if (!mePos) return;
   const mp = map.project(mePos), camB = map.getBearing(), placed = [], sos = sosSet(), seen = new Set();
   const blocks = ['#nvSpeed', '#nvFabs', '#nvRecenter', '.tools'].map((q) => document.querySelector(q)).filter((el) => el && !el.classList.contains('nv-hidden') && getComputedStyle(el).display !== 'none' && getComputedStyle(el).opacity !== '0').map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height);
   for (const m of others()) {
-    const uid = m.u.uid; seen.add(uid);
+    const uid = m.u.uid;
+    if (uid === st.focus) continue;  // 正在跟隨的人就在畫面中間
+    seen.add(uid);
     const p = map.project(m.pos), rel = ((brg(mePos, m.pos) - camB + 540) % 360) - 180;
     const close = hav(mePos, m.pos) < 120;
     const inside = p.x > XL + 12 && p.x < XR - 12 && p.y > top + 40 && p.y < bot && (Math.abs(rel) < 100 || close || map.getPitch() < 20); // 平面（總覽）時沒有「背後看不到」的問題
@@ -418,16 +444,22 @@ function frame(now) {
   // 鏡頭
   const ni = nextIdx(st.s), toTurn = ni < manS.length ? manS[ni] - st.s : Infinity;
   let tz = 17.6 - (Math.max(0, st.v - 20) / 30) * 1.1;
-  if (toTurn < 160) tz += 0.5;
+  if (toTurn < 160 && !st.focus) tz += 0.5;
+  st.tzBase = tz; tz += st.zoomOff;  // 使用者自己捏過縮放：之後都照那個差距
   st.camZoom += (tz - st.camZoom) * Math.min(1, dt * 1.5);
-  st.camBearing = lerpAngle(st.camBearing, st.northUp ? 0 : st.heading, Math.min(1, dt * 3));
-  st.camPitch += ((st.northUp ? 0 : NAV_PITCH) - st.camPitch) * Math.min(1, dt * 3);
+  // 跟隨的對象：自己，或點過的隊友（車頭方向用他回報的 heading）
+  const fm = st.focus && S.members.get(st.focus);
+  if (st.focus && (!fm || !fm.pos)) setFocus(null);
+  const tPos = fm?.pos || st.pos, fhd = fm && fm.state?.heading != null && fm.state.heading !== '' ? +fm.state.heading : null;
+  const tHead = fm ? (fhd ?? st.camBearing) : st.heading;
+  st.camBearing = lerpAngle(st.camBearing, st.northUp ? 0 : tHead, Math.min(1, dt * 3));
+  st.camPitch += ((st.northUp ? 0 : st.navPitch) - st.camPitch) * Math.min(1, dt * 3);
   // 地形高度用自己腳下的（平滑），不用周圍平均：山路上平均常比路面低，鏡頭會對到路面下方、自己跑到畫面上半部
-  if (st.pos && map.getTerrain()) {
-    const e = map.queryTerrainElevation(st.pos);
+  if (tPos && map.getTerrain()) {
+    const e = map.queryTerrainElevation(tPos);
     if (e != null) st.elev = st.elev == null ? e : st.elev + (e - st.elev) * Math.min(1, dt * 2);
   } else st.elev = null;
-  if (st.follow && st.pos) M.follow(st.pos, { padding: camPad(true), zoom: st.camZoom, bearing: st.camBearing, pitch: st.camPitch, ...(st.elev != null ? { elevation: st.elev } : {}) });
+  if (st.follow && tPos) M.follow(tPos, { padding: camPad(true), zoom: st.camZoom, bearing: st.camBearing, pitch: st.camPitch, ...(st.elev != null ? { elevation: st.elev } : {}) });
   // 路線進度：走過的灰色、前面的藍色
   if (P && map.getLayer('nv-line') && now - (st.lastGrad || 0) > 500) {
     st.lastGrad = now;
@@ -551,6 +583,7 @@ function layout() {
   const tb = head.getBoundingClientRect().bottom;
   if (land) $('#nvSheet').style.maxHeight = `${Math.max(120, innerHeight - tb - 18)}px`;
   $('#nvBanner').style.top = `${tb + 8}px`;
+  $('#nvFocus').style.top = `${tb + 8 + ($('#nvBanner').classList.contains('nv-hidden') ? 0 : $('#nvBanner').offsetHeight + 8)}px`;
   const bh = $('#nvBanner').classList.contains('nv-hidden') ? 0 : $('#nvBanner').offsetHeight + 8;
   st.safeTop = tb + 8 + bh;
   document.body.style.setProperty('--nv-top', `${tb + 8 + bh}px`);
