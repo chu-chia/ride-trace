@@ -224,6 +224,7 @@ export const ICONS = {
   home: SVG('<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>'),
   edit: SVG('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
   reset: SVG('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/>'),
+  share: SVG('<path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>'),
 };
 // 有 data-icon 的元素自動補上圖示；工具列按鈕的文字包成 <span>，之後用 setLabel() 改字不會洗掉圖示
 export function decorate(root = document) {
@@ -376,15 +377,18 @@ export function sheetDrag(sheet, { isOpen, setOpen, scroll, peek = '.handle, .pa
     if (!animate) sheet.classList.add('dragging');
     setOff(o ? 0 : max);
     if (!animate) { void sheet.offsetHeight; sheet.classList.remove('dragging'); }
-    if (!o) { const b = scroll && sheet.querySelector(scroll); if (b) b.scrollTop = 0; }
+    if (!o) { const b = scrollEl(); if (b) b.scrollTop = 0; }
     publishFor(animate ? 360 : 0);
   };
   const toggle = (o = !open) => set(o);
+  // 捲動的地方：可以是抽屜裡的清單，也可以是整個抽屜（行程頁打開後整個抽屜一起捲）
+  const scrollEl = () => (scroll ? (sheet.matches(scroll) ? sheet : sheet.querySelector(scroll)) : null);
 
   let y0 = null, off0 = 0, last = 0, lastT = 0, vel = 0, moved = false, pid = null, inBody = false;
   sheet.addEventListener('pointerdown', (e) => {
     if (!mq.matches || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    const body = scroll && e.target.closest(scroll);
+    // 把手一律可以拉；其他地方在清單（或整個抽屜）已經往下捲時，交給原生捲動
+    const body = scroll && !e.target.closest('.handle') && e.target.closest(scroll);
     if (body && open && body.scrollTop > 0) return;
     if (e.target.closest(NO_DRAG)) return;
     measure();
@@ -413,17 +417,25 @@ export function sheetDrag(sheet, { isOpen, setOpen, scroll, peek = '.handle, .pa
   };
   addEventListener('pointerup', end);
   addEventListener('pointercancel', end);
+  // 清單捲到最上面再往下拉＝拉抽屜：擋掉原生的回彈捲動，pointer 事件才不會被取消（iOS 不支援 touch-action: pan-down）
+  sheet.addEventListener('touchmove', (e) => {
+    if (y0 == null || !mq.matches) return;
+    const dy = e.touches[0].clientY - y0, el = scrollEl();
+    if (moved || (dy > 0 && (!inBody || !el || el.scrollTop <= 0))) e.preventDefault();
+  }, { passive: false });
   // 拖曳或點摘要展開後，瀏覽器補送的 click 不要再觸發按鈕（例如把手又切回去）
   sheet.addEventListener('click', (e) => {
     if (performance.now() - endAt < 400) { e.preventDefault(); e.stopPropagation(); }
   }, true);
+  // 轉場結束再量一次（保證 --sheet-h 停在最後的位置）
+  sheet.addEventListener('transitionend', (e) => { if (e.target === sheet) publishFor(0); });
   // 頁面自己切開合（.small）：滑到對的位置
   new MutationObserver(() => { if (y0 == null && isOpen() !== open) set(isOpen()); })
     .observe(sheet, { attributes: true, attributeFilter: ['class'] });
   // 收合時露出的內容變高變矮（摘要換行、轉向）：跟著調整
   if ('ResizeObserver' in window) {
-    const ro = new ResizeObserver(() => { if (y0 == null && mq.matches) { const was = max; measure(); if (!open && Math.abs(max - was) > 1) setOff(max); publishFor(0); } });
-    for (const el of sheet.children) if (el.matches(peek) || el.matches(keep)) ro.observe(el);
+    const ro = new ResizeObserver(() => { if (y0 == null && mq.matches) { const was = max; measure(); if (!open && Math.abs(max - was) > 1) { setOff(max); publishFor(360); } else publishFor(0); } });
+    for (const el of sheet.children) ro.observe(el);  // 任何一塊出現、消失、變高（例如提示晚一點才出現）都要重量
     ro.observe(sheet);
   }
   mq.addEventListener('change', () => { mark(); set(isOpen(), { animate: false }); });
@@ -455,7 +467,7 @@ export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 7
   };
   if (btn) btn.onclick = () => set(!small);
   set(small, false);
-  const drag = sheetDrag(panel, { isOpen: () => !small, setOpen: (open) => set(!open), scroll: '.panel-body' });
+  const drag = sheetDrag(panel, { isOpen: () => !small, setOpen: (open) => set(!open), scroll: '.panel' });
   if (handle) handle.onclick = () => drag.toggle();
   return { set, get small() { return small; } };
 }

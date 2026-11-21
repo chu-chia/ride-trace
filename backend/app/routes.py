@@ -189,7 +189,7 @@ async def _post(path: str, body: dict) -> dict:
     return res.json()
 
 
-TRACE_ATTRS = ["edge.road_class", "edge.names", "edge.length", "edge.density", "edge.speed",
+TRACE_ATTRS = ["edge.road_class", "edge.names", "edge.length", "edge.density", "edge.speed", "edge.speed_limit",
                "edge.begin_shape_index", "edge.end_shape_index"]
 
 
@@ -257,6 +257,22 @@ def personal_minutes(edges: list[dict], pace: dict) -> int | None:
     return round(hours * 60)
 
 
+def speed_limits(edges: list[dict]) -> list[list[float]]:
+    """導航畫面的速限：沿路線累加路段長度，合併成 [起點 km, 終點 km, 速限 km/h]。
+    只收 OSM 有標速限（maxspeed）的路段；沒標的不放，畫面上就不顯示速限牌。"""
+    out, km = [], 0.0
+    for e in edges:
+        ln = float(e.get("length") or 0)
+        lim = e.get("speed_limit")
+        if isinstance(lim, (int, float)) and 0 < lim < 200:
+            if out and out[-1][2] == lim and abs(out[-1][1] - km) < 1e-6:
+                out[-1][1] = round(km + ln, 3)
+            else:
+                out.append([round(km, 3), round(km + ln, 3), int(lim)])
+        km += ln
+    return out
+
+
 def build_route(trip: dict, edges: list[dict] | None, vehicle: str, pace: dict) -> dict:
     checked = edges is not None
     edges = edges or []
@@ -296,6 +312,7 @@ def build_route(trip: dict, edges: list[dict] | None, vehicle: str, pace: dict) 
         "summary": {"km": round(s["length"], 2), "min": round(s["time"] / 60), "points": len(idx),
                     "min_personal": personal_minutes(edges, pace) if vehicle != "car" else None},
         "via": " → ".join(via[:5]),
+        "limits": speed_limits(edges),
         "uses_3a": vehicle == "heavy" and any(e.get("road_class") == "motorway" and is_3a(e) for e in edges),
         "warnings": violations(edges, vehicle) + ([] if checked or not VEHICLES[vehicle]["forbid"]
                                                   else ["（這條路線無法自動檢查路權，請自行確認沒有國道或快速道路）"]),
@@ -322,7 +339,8 @@ async def valhalla_routes(points: list[dict], vehicle: str, uid: str | None = No
         raise HTTPException(422, f"算不出路線：{d.get('error', d)}")
     trips = [d["trip"]] + [a["trip"] for a in d.get("alternates", []) if "trip" in a]
     pace = await get_pace(uid) if uid and vehicle != "car" else {}
-    need_edges = bool(v["forbid"] or pace)
+    # 路段資料：路權檢查、依個人速度估時間、導航的速限都靠它（汽車沒有路權限制，但導航還是要速限）
+    need_edges = True
     all_edges = [await route_edges(t, v["costing"]) if need_edges else [] for t in trips]
     if vehicle == "heavy":
         # 國道3甲例外：OSM 把 3甲 也標成收費，exclude_tolls 會一起擋掉。

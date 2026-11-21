@@ -224,7 +224,7 @@ async function heroLive(t) {
     ${stepper('ride')}
     ${avatars(det.members, false)}
     ${pct != null ? `<div class="prog"><i style="width:${pct}%"></i></div><div class="sub num">全隊進度 ${pct}%・平均 ${avg.toFixed(1)}／${Math.round(km)} 公里</div>` : `<div class="sub">${on}／${det.members.length} 人正在回報位置</div>`}
-    <div class="acts"><a class="btn primary" href="/trip?id=${t.id}">回到地圖</a><a class="btn" href="/war?id=${t.id}">戰情室</a></div></section>`;
+    <div class="acts"><a class="btn primary" href="/nav?id=${t.id}">${line ? '繼續導航' : '繼續騎乘'}</a><a class="btn" href="/trip?id=${t.id}">看全隊</a></div></section>`;
 }
 async function heroPlanned(t) {
   const [det, rs] = await Promise.all([api('/api/trips/' + t.id), getRoute(t.id)]);

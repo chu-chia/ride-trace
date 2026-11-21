@@ -112,7 +112,7 @@ async def me_page():
     return RedirectResponse("/#trips", status_code=302)
 
 
-PAGES = {"/war": "war.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html", "/about": "about.html", "/settings": "settings.html"}
+PAGES = {"/war": "war.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html", "/about": "about.html", "/settings": "settings.html", "/nav": "trip.html"}  # /nav＝行程頁的導航模式
 for path, file in PAGES.items():
     app.add_api_route(path, page(file), include_in_schema=False)
 

@@ -276,12 +276,22 @@ body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-mini-w
   .panel,.panel.small{left:0;right:0;top:auto;bottom:0;width:auto;height:var(--panel-h);border-radius:20px 20px 0 0;border-bottom:0;box-shadow:0 -2px 16px rgba(0,0,0,.35);
     transform:translateY(var(--sheet-off,0px));transition:transform .28s cubic-bezier(.2,.8,.2,1);will-change:transform}
   .panel.dragging{transition:none}
+  /* 打開時拉到滿版（停在上方標題列下面），整個抽屜一起上下捲；收起來時不能捲 */
+  :root{--panel-h:calc(100dvh - env(safe-area-inset-top,0px) - 66px)}
+  .panel{overflow:hidden}
+  .panel:not(.small){overflow-y:auto;overscroll-behavior:contain}
+  .panel>.panel-body,.panel:not(.small)>.panel-body{flex:none;min-height:auto;overflow:visible}
+  .sheetx.sx-on.panel:not(.small){touch-action:pan-y}
+  /* 把手黏在抽屜最上面，捲下去也拉得到 */
+  .panel .handle{position:sticky;top:0;z-index:3;background:var(--solid);min-height:30px;margin-bottom:0}
+  /* 抽屜往上拉時，右上的工具列跟著往上滑出畫面 */
+  body:has(.panel) .tools{transition:none;transform:translateY(calc(clamp(0, (var(--sheet-t,0) - .3) / .5, 1) * -1 * (100% + 90px)))}
   /* 一直貼在畫面最下面的列（行程頁的 SOS）：抽屜往下推多少，它就往上推回多少 */
   .panel>.keep{position:relative;z-index:1;background:var(--solid);transform:translateY(calc(-1 * var(--sheet-off,0px)))}
   .panel.dragging>.keep{transition:none}
   .panel>.keep{transition:transform .28s cubic-bezier(.2,.8,.2,1)}
   /* 把手可點範圍 44px 高（UX-14），下面的頂列不再留上邊距，抽屜總高度只多約 19px */
-  .panel .handle{display:grid;place-items:center;border:0;background:none;padding:0;min-height:44px;cursor:grab;touch-action:none}
+  .panel .handle{display:grid;place-items:center;border:0;background:var(--solid);padding:0;min-height:44px;cursor:grab;touch-action:none;position:sticky;top:0;z-index:3}
   .panel .handle::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--muted);opacity:.65}
   .panel-head{padding:0 var(--sp-3) var(--sp-2) var(--sp-2)}
   .panel-collapse{display:none}
