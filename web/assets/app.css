@@ -183,7 +183,10 @@ a.li{color:inherit}
   --lg-tint:rgb(var(--lg-rgb) / var(--lg-a)); --lg-float:rgb(var(--lg-rgb-float) / var(--lg-a));
   --lg-big:rgb(var(--lg-rgb) / min(1, calc(var(--lg-a) + .12)));
   --lg-edge:rgba(255,255,255,.55); --lg-inner:rgba(255,255,255,.6);
-  --lg-blur:20px; --lg-sat:180%; --lg-shadow:0 10px 36px rgba(0,0,0,.22);
+  --lg-blur:20px; --lg-sat:180%; --lg-bri:1; --lg-shadow:0 10px 36px rgba(0,0,0,.22);
+  /* 模糊、亮度可在設定頁「玻璃進階」調；--lg-bf 是所有玻璃共用的 backdrop-filter（邊緣折射另外接在前面） */
+  --lg-bf:blur(var(--lg-blur)) saturate(var(--lg-sat)) brightness(var(--lg-bri));
+  --lg-rim:inset 0 1px 0 var(--lg-inner),inset 0 -1px 0 rgba(255,255,255,.08);
   /* 玻璃裡的卡片、分段按鈕：半透明，整片看起來是同一塊玻璃 */
   --lg-surface:rgba(255,255,255,.5); --lg-surface-2:rgba(118,118,128,.14);
   /* 面板（改版原型）：不透明的三階灰 */
@@ -207,19 +210,19 @@ a.li{color:inherit}
   --surface:var(--lg-surface); --surface-2:var(--lg-surface-2);
   background:var(--lg-tint); border:1px solid var(--lg-edge);
   /* 上緣亮、下緣淡的內高光，加細邊框和陰影，讓按鈕在地圖上有輪廓（HIG Maps：控制項和地圖要有對比） */
-  box-shadow:inset 0 1px 0 var(--lg-inner),inset 0 -1px 0 rgba(255,255,255,.08),var(--lg-shadow);
-  -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat));
-  backdrop-filter:var(--liquid-filter,) blur(var(--lg-blur)) saturate(var(--lg-sat));
+  box-shadow:var(--lg-rim),var(--lg-shadow);
+  -webkit-backdrop-filter:var(--lg-bf);
+  backdrop-filter:var(--liquid-filter,) var(--lg-bf);
 }
 /* 大面板：字多，底色再濃一點 */
 :is(.war-panel,.mobile-sheet).glass{background:var(--lg-big)}
 /* 玻璃底樣式給不能加 .glass class 的元件用（導航模式、抽屜、通知），跟 .glass 同一套數值 */
 .toast{
-  background:var(--lg-float)!important; box-shadow:inset 0 1px 0 var(--lg-inner),var(--lg-shadow)!important;
-  -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)); backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
+  background:var(--lg-float)!important; box-shadow:var(--lg-rim),var(--lg-shadow)!important;
+  -webkit-backdrop-filter:var(--lg-bf); backdrop-filter:var(--liquid-filter,) var(--lg-bf)}
 .wsheet,.psheet{
   background:var(--lg-big)!important;
-  -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)); backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
+  -webkit-backdrop-filter:var(--lg-bf); backdrop-filter:var(--liquid-filter,) var(--lg-bf)}
 /* 導航模式的浮鈕、抽屜在 nav.css（跟著導航自己的深淺色） */
 
 /* 關掉玻璃的情況都退回不透明底色：瀏覽器不支援、系統「降低透明度」、設定頁關閉玻璃 */
@@ -238,6 +241,14 @@ a.li{color:inherit}
 }
 /* 省電模式：小按鈕照樣是玻璃（實測 4 顆按鈕負擔很小），大面板不做背景模糊（地圖每重畫一格就要重算一次整片模糊） */
 .low-power :is(.panel,.war-panel,.mobile-sheet).glass,.low-power :is(.nv-sheet,.wsheet,.psheet){-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:var(--glass)!important}
+/* ── 玻璃進階（設定頁，測試用；common.js 在 <html> 加 class） ── */
+/* 漸層亮邊：左上亮、右下淡，像光從左上打過來 */
+.glass-rim{--lg-rim:inset 1px 1px 0 rgba(255,255,255,.75),inset -1px -1px 0 rgba(255,255,255,.3),inset 0 0 14px rgba(255,255,255,.08)}
+/* 省電時抽屜也用玻璃（系統降低透明度、關閉玻璃時不套用） */
+@media not (prefers-reduced-transparency: reduce){
+  html.glass-sheet-lp.low-power:not(.no-glass) :is(.war-panel,.mobile-sheet).glass{background:var(--lg-big)!important;-webkit-backdrop-filter:var(--lg-bf)!important;backdrop-filter:var(--liquid-filter,) var(--lg-bf)!important}
+  html.glass-sheet-lp.low-power:not(.no-glass) :is(.wsheet,.psheet){background:var(--lg-big)!important;-webkit-backdrop-filter:var(--lg-bf)!important;backdrop-filter:var(--liquid-filter,) var(--lg-bf)!important}
+}
 .liquid-glass-filter{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
 
 /* 圖示按鈕（返回、收合）：所有頁同一個尺寸 */

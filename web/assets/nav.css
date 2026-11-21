@@ -175,12 +175,22 @@ body.nav{--nvg-rgb:42 43 47; --nvg-sheet:30 31 34; --nvg-sub:rgba(255,255,255,.1
 body.nav[data-nvtheme="light"]{--nvg-rgb:255 255 255; --nvg-sheet:255 255 255; --nvg-sub:rgba(0,0,0,.06); --nvg-inner:rgba(255,255,255,.7)}
 .nv-fab:not(.sos),.nv-cur,.nv-recenter,.nv-focus{
   background:rgb(var(--nvg-rgb) / var(--lg-a))!important;
-  box-shadow:inset 0 1px 0 var(--nvg-inner),var(--nv-shadow)!important;
-  -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)); backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
+  box-shadow:var(--nv-rim,inset 0 1px 0 var(--nvg-inner)),var(--nv-shadow)!important;
+  -webkit-backdrop-filter:var(--lg-bf); backdrop-filter:var(--liquid-filter,) var(--lg-bf)}
 .nv-sheet{
   background:rgb(var(--nvg-sheet) / min(1, calc(var(--lg-a) + .12)))!important; --nv-sheet-2:var(--nvg-sub);
-  -webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)); backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
+  -webkit-backdrop-filter:var(--lg-bf); backdrop-filter:var(--liquid-filter,) var(--lg-bf)}
 .nv-fab.team .cnt{border-color:transparent}
 /* 省電：抽屜改回實色不模糊（小按鈕照樣是玻璃） */
 .low-power .nv-sheet{background:var(--nv-sheet)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 .no-glass :is(.nv-fab,.nv-cur,.nv-recenter,.nv-focus,.nv-sheet){-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+/* ── 玻璃進階（設定頁，測試用） ── */
+.glass-rim{--nv-rim:inset 1px 1px 0 rgba(255,255,255,.6),inset -1px -1px 0 rgba(255,255,255,.22),inset 0 0 14px rgba(255,255,255,.06)}
+@media not (prefers-reduced-transparency: reduce){
+  /* 轉彎卡也用玻璃：綠色依濃淡變透明（比按鈕濃 12%，字才讀得到） */
+  html.glass-turn:not(.no-glass) .turn-main{background:color-mix(in srgb,var(--c) min(100%,calc((var(--lg-a) + .12) * 100%)),transparent);box-shadow:var(--nv-rim,inset 0 1px 0 rgba(255,255,255,.2)),var(--nv-shadow);-webkit-backdrop-filter:var(--lg-bf);backdrop-filter:var(--liquid-filter,) var(--lg-bf)}
+  html.glass-turn:not(.no-glass) .turn-then{background:color-mix(in srgb,var(--c2) min(100%,calc((var(--lg-a) + .12) * 100%)),transparent);-webkit-backdrop-filter:var(--lg-bf);backdrop-filter:var(--liquid-filter,) var(--lg-bf)}
+  html.glass-turn:not(.no-glass) .nv-turn{text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  /* 省電時抽屜也用玻璃 */
+  html.glass-sheet-lp.low-power:not(.no-glass) .nv-sheet{background:rgb(var(--nvg-sheet) / min(1, calc(var(--lg-a) + .12)))!important;-webkit-backdrop-filter:var(--lg-bf)!important;backdrop-filter:var(--liquid-filter,) var(--lg-bf)!important}
+}

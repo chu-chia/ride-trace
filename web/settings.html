@@ -59,6 +59,17 @@
   .gd-btn{position:absolute;right:14px;top:14px;width:44px;height:44px;font-size:12px}
   .gd-pill{position:absolute;left:44px;bottom:12px;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600}
   #glassRow.off .glass-adj,#glassRow.off .glass-demo{opacity:.45;pointer-events:none}
+  .gx{width:100%;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+  .gx-r{display:flex;align-items:center;gap:10px}
+  .gx-r>span{width:64px;flex:none;font-size:13.5px}
+  .gx-r input{flex:1;min-width:0;accent-color:var(--accent)}
+  .gx-r output{min-width:44px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;font-size:13.5px}
+  .gx-s{display:flex;align-items:center;gap:12px;cursor:pointer}
+  .gx-s>span{flex:1;min-width:0;display:flex;flex-direction:column}
+  .gx-s b{font-size:14px}.gx-s small{font-size:12px;color:var(--muted)}
+  .gx .btn{align-self:flex-start;min-height:36px;padding:4px 12px}
+  #glassX.off .gx{opacity:.45;pointer-events:none}
+  .gx-r.dim{opacity:.45}
   form{display:flex;flex-direction:column;gap:10px}
   form label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
   form input{font:inherit;font-size:15px;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
@@ -122,6 +133,19 @@
       </div>
       <div class="glass-demo" aria-hidden="true"><span class="gd-road"></span><span class="gd-name">坪林</span><span class="gd-name n2">北宜公路</span><span class="tool glass gd-btn">3D</span><span class="glass gd-pill">12.4 km · 28 分</span></div>
     </div>
+    <div class="li wrap" id="glassX"><span class="m"><b>玻璃進階（測試用）</b><span>先全部放上來，調到喜歡的樣子後再決定哪些留下。改了立刻套用到整個網站</span></span>
+      <div class="gx">
+        <label class="gx-r" for="gxBlur"><span>模糊</span><input type="range" id="gxBlur" min="0" max="30" step="1"><output id="gxBlurV"></output></label>
+        <label class="gx-r" for="gxBri"><span>亮度</span><input type="range" id="gxBri" min="0" max="20" step="1"><output id="gxBriV"></output></label>
+        <label class="gx-s"><span><b>邊緣折射</b><small>玻璃邊緣把後面的地圖往內彎；只有 Chrome、Edge 看得到，iPhone Safari 沒有效果</small></span><input type="checkbox" class="sw" id="gxRefr"></label>
+        <label class="gx-r" for="gxRefrS"><span>折射強度</span><input type="range" id="gxRefrS" min="0" max="100" step="1"><output id="gxRefrSV"></output></label>
+        <label class="gx-s"><span><b>色散</b><small>折射時邊緣出現紅藍彩邊（要先開邊緣折射）</small></span><input type="checkbox" class="sw" id="gxDisp"></label>
+        <label class="gx-s"><span><b>漸層亮邊</b><small>左上亮、右下淡的邊框，像光從左上打過來</small></span><input type="checkbox" class="sw" id="gxRim"></label>
+        <label class="gx-s"><span><b>轉彎卡也用玻璃</b><small>導航上方的綠色轉彎卡跟著濃淡變透明</small></span><input type="checkbox" class="sw" id="gxTurn"></label>
+        <label class="gx-s"><span><b>省電時抽屜也用玻璃</b><small>省電模式預設把抽屜、大面板改成實色；打開就照樣是玻璃（較耗電）</small></span><input type="checkbox" class="sw" id="gxSheet"></label>
+        <button type="button" class="btn" id="gxReset">進階全部回預設</button>
+      </div>
+    </div>
     <label class="li"><span class="m"><b>立體地形</b><span>按 3D 時把山立起來；關掉時只傾斜。較耗電，手機可能會卡（手機預設關閉）</span></span><input type="checkbox" class="sw" id="terrain3d"></label>
     <label class="li"><span class="m"><b>效能量測浮層</b><span>開發用：在地圖頁左上角顯示 FPS、掉格與地圖重畫次數（只影響這台裝置）</span></span><input type="checkbox" class="sw" id="perfHud"></label>
   </div>
@@ -154,22 +178,40 @@
   </div>
 </main>
 <script type="module">
-import { api, $, esc, avatar, LOW_POWER, PERF, glassPrefs, applyGlass, GLASS_DEFAULT_A } from '/assets/common.js';
+import { api, $, esc, avatar, LOW_POWER, PERF, glassPrefs, applyGlass, saveGlass, GLASS_DEFAULT_A, GLASS_X_DEFAULT } from '/assets/common.js';
 import { terrainPref, TERRAIN_KEY } from '/assets/mapbase.js';
 import { resumeMs } from '/assets/gestures.js';
 import { mountPushCard, pushEndpoint, dropLocalPush } from '/assets/push.js';
 import { clearSwrCache } from '/assets/swr.js';
 mountPushCard($('#pushCard'));  // 和行程頁同一張推播卡（UX-08）
 $('#lowPower').checked = LOW_POWER;
-// 玻璃效果：開關＋濃淡滑桿，改了立刻套用到整個網站（只存在這台裝置）
+// 玻璃效果：開關、濃淡滑桿、進階（測試用），改了立刻套用到整個網站（只存在這台裝置）
 {
-  const g = glassPrefs(), show = () => { $('#glassVal').textContent = `${g.a}%`; $('#glassRow').classList.toggle('off', !g.on); };
-  $('#glassOn').checked = g.on; $('#glassA').value = g.a; show();
-  const save = () => { try { localStorage.setItem('qiji:glass', g.on ? '1' : '0'); localStorage.setItem('qiji:glass-a', String(g.a)); } catch { /* 私密模式 */ } applyGlass(g); show(); };
+  const g = glassPrefs();
+  const R = [['gxBlur', 'blur', 'px'], ['gxBri', 'bri', '%'], ['gxRefrS', 'refrS', '']];
+  const S = [['gxRefr', 'refr'], ['gxDisp', 'disp'], ['gxRim', 'rim'], ['gxTurn', 'turn'], ['gxSheet', 'sheetLP']];
+  const show = () => {
+    $('#glassVal').textContent = `${g.a}%`;
+    $('#glassRow').classList.toggle('off', !g.on); $('#glassX').classList.toggle('off', !g.on);
+    for (const [id, k, u] of R) $(`#${id}V`).textContent = `${g[k]}${u}`;
+    $('#gxRefrS').closest('.gx-r').classList.toggle('dim', !g.refr);
+  };
+  const fill = () => {
+    $('#glassOn').checked = g.on; $('#glassA').value = g.a;
+    for (const [id, k] of R) $(`#${id}`).value = g[k];
+    for (const [id, k] of S) $(`#${id}`).checked = g[k];
+    show();
+  };
+  const save = () => { saveGlass(g); applyGlass(g); show(); };
   $('#glassOn').onchange = (e) => { g.on = e.target.checked; save(); };
   $('#glassA').oninput = (e) => { g.a = Number(e.target.value); save(); };
-  $('#glassReset').onclick = () => { g.a = GLASS_DEFAULT_A; g.on = true; $('#glassA').value = g.a; $('#glassOn').checked = true; save(); };
+  for (const [id, k] of R) $(`#${id}`).oninput = (e) => { g[k] = Number(e.target.value); save(); };
+  for (const [id, k] of S) $(`#${id}`).onchange = (e) => { g[k] = e.target.checked; save(); };
+  $('#glassReset').onclick = () => { g.a = GLASS_DEFAULT_A; g.on = true; fill(); save(); };
+  $('#gxReset').onclick = () => { Object.assign(g, GLASS_X_DEFAULT); fill(); save(); };
+  fill();
 }
+
 $('#perfHud').checked = PERF;
 $('#terrain3d').checked = terrainPref();
 $('#terrain3d').onchange = (e) => { try { localStorage.setItem(TERRAIN_KEY, e.target.checked ? '1' : '0'); } catch { /* 私密模式 */ } };

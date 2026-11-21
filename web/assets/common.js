@@ -304,6 +304,7 @@ const LIQUID_OK = !!(navigator.userAgentData?.brands || []).find((b) => /Chromiu
 let liquidSeq = 0;
 export function liquidGlass(el, { radius = 24, bezel = 20, scale = 90 } = {}) {
   if (!LIQUID_OK || !el || !('ResizeObserver' in window)) return;
+  el.dataset.lgOwn = '1'; // 這個元件自己管折射，設定頁的「邊緣折射」不要再蓋掉
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('class', 'liquid-glass-filter'); svg.setAttribute('aria-hidden', 'true');
@@ -335,22 +336,82 @@ export const LOW_POWER = (() => {
 })();
 document.documentElement.classList.toggle('low-power', LOW_POWER);
 
-// ---------- 玻璃效果（設定頁可關、可調濃淡；只影響這台裝置） ----------
+// ---------- 玻璃效果（設定頁可關、可調；只影響這台裝置） ----------
 // qiji:glass = '0' 關閉；qiji:glass-a = 小按鈕底色不透明度 0～100（%），大面板自動再濃 12%
+// qiji:glass-x = 玻璃進階（測試用，JSON）：模糊、亮度、邊緣折射與強度、色散、漸層亮邊、轉彎卡玻璃、省電時抽屜也用玻璃
 export const GLASS_DEFAULT_A = 72;
+export const GLASS_X_DEFAULT = { blur: 20, bri: 0, refr: false, refrS: 60, disp: false, rim: false, turn: false, sheetLP: false };
 export function glassPrefs() {
-  let on = true, a = GLASS_DEFAULT_A;
+  let on = true, a = GLASS_DEFAULT_A, x = { ...GLASS_X_DEFAULT };
   try {
     on = localStorage.getItem('qiji:glass') !== '0';
     const s = localStorage.getItem('qiji:glass-a'), v = Number(s);
     if (s !== null && s !== '' && v >= 0 && v <= 100) a = v;
-  } catch { /* 私密模式 */ }
-  return { on, a };
+    const j = JSON.parse(localStorage.getItem('qiji:glass-x') || '{}');
+    for (const k of Object.keys(GLASS_X_DEFAULT)) if (typeof j[k] === typeof GLASS_X_DEFAULT[k]) x[k] = j[k];
+  } catch { /* 私密模式、JSON 壞掉 */ }
+  x.blur = Math.min(30, Math.max(0, x.blur)); x.bri = Math.min(20, Math.max(0, x.bri)); x.refrS = Math.min(100, Math.max(0, x.refrS));
+  return { on, a, ...x };
 }
-export function applyGlass({ on, a } = glassPrefs()) {
+export function saveGlass(g) {
+  try {
+    localStorage.setItem('qiji:glass', g.on ? '1' : '0'); localStorage.setItem('qiji:glass-a', String(g.a));
+    const x = {}; for (const k of Object.keys(GLASS_X_DEFAULT)) x[k] = g[k];
+    localStorage.setItem('qiji:glass-x', JSON.stringify(x));
+  } catch { /* 私密模式 */ }
+}
+export function applyGlass(g = glassPrefs()) {
   const root = document.documentElement;
-  root.classList.toggle('no-glass', !on);
-  root.style.setProperty('--lg-a', String(a / 100));
+  root.classList.toggle('no-glass', !g.on);
+  root.classList.toggle('glass-rim', !!g.rim);
+  root.classList.toggle('glass-turn', !!g.turn);
+  root.classList.toggle('glass-sheet-lp', !!g.sheetLP);
+  root.style.setProperty('--lg-a', String(g.a / 100));
+  root.style.setProperty('--lg-blur', `${g.blur}px`);
+  root.style.setProperty('--lg-bri', String(1 + g.bri / 100));
+  edgeRefraction(g.on && g.refr ? { strength: g.refrS, disp: !!g.disp } : null);
+}
+
+// 邊緣折射（設定頁開）：替每個玻璃元件依尺寸產生位移圖，寫進 --liquid-filter。只有 Chromium 有效；
+// 色散＝紅綠藍三個通道位移量不同，邊緣會出現彩色邊
+const GLASS_SEL = '.glass,.toast,.nv-fab:not(.sos),.nv-cur,.nv-recenter,.nv-focus,.nv-sheet,.wsheet,.psheet,.turn-main,.turn-then';
+const ER = { opts: null, svg: null, ro: null, mo: null, mine: new Set(), size: new WeakMap(), seq: 0 };
+function erFilter(el) {
+  const o = ER.opts; if (!o || el.dataset.lgOwn) return;
+  const w = Math.round(el.offsetWidth), h = Math.round(el.offsetHeight); if (!w || !h) return;
+  const key = `${w}x${h}|${o.strength}|${o.disp}`; if (ER.size.get(el) === key) return; ER.size.set(el, key);
+  const rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 12, bezel = Math.max(4, Math.min(16, rad, h / 2));
+  const sc = bezel * 4 * o.strength / 60, id = `lgx-${++ER.seq}`;
+  const map = `<feImage href="${edgeMap(w, h, rad, bezel)}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="map"/>`;
+  const dm = (k, res) => `<feDisplacementMap in="SourceGraphic" in2="map" scale="${(sc * k).toFixed(1)}" xChannelSelector="R" yChannelSelector="G"${res ? ` result="${res}"` : ''}/>`;
+  const cm = (n, m) => `<feColorMatrix in="d${n}" values="${m}" result="c${n}"/>`;
+  const body = !o.disp ? dm(1)
+    : dm(1.1, 'dr') + cm('r', '1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0') + dm(1, 'dg') + cm('g', '0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0')
+      + dm(.9, 'db') + cm('b', '0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0') + '<feBlend in="cr" in2="cg" mode="screen" result="rg"/><feBlend in="rg" in2="cb" mode="screen"/>';
+  const old = el.dataset.lgx && document.getElementById(el.dataset.lgx); if (old) old.remove();
+  ER.svg.insertAdjacentHTML('beforeend', `<filter id="${id}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">${map}${body}</filter>`);
+  el.dataset.lgx = id; el.style.setProperty('--liquid-filter', `url(#${id})`); ER.mine.add(el);
+}
+function erScan() { for (const el of document.querySelectorAll(GLASS_SEL)) if (!el.dataset.lgOwn && !ER.mine.has(el)) { ER.ro.observe(el); erFilter(el); } }
+function edgeRefraction(opts) {
+  if (!LIQUID_OK || !('ResizeObserver' in window)) return;
+  ER.opts = opts;
+  if (!opts) {
+    ER.ro?.disconnect(); ER.mo?.disconnect();
+    for (const el of ER.mine) { el.style.removeProperty('--liquid-filter'); delete el.dataset.lgx; ER.size.delete(el); }
+    ER.mine.clear(); if (ER.svg) ER.svg.innerHTML = '';
+    return;
+  }
+  if (!ER.svg) {
+    ER.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    ER.svg.setAttribute('class', 'liquid-glass-filter'); ER.svg.setAttribute('aria-hidden', 'true'); document.body.append(ER.svg);
+    ER.ro = new ResizeObserver((es) => requestAnimationFrame(() => es.forEach((e) => erFilter(e.target))));
+    ER.mo = new MutationObserver(() => { cancelAnimationFrame(ER.raf); ER.raf = requestAnimationFrame(erScan); });
+  }
+  for (const el of ER.mine) ER.size.delete(el); // 強度、色散變了：全部重做
+  ER.mine.forEach((el) => erFilter(el));
+  ER.mo.observe(document.body, { childList: true, subtree: true });
+  erScan();
 }
 applyGlass();
 
