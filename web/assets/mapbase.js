@@ -162,10 +162,30 @@ export function flatZoom(b, padding = {}, maxZoom = 15, map) {
   return Math.min(maxZoom, Math.log2(Math.max(1, Math.min(W / (dx * 512), H / (dy * 512)))));
 }
 
+// 地圖解析度：省電模式（手機預設）最多 2 倍；省電又畫立體地形時再降到 1.5 倍（立體地形每格都很吃 GPU）
+const LOW_DPR = () => document.documentElement.classList.contains('low-power');
+function mapDpr(withTerrain) {
+  if (!LOW_DPR()) return devicePixelRatio;
+  return Math.min(devicePixelRatio, withTerrain ? 1.5 : 2);
+}
+
+// 立體地形（按 3D 時真的把山立起來）。iPhone 實測（11-22，戰情室）：
+//   立體地形 地圖每秒畫 22 次、每 5 秒頓 20～27 次；遠處減細節＋傾斜 45°＋解析度 1.25 全上也還有 16～21 次
+//   只傾斜不畫地形 每秒 30 次、0 次頓挫，跟平面一樣順
+// 所以手機（省電模式）預設關：3D 鈕只傾斜（立體建築、山影照舊）；電腦預設開。設定頁「立體地形」可以改
+export const TERRAIN_KEY = 'qiji:terrain';
+export function terrainPref() {
+  let v = null;
+  try { v = localStorage.getItem(TERRAIN_KEY); } catch { /* 私密模式 */ }
+  return v ? v === '1' : !LOW_DPR();
+}
+
 export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, interactive = true, syncTheme = true, styles = DEFAULT_ORDER } = {}) {
   const ORDER = styles;
   let cur = style;
   let is3d = terrain;
+  let useTerrain = terrainPref();
+  window.__qiji3d = terrain;
   // 浮在地圖上的面板跟著底圖深淺走（深色、衛星 → 深色面板；淺色 → 淺色面板），不跟系統
   // syncTheme:false 給只有半邊是地圖的頁面（登入頁），那邊的表單還是跟系統
   const theme = () => { if (syncTheme) document.documentElement.dataset.theme = cur === 'light' ? 'light' : 'dark'; };
@@ -178,7 +198,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     map = new maplibregl.Map({
       container, style: STYLES[cur].url, center, zoom, interactive,
       // 省電模式（common.js 在 <html> 加 .low-power）：手機 3 倍螢幕只畫 2 倍，像素少一半以上
-      pixelRatio: document.documentElement.classList.contains('low-power') ? Math.min(devicePixelRatio, 2) : devicePixelRatio,
+      pixelRatio: mapDpr(terrain && useTerrain),
       fadeDuration: document.documentElement.classList.contains('low-power') ? 0 : 300, // 省電：文字不做淡入（淡入期間會一直重畫）
       // 反鋸齒（MSAA）：斜的路線、山的稜線、立體建築邊緣才不會一格一格的。手機預設是省電模式，也一律開（不然 iPhone 上最明顯）
       canvasContextAttributes: { antialias: true },  // MapLibre 5：反鋸齒要寫在這裡
@@ -194,6 +214,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => {}) });  // 其他方法（follow、set3d…）都是空的
   }
   if (!interactive3d && interactive) map.touchZoomRotate.disableRotation();
+  // ?perf=1 時交給量測浮層算地圖每秒重畫幾次（perf.js 是非同步載入，可能比地圖晚到，所以兩邊都接）
+  if (window.__qijiMaps) { window.__qijiMaps.push(map); window.__qijiPerfWatch?.(map); }
   // 省電：地圖自己的重畫最多 30 fps（圖磚載入、資料更新時 MapLibre 會連續重畫）；手指在地圖上時不限制，拖曳縮放才跟手
   if (document.documentElement.classList.contains('low-power')) {
     const repaint = map.triggerRepaint.bind(map);
@@ -205,10 +227,22 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     const tryPaint = () => {
       pending = 0;
       const now = performance.now();
-      if (touching || now - last >= 25) { last = now; repaint(); } else pending = requestAnimationFrame(tryPaint);
+      // 效能量測 A/B「3D 20fps」：頁面迴圈已經是 20 fps，這裡只要不比它慢（60Hz 螢幕上 45ms 會剛好錯過一格，變成 10 fps）
+      const gap = is3d && window.__qijiPerfFlags?.has('fps20') ? 36 : 25;
+      if (touching || now - last >= gap) { last = now; repaint(); } else pending = requestAnimationFrame(tryPaint);
     };
     map.triggerRepaint = () => { if (touching) { last = performance.now(); repaint(); } else if (!pending) tryPaint(); };
   }
+  // 暫停重畫：抽屜全開把地圖整個蓋住時，各頁呼叫 pauseRender(true)。期間鏡頭、資料照常更新，只是不畫；
+  // 恢復時補畫一次。iPhone 實測抽屜全開時地圖還在每秒畫 30 次，掉格 15%，清單捲動也跟著卡
+  let paused = false, dirty = false;
+  const paintNow = map.triggerRepaint.bind(map);
+  map.triggerRepaint = () => { if (paused) { dirty = true; return; } paintNow(); };
+  map._qijiPause = (on) => {
+    if (paused === !!on) return;
+    paused = !!on;
+    if (!paused && dirty) { dirty = false; paintNow(); }
+  };
   if (!terrain) map.setMaxPitch(0);
   // OpenFreeMap 的樣式引用了 sprite 裡沒有的圖示（circle-11、wood-pattern），每次載入都會警告：補一張透明圖（UX-53）
   map.on('styleimagemissing', (e) => {
@@ -291,9 +325,43 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       if (!map.getSource('dem-hs')) map.addSource('dem-hs', { ...DEM });
       map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'dem-hs', paint: LOOK[cur].hillshade }, firstSymbol());
     }
-    map.setTerrain(is3d ? { source: 'dem', exaggeration: 1.4 } : null);
+    map.setTerrain(is3d && useTerrain ? { source: 'dem', exaggeration: 1.4 } : null);
     if (is3d) map.setSky(LOOK[cur].sky);
     applyDim();
+    watchSlow();
+  }
+
+  // 立體地形太卡就提醒一次（不自動切）：連續兩個 5 秒區間，每段都有 5 格以上超過 50ms（約每秒頓一下）。
+  // 不用「每秒畫幾次」判斷：隊伍停著時地圖本來就不用重畫，會誤判。切到背景、抽屜蓋住地圖（暫停重畫）時不算；
+  // 開地形後頭 8 秒在載圖磚，也不算。同一個分頁只問一次
+  let watching = false;
+  function watchSlow() {
+    if (watching || !(is3d && useTerrain)) return;
+    try { if (sessionStorage.getItem('qiji:terrain-asked')) return; } catch { /* 私密模式 */ }
+    watching = true;
+    let prev = 0, t0 = 0, long = 0, bad = 0;
+    const warm = performance.now() + 8000;
+    const step = (now) => {
+      if (!(is3d && useTerrain)) { watching = false; return; }
+      if (document.hidden || paused || now < warm) { prev = 0; t0 = 0; long = 0; requestAnimationFrame(step); return; }
+      if (prev && now - prev > 50) long++;
+      prev = now;
+      if (!t0) t0 = now;
+      if (now - t0 >= 5000) {
+        bad = long >= 5 ? bad + 1 : 0;
+        long = 0; t0 = now;
+        if (bad >= 2) { watching = false; askTilt(); return; }
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  function askTilt() {
+    try { sessionStorage.setItem('qiji:terrain-asked', '1'); } catch { /* 私密模式 */ }
+    import('/assets/common.js').then(({ toast }) => toast('立體地形太卡了', {
+      icon: '3D', sub: '改用傾斜（不畫山形）會順很多，設定頁可以再打開', ms: 15000,
+      action: { label: '改用傾斜', onClick: () => api.setTerrainEnabled(false) },
+    }));
   }
 
   // MapLibre 5 的鏡頭動畫被打斷時，地形高度可能停在 0（鏡頭會鑽進 3000 公尺的山裡）。
@@ -337,7 +405,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     hooks.forEach((fn) => fn(cur));
   });
 
-  return {
+  const api = {
     map,
     get style() { return cur; },
     get styleName() { return STYLES[cur].name; },
@@ -349,6 +417,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     // 跟隨模式：每一格把鏡頭中心移到 center。高度不直接貼地形（地形有細小起伏，鏡頭會上下彈），
     // 而是周圍取幾個點平均後再慢慢追，看起來就是平穩地沿著山坡移動。
     follow(center, extra = {}) {
+      if (window.__qijiPerfFlags?.has('nofollow')) return;  // 效能量測 A/B：鏡頭不動
       const now = performance.now();
       if (now < busyUntil || now < wheelUntil || held || userMove) { lastT = now; wasBusy = true; return; }  // 指北針、切 2D/3D 的動畫、手指按在地圖上、使用者縮放的慣性還沒停，跟隨先讓路
       const dt = Math.min(0.2, (now - (lastT || now)) / 1000);
@@ -362,7 +431,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
         if (k >= 1) resume = null;
       }
       let el = 0;
-      if (is3d && map.getTerrain()) {
+      if (is3d && map.getTerrain() && !window.__qijiPerfFlags?.has('noel')) {
         const d = 0.0015, D = 0.003; // 約 150、300 公尺兩圈
         const samples = [[0, 0], [d, 0], [-d, 0], [0, d], [0, -d], [D, D], [-D, D], [D, -D], [-D, -D]]
           .map(([a, b]) => map.queryTerrainElevation([center[0] + a, center[1] + b]))
@@ -435,18 +504,33 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     // 以畫面中心縮放（跟隨中點兩下、雙指點一下用；MapLibre 內建的是以手指位置為中心）
     zoomBy(d) { animate({ zoom: map.getZoom() + d, duration: 300 }); },
     resetNorth() { animate({ bearing: 0, duration: 500 }); },
+    // 抽屜全開、地圖被蓋住時暫停重畫（見 createMap 裡的說明）
+    pauseRender(on) { map._qijiPause?.(on); },
     set3d(on) {
       is3d = on;
+      window.__qiji3d = on;
+      try { map.setPixelRatio(mapDpr(on && useTerrain)); } catch { /* 舊版 MapLibre */ }
       if (styleLoaded) {
-        map.setTerrain(on ? { source: 'dem', exaggeration: 1.4 } : null);
+        map.setTerrain(on && useTerrain ? { source: 'dem', exaggeration: 1.4 } : null);
         if (on) map.setSky(LOOK[cur].sky);
       }
       if (on) { applyDim(); animate({ pitch: 60, duration: 800 }); }
       // 先把鏡頭放平，再鎖住 pitch（直接鎖會瞬間跳平）
       else { animate({ pitch: 0, duration: 600 }); setTimeout(() => { if (!is3d) applyDim(); }, 650); }
       if (!styleLoaded) applyDim();
+      watchSlow();
+    },
+    // 3D 時要不要畫立體地形（設定頁、太卡提醒用）。會記住，其他頁也跟著
+    get useTerrain() { return useTerrain; },
+    setTerrainEnabled(on) {
+      useTerrain = !!on;
+      try { localStorage.setItem(TERRAIN_KEY, useTerrain ? '1' : '0'); } catch { /* 私密模式 */ }
+      try { map.setPixelRatio(mapDpr(is3d && useTerrain)); } catch { /* 舊版 MapLibre */ }
+      if (styleLoaded) map.setTerrain(is3d && useTerrain ? { source: 'dem', exaggeration: 1.4 } : null);
+      watchSlow();
     },
   };
+  return api;
 }
 
 // 標記重疊時整理名字：靠太近的隊友只留第一個人的名字，後面加「+N」，其他人只顯示頭像。

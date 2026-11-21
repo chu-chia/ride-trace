@@ -87,6 +87,7 @@ a.li{color:inherit}
 .toast .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ink,#fff);font-weight:800;font-size:12px;flex:none;background:var(--c)}
 .toast .tx{font-size:13.5px;font-weight:600}
 .toast .tt{font-size:12px;color:var(--muted)}
+.toast .toast-act{flex:none;font:700 13px/1 inherit;color:#fff;background:var(--accent,#d9500f);border:0;border-radius:10px;padding:9px 12px;cursor:pointer}
 @keyframes tin{from{transform:translateY(-10px);opacity:.3}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.toast{animation:none}}
 

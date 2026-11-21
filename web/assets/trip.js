@@ -250,8 +250,11 @@ S.fitFallback = fitFallback; // trip-extra.js：路線載入後再框一次
 // 動畫迴圈：標記平滑移動、跟隨的人保持在畫面中間、軌跡線尾巴接著標記
 let lastTrailDraw = 0, lastDeclutter = 0;
 const gate = frameGate();
+const panelEl = $('#panel');
 function tick(now) {
   if (!gate(now)) { requestAnimationFrame(tick); return; } // 省電模式約 30 fps
+  // 手機抽屜拉到快頂（地圖只剩標題列後面一小條）：暫停地圖重畫。用實際位置判斷，拖曳往下一露出地圖就恢復
+  M.pauseRender(innerWidth <= 760 && !S.navMode && panelEl.getBoundingClientRect().top < innerHeight * 0.25);
   for (const m of S.members.values()) {
     if (!m.anim) continue;
     const k = Math.min(1, (now - m.anim.t0) / m.anim.dur);
