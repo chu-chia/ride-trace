@@ -35,7 +35,8 @@ try { for (const f of JSON.parse(localStorage.getItem('qiji:perf-flags') || '[]'
 window.__qijiPerfFlags = flags;
 const maps = [];
 function applyFlags() {
-  // blur：省電模式本來不做背景模糊（.low-power .glass），強制打開，量 glass 按鈕的負擔
+  // blur：真的看得出來的毛玻璃（底色 45% 透明、模糊 16px），量 glass 按鈕／面板的負擔。
+  // 現有 .glass 底色 90% 不透明，模糊幾乎看不出來；省電模式（.low-power .glass）更是直接不模糊
   document.documentElement.classList.toggle('perf-blur', flags.has('blur'));
   for (const m of maps) {
     try {
@@ -65,7 +66,7 @@ css.textContent = `#qiji-perf{position:fixed;z-index:2147483647;font:600 11px/1.
 border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:6px 8px;pointer-events:auto;user-select:none;-webkit-user-select:none;touch-action:manipulation}
 #qiji-perf pre{margin:0 0 4px;font:inherit;white-space:pre;max-width:240px;overflow:hidden;text-overflow:ellipsis}
 #qiji-perf canvas{display:block;width:240px;height:48px}
-html.perf-blur .glass{-webkit-backdrop-filter:blur(var(--lg-blur,20px)) saturate(var(--lg-sat,1.6))!important;backdrop-filter:blur(var(--lg-blur,20px)) saturate(var(--lg-sat,1.6))!important}
+html.perf-blur .glass{background:rgba(22,22,28,.45)!important;-webkit-backdrop-filter:blur(16px) saturate(170%)!important;backdrop-filter:blur(16px) saturate(170%)!important}
 #qiji-perf .fl{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-width:240px}
 #qiji-perf .fl button{font:600 11px/1 system-ui;color:#cfd8e6;background:#1e2633;border:1px solid #3a4558;border-radius:6px;padding:6px 7px}
 #qiji-perf .fl button[aria-pressed="true"]{background:#b45309;border-color:#f59e0b;color:#fff}
