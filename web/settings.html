@@ -15,100 +15,117 @@
 <meta name="theme-color" content="#d9500f">
 <link rel="stylesheet" href="/assets/app.css">
 <style>
-  .card h2{margin:0 0 12px;font-size:15px}
-  .card form{display:flex;flex-direction:column;gap:10px}
-  .card form label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
-  .card form input{font:inherit;font-size:15px;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
-  .preview{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-  .preview .avatar{width:48px;height:48px;font-size:19px}
-  .preview b{font-size:16px;display:block}
+  /* 版面照改版原型（ride-trace-redesign/settings.html）：iOS 設定那樣的分組列表 */
+  .page{max-width:620px;gap:0;padding-top:max(14px,env(safe-area-inset-top,0px))}
+  .hd{display:flex;align-items:center;gap:6px;margin-bottom:6px}.hd h1{font-size:22px;margin:0}
+  .ib{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;flex:none;color:var(--fg)}
+  .ib svg{width:22px;height:22px}
+  .sec-t{font-size:13px;font-weight:700;color:var(--muted);margin:18px 4px 8px;display:flex;align-items:center}
+  .new{font-size:11px;font-weight:800;color:#fff;background:var(--accent-fill);border-radius:5px;padding:1px 5px;margin-left:8px}
+  .list{background:var(--surface);border-radius:16px;overflow:hidden}
+  .list .li{display:flex;align-items:center;gap:12px;padding:11px 14px;min-height:56px;width:100%;text-align:left;border:0;border-bottom:0;background:none;color:var(--fg);font:inherit;text-decoration:none;cursor:pointer}
+  .list>*+*{border-top:1px solid var(--line)}
+  .list .li.wrap{flex-wrap:wrap;cursor:default}
+  .list .li.wrap .seg{width:100%}
+  .list .li .m{flex:1;min-width:0}
+  .list .li .m b{display:block;font-weight:600;font-size:15.5px}
+  .list .li .m span{font-size:13px;color:var(--muted)}
+  .list .li .m .u{margin-left:6px}
+  .list .li .avatar{width:38px;height:38px;font-size:15px}
+  .chev{color:var(--muted);font-size:20px;flex:none;transition:transform .2s}
+  .li[aria-expanded="true"] .chev{transform:rotate(90deg)}
+  .li-body{padding:4px 14px 14px}
+  .li-body[hidden]{display:none}
+  .li-block{padding:12px 14px}
+  /* 開關（照原型的 50×30） */
+  .sw{appearance:none;-webkit-appearance:none;width:50px;height:30px;border-radius:15px;background:var(--surface-2);position:relative;flex:none;margin:0;cursor:pointer;transition:background .2s}
+  .sw::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .2s}
+  .sw:checked{background:var(--ok)}.sw:checked::after{left:23px}
+  .sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .seg button{font-weight:600;color:var(--muted);min-height:36px;padding:4px 6px}.seg button.on{color:var(--fg)}
+  .list .li.wrap .seg{margin-top:8px}
+  form{display:flex;flex-direction:column;gap:10px}
+  form label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
+  form input{font:inherit;font-size:15px;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
   .swatches{display:flex;flex-wrap:wrap;gap:10px}
   .swatches button{width:44px;height:44px;border-radius:50%;border:0;background:var(--c);cursor:pointer;box-shadow:inset 0 0 0 2px rgba(0,0,0,.12)}
   .swatches button[aria-pressed="true"]{box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--fg)}
   .msg{font-size:13px;min-height:18px}
   .msg.ok{color:var(--ok-ink)}.msg.err{color:var(--crit-ink)}
-  .row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px;flex-wrap:wrap}
   .row code{font-size:13px;background:var(--surface-2);padding:4px 8px;border-radius:8px;overflow-wrap:anywhere;word-break:break-all;min-width:0;text-align:right}
   /* 放大 200% 時長網址會撐出水平捲動：允許換行，標題和值擠不下就上下排（UX-15） */
-  .row{flex-wrap:wrap}
   .row>span{flex:1 1 auto}
   .page{overflow-wrap:anywhere}
-  .links .lk{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:48px;padding:0 2px;border:0;border-top:1px solid var(--line);background:none;color:var(--fg);font:inherit;font-size:15px;text-decoration:none;cursor:pointer;text-align:left}
-  .links h2+.lk{border-top:0}
-  .links .lk span{color:var(--muted);font-size:18px}
-  .links .lk.out{color:var(--crit-ink);font-weight:600}
 </style>
 </head>
 <body>
 <main class="page">
-  <header class="page-top"><a class="icon-btn" href="/" aria-label="回首頁"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a><h1>設定</h1></header>
+  <header class="hd"><a class="ib" href="/" aria-label="回首頁"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a><h1>設定</h1></header>
 
-  <section class="card">
-    <h2>個人資料</h2>
-    <div class="preview"><div id="av"></div><div><b id="pvName"></b><span class="small muted" id="pvUser"></span></div></div>
-    <form id="profileF">
-      <label>暱稱（隊友在地圖上看到的名字，最多 12 字）<input id="nick" maxlength="12" required></label>
-      <div><div class="small muted" style="margin-bottom:8px">頭像顏色（地圖圖釘、軌跡線都用這個顏色）</div><div class="swatches" id="colors" role="group" aria-label="頭像顏色"></div></div>
-      <button class="btn primary" type="submit">儲存</button>
-      <div class="msg" id="profileMsg" role="status"></div>
-    </form>
-  </section>
+  <div class="sec-t">個人</div>
+  <div class="list">
+    <button type="button" class="li" data-open="prof" aria-expanded="false"><span id="av"></span><span class="m"><b id="pvName"></b><span>暱稱、頭像顏色<span id="pvUser" class="u"></span></span></span><span class="chev" aria-hidden="true">›</span></button>
+    <div class="li-body" id="prof" hidden>
+      <form id="profileF">
+        <label>暱稱（隊友在地圖上看到的名字，最多 12 字）<input id="nick" maxlength="12" required></label>
+        <div><div class="small muted" style="margin-bottom:8px">頭像顏色（地圖圖釘、軌跡線都用這個顏色）</div><div class="swatches" id="colors" role="group" aria-label="頭像顏色"></div></div>
+        <button class="btn primary" type="submit">儲存</button>
+        <div class="msg" id="profileMsg" role="status"></div>
+      </form>
+    </div>
+    <button type="button" class="li" data-open="pw" aria-expanded="false"><span class="m"><b>變更密碼</b></span><span class="chev" aria-hidden="true">›</span></button>
+    <div class="li-body" id="pw" hidden>
+      <form id="pwF">
+        <label>目前的密碼<input type="password" id="pwOld" autocomplete="current-password" required></label>
+        <label>新密碼（至少 6 個字）<input type="password" id="pwNew" autocomplete="new-password" minlength="6" required></label>
+        <label>再輸入一次新密碼<input type="password" id="pwNew2" autocomplete="new-password" minlength="6" required></label>
+        <button class="btn primary" type="submit">變更密碼</button>
+        <div class="msg" id="pwMsg" role="status"></div>
+      </form>
+    </div>
+  </div>
 
-  <section class="card">
-    <h2>通知</h2>
-    <p class="small muted" style="margin:-4px 0 12px">隊友 SOS、失聯、落隊會推播到這台裝置。每台手機、電腦要各自開一次；行程頁的「更多 → 裝置與通知」也是同一個開關。</p>
-    <div id="pushCard" style="display:flex;flex-direction:column;gap:10px"></div>
-  </section>
+  <div class="sec-t">導航<span class="new">新</span></div>
+  <div class="list">
+    <label class="li"><span class="m"><b>有路線時自動進導航</b><span>按「開始行程」後直接進第一人稱導航</span></span><input type="checkbox" class="sw" id="navAuto"></label>
+    <div class="li wrap"><span class="m"><b>導航視角</b><span>傾斜越多越耗電；導航時用雙指上下滑也能調，會記住</span></span><div class="seg" id="navPitch" role="group" aria-label="導航視角"><button type="button" data-v="0">平面</button><button type="button" data-v="45">45°</button><button type="button" data-v="60">60°（建議）</button></div></div>
+    <label class="li"><span class="m"><b>語音提示</b><span>路口前 400 公尺、80 公尺各提醒一次</span></span><input type="checkbox" class="sw" id="navVoice"></label>
+    <label class="li"><span class="m"><b>顯示速限與超速提醒</b><span>有速限資料的路段才會顯示</span></span><input type="checkbox" class="sw" id="navLimit"></label>
+  </div>
 
-  <section class="card">
-    <h2>變更密碼</h2>
-    <form id="pwF">
-      <label>目前的密碼<input type="password" id="pwOld" autocomplete="current-password" required></label>
-      <label>新密碼（至少 6 個字）<input type="password" id="pwNew" autocomplete="new-password" minlength="6" required></label>
-      <label>再輸入一次新密碼<input type="password" id="pwNew2" autocomplete="new-password" minlength="6" required></label>
-      <button class="btn primary" type="submit">變更密碼</button>
-      <div class="msg" id="pwMsg" role="status"></div>
-    </form>
-  </section>
+  <div class="sec-t">地圖</div>
+  <div class="list">
+    <div class="li wrap"><span class="m"><b>拖曳地圖後自動回到跟隨</b><span>行程頁、戰情室適用；回放不會自動回去。縮放、旋轉不會離開跟隨</span></span><div class="seg" id="resume" role="group" aria-label="自動回到跟隨"><button type="button" data-v="0">不自動</button><button type="button" data-v="10">10 秒</button><button type="button" data-v="15">15 秒</button><button type="button" data-v="30">30 秒</button></div></div>
+    <label class="li"><span class="m"><b>省電模式</b><span>地圖 30 fps、解析度最多 2 倍、面板不做背景模糊、戰情室不自動旋轉（手機預設開啟）</span></span><input type="checkbox" class="sw" id="lowPower"></label>
+  </div>
 
-  <section class="card">
-    <h2>地圖跟隨</h2>
-    <label class="row" style="cursor:pointer"><span>拖曳地圖後自動回到跟隨</span>
-      <select id="resume" style="width:auto"><option value="0">不自動</option><option value="10">10 秒</option><option value="15">15 秒</option><option value="30">30 秒</option></select></label>
-    <p class="small muted" style="margin:10px 0 0">行程頁、戰情室適用；回放不會自動回去。縮放、旋轉不會離開跟隨。</p>
-  </section>
+  <div class="sec-t">通知與裝置</div>
+  <div class="list">
+    <div class="li-block"><div class="small muted" style="margin-bottom:10px">隊友 SOS、失聯、落隊會推播到這台裝置。每台手機、電腦要各自開一次；行程頁的「更多 → 裝置與通知」也是同一個開關。</div><div id="pushCard" style="display:flex;flex-direction:column;gap:10px"></div></div>
+    <button type="button" class="li" data-open="tr" aria-expanded="false"><span class="m"><b>Traccar Client</b><span>iPhone 背景定位用</span></span><span class="chev" aria-hidden="true">›</span></button>
+    <div class="li-body" id="tr" hidden>
+      <div class="row"><span>伺服器網址</span><code id="trUrl"></code></div>
+      <div class="row" style="margin-top:8px"><span>裝置 ID</span><code id="trId">…</code></div>
+      <p class="small muted" style="margin:10px 0 0">iPhone 背景定位要用 Traccar Client，把上面兩個值填進去；裝置 ID 是你專屬的，不要給別人。</p>
+    </div>
+  </div>
 
-  <section class="card">
-    <h2>省電模式</h2>
-    <label class="row" style="cursor:pointer"><span>地圖用較低的更新頻率與畫質</span><input type="checkbox" id="lowPower" style="width:20px;height:20px;accent-color:var(--accent-fill)"></label>
-    <p class="small muted" style="margin:10px 0 0">手機預設開啟：地圖 30 fps、解析度最多 2 倍、面板不做背景模糊、戰情室不自動旋轉。騎車時只要用 Traccar Client 回報位置，網頁不必一直開著。</p>
-  </section>
-
+  <div class="sec-t">其他</div>
   <!-- UX-59：地圖頁固定深色（跟底圖），非地圖頁跟系統 -->
-  <section class="card" id="appearance">
-    <h2>外觀（深色／淺色）</h2>
-    <p class="small muted" style="margin:0 0 8px">騎跡沒有自己的深淺色開關，規則固定是這樣：</p>
-    <ul class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;line-height:1.55">
-      <li><b>地圖頁固定深色</b>：騎乘、規劃、回放、戰情室、足跡。夜裡、隧道裡看不刺眼，深色底圖上的隊友圖釘也比較清楚。不跟手機或電腦的系統設定切換。</li>
-      <li>在地圖頁右上角把底圖切成「淺色」時，面板會一起變淺色；切回深色或衛星又變回深色。</li>
-      <li><b>其他頁面跟著系統</b>：首頁、設定、登入、關於，手機或電腦設成深色就是深色，淺色就是淺色。</li>
-    </ul>
-  </section>
-
-  <section class="card">
-    <h2>Traccar Client</h2>
-    <div class="row"><span>伺服器網址</span><code id="trUrl"></code></div>
-    <div class="row" style="margin-top:8px"><span>裝置 ID</span><code id="trId">…</code></div>
-    <p class="small muted" style="margin:10px 0 0">iPhone 背景定位要用 Traccar Client，把上面兩個值填進去；裝置 ID 是你專屬的，不要給別人。</p>
-  </section>
-
-  <!-- 首頁沒有帳號選單了（頭像直接進設定），關於、管理後台、登出都放這裡 -->
-  <section class="card links">
-    <h2>其他</h2>
-    <a href="/about" class="lk">關於騎跡<span aria-hidden="true">›</span></a>
-    <a href="/admin" class="lk" id="adminLink" hidden>管理後台<span aria-hidden="true">›</span></a>
-    <button type="button" class="lk out" id="logout">登出</button>
-  </section>
+  <div class="list" id="appearance">
+    <button type="button" class="li" data-open="look" aria-expanded="false"><span class="m"><b>外觀（深色／淺色）</b><span>地圖頁固定深色，其他頁跟著系統</span></span><span class="chev" aria-hidden="true">›</span></button>
+    <div class="li-body" id="look" hidden>
+      <ul class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;line-height:1.55">
+        <li><b>地圖頁固定深色</b>：騎乘、規劃、回放、戰情室、足跡。夜裡、隧道裡看不刺眼，深色底圖上的隊友圖釘也比較清楚。不跟手機或電腦的系統設定切換。</li>
+        <li>在地圖頁右上角把底圖切成「淺色」時，面板會一起變淺色；切回深色或衛星又變回深色。</li>
+        <li><b>其他頁面跟著系統</b>：首頁、設定、登入、關於，手機或電腦設成深色就是深色，淺色就是淺色。</li>
+      </ul>
+    </div>
+    <a href="/about" class="li"><span class="m"><b>關於騎跡</b></span><span class="chev" aria-hidden="true">›</span></a>
+    <a href="/admin" class="li" id="adminLink" hidden><span class="m"><b>管理後台</b></span><span class="chev" aria-hidden="true">›</span></a>
+    <button type="button" class="li" id="logout"><span class="m"><b style="color:var(--crit-ink)">登出</b></span></button>
+  </div>
 </main>
 <script type="module">
 import { api, $, esc, avatar, LOW_POWER } from '/assets/common.js';
@@ -117,8 +134,27 @@ import { mountPushCard, pushEndpoint, dropLocalPush } from '/assets/push.js';
 import { clearSwrCache } from '/assets/swr.js';
 mountPushCard($('#pushCard'));  // 和行程頁同一張推播卡（UX-08）
 $('#lowPower').checked = LOW_POWER;
-$('#resume').value = String(resumeMs() / 1000);
-$('#resume').onchange = (e) => { try { localStorage.setItem('qiji:resume', e.target.value); } catch { /* 私密模式 */ } };
+// 分段按鈕（照原型）：點了就存，按鈕狀態跟著換
+function seg(el, value, save) {
+  const paint = (v) => el.querySelectorAll('[data-v]').forEach((b) => { const on = b.dataset.v === String(v); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+  paint(value);
+  el.onclick = (e) => { const b = e.target.closest('[data-v]'); if (!b) return; paint(b.dataset.v); save(b.dataset.v); };
+}
+const store = (k, v) => { try { localStorage.setItem(k, v); } catch { /* 私密模式 */ } };
+const read = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+seg($('#resume'), resumeMs() / 1000, (v) => store('qiji:resume', v));
+// 導航設定（導航頁讀這幾個值）：預設自動進導航、45°、語音開、速限開
+// 導航時用雙指調過傾斜，會存成自訂角度：多一顆「自訂 N°」
+{ const v = read('qiji:nav:pitch', '60');
+  if (!['0', '45', '60'].includes(v)) $('#navPitch').insertAdjacentHTML('beforeend', `<button type="button" data-v="${v}">自訂 ${v}°</button>`);
+  seg($('#navPitch'), v, (x) => store('qiji:nav:pitch', x)); }
+for (const [id, key] of [['#navAuto', 'qiji:nav:auto'], ['#navVoice', 'qiji:nav:voice'], ['#navLimit', 'qiji:nav:limit']]) {
+  $(id).checked = read(key, '1') === '1';
+  $(id).onchange = (e) => store(key, e.target.checked ? '1' : '0');
+}
+// 可展開的列：個人資料、變更密碼、Traccar、外觀
+document.querySelectorAll('[data-open]').forEach((b) => { b.onclick = () => { const body = document.getElementById(b.dataset.open), open = body.hidden; body.hidden = !open; b.setAttribute('aria-expanded', String(open)); }; });
+if (location.hash === '#appearance') { $('#look').hidden = false; $('[data-open="look"]').setAttribute('aria-expanded', 'true'); }
 $('#lowPower').onchange = (e) => { try { localStorage.setItem('qiji:lowpower', e.target.checked ? '1' : '0'); } catch { /* 私密模式 */ } document.documentElement.classList.toggle('low-power', e.target.checked); };
 const me = await api('/api/me');
 const { colors, named } = await api('/api/me/palette');

@@ -32,7 +32,7 @@ $('#back').href = '/';
 
 const EV = { lost: 'var(--crit)', back: 'var(--ok)', start: 'var(--accent)', end: 'var(--muted)', stop: 'var(--muted)', join: 'var(--accent)', kick: 'var(--warn)', behind: 'var(--warn)', ahead: 'var(--warn)', regroup: 'var(--ok)', arrive: 'var(--ok)', allin: 'var(--ok)', speedcam: 'var(--warn)', roadevent: 'var(--warn)', weather: 'var(--accent)', msg: 'var(--accent)', chat: 'var(--accent)', mark: 'var(--warn)', sos: 'var(--crit)', sos_off: 'var(--ok)', route: 'var(--accent)', offroute: 'var(--warn)', onroute: 'var(--ok)', reroute: 'var(--accent)', stuck: 'var(--warn)', moving: 'var(--ok)', town: 'var(--accent)' };
 // 時間軸事件點裡的小圖示（照原型：彩色小圓＋白色符號）
-const GLYPH = { start: '▶', moving: '▶', end: '■', stop: '‖', lost: '!', back: '✓', join: '+', kick: '✕', behind: '!', ahead: '»', regroup: '⚑', arrive: '★', allin: '★', speedcam: '◉', roadevent: '⚠', weather: '☂', msg: '✉', chat: '✉', mark: '⚑', sos: 'S', sos_off: '✓', route: '↺', offroute: '!', onroute: '✓', reroute: '↺', stuck: '!' };
+const GLYPH = { start: '▶', moving: '▶', end: '■', stop: '‖', lost: '!', back: '✓', join: '+', kick: '✕', behind: '!', ahead: '»', regroup: '⚑', arrive: '★', allin: '★', speedcam: '◉', roadevent: '!', weather: '雨', msg: '✉', chat: '✉', mark: '⚑', sos: 'S', sos_off: '✓', route: '↺', offroute: '!', onroute: '✓', reroute: '↺', stuck: '!' };
 const SPEED_STOPS = [0, '#5e60ce', 20, '#4ea8de', 40, '#56cfe1', 60, '#ffd166', 90, '#ef476f'];
 const ALT_STOPS = [0, '#2a9d8f', 800, '#8ab17d', 1600, '#e9c46a', 2400, '#f4a261', 3300, '#e76f51'];
 const PLAY = '<svg viewBox="0 0 12 12"><path d="M3 1.5v9l7.5-4.5z" fill="currentColor"/></svg>';
@@ -285,7 +285,7 @@ function drawTicks() {
   const groups = [...bins.values()].sort((a, c) => a.k - c.k);
   box.innerHTML = groups.map((g, i) => {
     const x = (g.k + 0.5) * GAP, e = g.items[0];
-    if (g.items.length === 1) return `<button type="button" class="tick" style="left:${x}px;--c:${EV[e.type] || 'var(--muted)'}" data-t="${e.ts}" title="${esc(evLabel(e))}" aria-label="${esc(evLabel(e))}"><span aria-hidden="true">${GLYPH[e.type] || '•'}</span></button>`;
+    if (g.items.length === 1) return `<button type="button" class="tick" style="left:${x}px;--c:${EV[e.type] || 'var(--muted)'}" data-t="${e.ts}" title="${esc(evLabel(e))}" aria-label="${esc(evLabel(e))}"><span aria-hidden="true">${GLYPH[e.type] || '•'}\uFE0E</span></button>`;
     const sos = g.items.some((x2) => x2.type === 'sos');
     return `<button type="button" class="tick group${sos ? ' sos' : ''}" style="left:${x}px" data-g="${i}" aria-haspopup="true" aria-label="${clock(g.items[0].ts)}～${clock(g.items.at(-1).ts)} 共 ${g.items.length} 個事件，點一下展開">${g.items.length}</button>`;
   }).join('');

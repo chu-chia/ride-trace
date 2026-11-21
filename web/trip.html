@@ -114,13 +114,16 @@
   .rideActs .goNav+#rideGps{flex:1;font-size:13px}
   .kv4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;margin:4px 0 10px}
   .kv4 b{display:block;font-size:19px}.kv4 span{font-size:12px;color:var(--muted)}
-  .done-l{font-size:14px;margin:0 0 4px;color:var(--muted)}
-  .acts2{display:flex;gap:8px;margin-top:8px}.acts2 .btn{flex:1}
+  .done-l{font-size:14px;margin:0 0 4px;color:var(--muted);display:flex;align-items:flex-start;gap:6px}
+  .done-l b{color:var(--fg)}
+  .dl-ico{width:17px;height:17px;flex:none;margin-top:2px}.dl-ico.ok{color:var(--ok)}.dl-ico.star{color:#ffb020}
+  body.trip-ended .sosFab{display:none!important}
+  .acts2{display:flex;gap:8px;margin-top:8px}.acts2 .btn{flex:1;text-decoration:none}.acts2 .btn:not(.primary){color:var(--fg)}
   #tabs{margin-top:8px}
   /* 更多：圖示方格（照原型），點了在下面打開那一塊 */
   .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
   .tiles button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:0;border-radius:14px;background:var(--surface-2);color:var(--fg);font:inherit;min-height:78px;font-size:12.5px;font-weight:600;text-align:center;padding:6px 2px;cursor:pointer}
-  .tiles button .e{font-size:20px;line-height:1}
+  .tiles button .e{width:24px;height:24px}
   .tiles button.on{box-shadow:inset 0 0 0 2px var(--accent)}
   .sec-t{font-size:13px;font-weight:700;color:var(--muted);margin:10px 2px 0}
   .olist{background:var(--surface-2);border-radius:16px;overflow:hidden}
@@ -233,7 +236,7 @@
   <div class="panel-body" data-b="msg" hidden><div class="qx-pop" id="msgContent"></div></div>
   <div class="panel-body" data-b="events" hidden><button class="subBack" data-back-more>‹ 返回更多</button><div id="evFilter" aria-label="篩選事件"></div><div id="events"></div></div>
   <div class="panel-body" data-b="mark" hidden><button class="subBack" data-back-more>‹ 返回更多</button><div class="qx-pop" id="markContent"></div></div>
-  <div class="panel-body" data-b="more" hidden><div class="tiles" id="moreNav"><button data-open-tab="wp"><span class="e" aria-hidden="true">🚩</span>集合點</button><button data-open-tab="events"><span class="e" aria-hidden="true">📋</span>事件</button><button data-open-tab="mark"><span class="e" aria-hidden="true">📍</span>標註路況</button><button data-more-tab="cam"><span class="e" aria-hidden="true">📷</span>測速照相</button><button data-more-tab="lag"><span class="e" aria-hidden="true">⏱️</span>落隊警示</button><button class="on" data-more-tab="invite"><span class="e" aria-hidden="true">🔗</span>邀請隊友</button><button data-more-tab="report"><span class="e" aria-hidden="true">🔔</span>裝置與通知</button><button data-more-tab="war"><span class="e" aria-hidden="true">🖥️</span>戰情室</button></div>
+  <div class="panel-body" data-b="more" hidden><div class="tiles" id="moreNav"><button data-open-tab="wp"><svg class="e" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>集合點</button><button data-open-tab="events"><svg class="e" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h4"/></svg>事件</button><button data-open-tab="mark"><svg class="e" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>標註路況</button><button data-more-tab="cam"><svg class="e" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>測速照相</button><button data-more-tab="lag"><svg class="e" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M10 2h4"/></svg>落隊警示</button><button class="on" data-more-tab="invite"><svg class="e" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>邀請隊友</button><button data-more-tab="report"><svg class="e" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/></svg>裝置與通知</button><button data-more-tab="war"><svg class="e" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>戰情室</button></div>
     <section class="moreSection" data-more="invite">
 
     <div class="card" style="display:flex;flex-direction:column;gap:10px;text-align:center">

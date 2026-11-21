@@ -128,6 +128,28 @@ function zone() {
   if (!z) { z = document.createElement('div'); z.className = 'toasts'; document.body.append(z); }
   return z;
 }
+// 通知往上滑掉（照 iOS）：手指跟著往上走，放開時往上超過 30px 或甩得夠快就收起來，不然彈回去；左右滑不搶
+export function swipeAway(el, onGone) {
+  let y0 = null, x0 = 0, dy = 0, t0 = 0, pid = null, drag = false;
+  el.style.touchAction = 'none';
+  el.addEventListener('pointerdown', (e) => { if (e.target.closest('button,a')) return; y0 = e.clientY; x0 = e.clientX; dy = 0; t0 = performance.now(); pid = e.pointerId; drag = false; });
+  el.addEventListener('pointermove', (e) => {
+    if (y0 == null || e.pointerId !== pid) return;
+    dy = Math.min(0, e.clientY - y0);
+    if (!drag && Math.abs(e.clientY - y0) > 6 && Math.abs(e.clientY - y0) > Math.abs(e.clientX - x0)) { drag = true; try { el.setPointerCapture(pid); } catch { /* 略過 */ } }
+    if (!drag) return;
+    el.style.transition = 'none'; el.style.transform = `translateY(${dy}px)`; el.style.opacity = String(Math.max(0.2, 1 + dy / 120));
+  });
+  const end = () => {
+    if (y0 == null) return; y0 = null;
+    if (!drag) return;
+    const fast = -dy / Math.max(1, performance.now() - t0) > 0.4;
+    el.style.transition = 'transform .2s ease, opacity .2s ease';
+    if (dy < -30 || fast) { el.style.transform = 'translateY(-140%)'; el.style.opacity = '0'; setTimeout(() => { el.style.transition = el.style.transform = el.style.opacity = ''; onGone?.(); }, 200); }
+    else { el.style.transform = ''; el.style.opacity = ''; }
+  };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
 export function toast(text, { icon = '騎', color = '#d9500f', sub = '' } = {}) {
   const el = document.createElement('div');
   el.className = 'toast';
@@ -136,6 +158,7 @@ export function toast(text, { icon = '騎', color = '#d9500f', sub = '' } = {}) 
   z.prepend(el);
   while (z.children.length > 3) z.lastChild.remove();
   setTimeout(() => el.remove(), 5000);
+  swipeAway(el, () => el.remove());
 }
 
 // 訊號弱：移動中 30 秒沒新點；停著（< 5 km/h）3 分鐘（停著時手機本來就少送，甚至休眠不送；10 分鐘才算失聯）
