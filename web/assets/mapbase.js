@@ -386,10 +386,23 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
       const hx = Math.max(...pts.map((p) => Math.abs(p[0] - cx))), hy = Math.max(...pts.map((p) => Math.abs(p[1] - cy)));
       const b = new maplibregl.LngLatBounds([cx - hx, cy - hy], [cx + hx, cy + hy]);
-      const cam = map.cameraForBounds(b, { padding, maxZoom, bearing: map.getBearing() });
+      // 地圖已經記著上一格的留白（follow 每格都把 padding 交給 jumpTo），cameraForBounds 會再疊一次：只給還沒套上的差額，
+      // 不然全隊會少拉近約半級，大家只佔畫面一半（回放頁的同一個問題，見 replay.js fitAll）
+      const cur = map.getPadding(), extra = {};
+      for (const k of ['top', 'bottom', 'left', 'right']) extra[k] = Math.max(0, (padding?.[k] || 0) - (cur[k] || 0));
+      const cam = map.cameraForBounds(b, { padding: extra, maxZoom, bearing: map.getBearing() });
       const c = { lng: cx, lat: cy };
       // 鏡頭傾斜很大、畫面又很高（例如手機直拿看戰情室電腦版）時 cameraForBounds 會算不出來，改用平面換算
       let tz = cam?.zoom ?? flatZoom(b, padding, maxZoom, map);
+      // 再用畫面上的實際位置檢查一次（傾斜＋旋轉時經緯度框和螢幕框對不太上）：有人超出可視區，就照超出的比例拉遠
+      {
+        const W = map.getContainer().clientWidth, H = map.getContainer().clientHeight;
+        const L = padding?.left || 0, R = W - (padding?.right || 0), T = padding?.top || 0, B = H - (padding?.bottom || 0);
+        const ps = pts.map((p) => map.project(p)), mx = (L + R) / 2, my = (T + B) / 2;
+        let r = 0;
+        for (const q of ps) r = Math.max(r, Math.abs(q.x - mx) / Math.max(20, (R - L) / 2 - 24), Math.abs(q.y - my) / Math.max(20, (B - T) / 2 - 24));
+        if (r > 1) tz = Math.min(tz, map.getZoom() - Math.log2(r) - 0.05);
+      }
       const now = performance.now();
       const dt = Math.min(0.2, (now - (grpT || now)) / 1000);
       grpT = now;
