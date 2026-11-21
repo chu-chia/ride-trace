@@ -101,6 +101,16 @@ function recolorNavy(map) {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'text-size', ['interpolate', ['linear'], ['zoom'], ...size]);
   }
 }
+// 地名、路名、地標只顯示中文（沒有中文名才用原名）：OpenFreeMap 預設是「英文＋中文」兩行。
+// 照改版原型 maptools.js：只換底圖（openmaptiles）裡有用到 name 的文字，道路編號（ref）和各頁自己的圖層不動
+function zhLabels(map) {
+  const zh = ['coalesce', ['get', 'name:zh-Hant'], ['get', 'name:zh'], ['get', 'name']];
+  for (const l of map.getStyle().layers) {
+    if (l.type !== 'symbol' || l.source !== 'openmaptiles') continue;
+    const tf = map.getLayoutProperty(l.id, 'text-field');
+    if (tf && /name/.test(JSON.stringify(tf))) map.setLayoutProperty(l.id, 'text-field', zh);
+  }
+}
 const DEM = {
   // maxzoom 12：更細的地形放大用就好，圖磚請求少很多（手機流量、電力，也是「地圖載入中」拖很久的主因，UX-12）
   type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 12,
@@ -170,6 +180,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       // 省電模式（common.js 在 <html> 加 .low-power）：手機 3 倍螢幕只畫 2 倍，像素少一半以上
       pixelRatio: document.documentElement.classList.contains('low-power') ? Math.min(devicePixelRatio, 2) : devicePixelRatio,
       fadeDuration: document.documentElement.classList.contains('low-power') ? 0 : 300, // 省電：文字不做淡入（淡入期間會一直重畫）
+      // 反鋸齒（MSAA）：斜的路線、山的稜線、立體建築邊緣才不會一格一格的。手機預設是省電模式，也一律開（不然 iPhone 上最明顯）
+      canvasContextAttributes: { antialias: true },  // MapLibre 5：反鋸齒要寫在這裡
       maxPitch: 80, attributionControl: false,  // 來源標示統一放在「關於網頁」（設定頁最下面），地圖右下角不放 ⓘ
       dragRotate: interactive3d, pitchWithRotate: interactive3d, touchPitch: interactive3d,
     });
@@ -319,6 +331,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   map.on('style.load', () => {
     styleLoaded = true;
     if (cur === 'navy') recolorNavy(map);
+    zhLabels(map);
     applyTerrain();
     applyBuildings();
     hooks.forEach((fn) => fn(cur));
