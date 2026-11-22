@@ -612,22 +612,36 @@ function animatePanel(panel, toSmall) {
   panelAnim?.finish?.();
   const R = 20, ease = cssVar('--ease-spring'), dur = 520;
   const kids = () => [...panel.children].filter((el) => !el.matches('.panel-head,.panel-mini,.handle,.keep'));
+  // 標題列上的按鈕（收合鈕、分享…）跟著裁切的右邊一起移動，不要先被切掉、動畫完才跳到新位置
+  const ctrls = [...panel.querySelectorAll('.panel-head button,.panel-head a')];
+  const rects = () => ctrls.map((el) => el.getBoundingClientRect());
+  const slide = (from, to, back) => ctrls.forEach((el, i) => {
+    const f = from[i], t = to[i];
+    if (!f.width || !t.width) return;                  // 其中一個狀態看不到（隱藏）就不動
+    const dx = t.left - f.left, dy = t.top - f.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    const moved = `translate(${dx}px,${dy}px)`;
+    el.animate(back ? [{ transform: moved }, { transform: 'none' }] : [{ transform: 'none' }, { transform: moved }], { duration: dur, easing: ease, fill: back ? 'backwards' : 'forwards' });
+  });
   if (toSmall) {
-    const full = panel.getBoundingClientRect();
+    const full = panel.getBoundingClientRect(), r0 = rects();
     panel.classList.add('small');                      // 量目標大小
-    const sm = panel.getBoundingClientRect();
+    const sm = panel.getBoundingClientRect(), r1 = rects();
     panel.classList.add('closing');                    // 版面先維持展開
     const cut = `inset(0px ${Math.max(0, full.width - sm.width)}px ${Math.max(0, full.height - sm.height)}px 0px round ${R}px)`;
     kids().forEach((el) => el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-out', fill: 'forwards' }));
+    slide(r0, r1, false);
     const a = panel.animate([{ clipPath: `inset(0px 0px 0px 0px round ${R}px)` }, { clipPath: cut }], { duration: dur, easing: ease });
     panelAnim = a;
-    const done = () => { panel.classList.remove('closing'); kids().forEach((el) => el.getAnimations().forEach((x) => x.cancel())); if (panelAnim === a) panelAnim = null; };
+    const done = () => { panel.classList.remove('closing'); [...kids(), ...ctrls].forEach((el) => el.getAnimations().forEach((x) => x.cancel())); if (panelAnim === a) panelAnim = null; };
     a.onfinish = done; a.oncancel = done;
   } else {
-    const sm = panel.getBoundingClientRect();
+    const sm = panel.getBoundingClientRect(), r0 = rects();
     panel.classList.remove('small');
-    const full = panel.getBoundingClientRect();
+    const full = panel.getBoundingClientRect(), r1 = rects();
     const cut = `inset(0px ${Math.max(0, full.width - sm.width)}px ${Math.max(0, full.height - sm.height)}px 0px round ${R}px)`;
+    // 展開：按鈕從收合時的位置滑回來（版面已經是展開的，所以從 r0−r1 的位移開始）
+    ctrls.forEach((el, i) => { const f = r0[i], t = r1[i]; if (!f.width || !t.width) return; const dx = f.left - t.left, dy = f.top - t.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return; el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { duration: dur, easing: ease, fill: 'backwards' }); });
     const a = panel.animate([{ clipPath: cut }, { clipPath: `inset(0px 0px 0px 0px round ${R}px)` }], { duration: dur, easing: ease });
     panelAnim = a;
     // 內容晚一點出來、從上面一點點滑下來（像 iOS 展開卡片）
