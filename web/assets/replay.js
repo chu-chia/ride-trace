@@ -513,6 +513,9 @@ $('#events').addEventListener('click', () => { if (NARROW.matches) PANEL.set(tru
 /* ---------- 鏡頭跟誰（抽屜裡的一排；橫向和電腦用左欄的全隊狀態） ---------- */
 const TEAM_ICO = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 19c.6-3.4 3.3-5.3 6.5-5.3s5.9 1.9 6.5 5.3z"/><circle cx="17" cy="9" r="2.5" opacity=".7"/><path d="M16 13.8c2.9 0 4.9 1.6 5.5 4.6h-4.2c-.3-1.8-1.1-3.4-2.4-4.5z" opacity=".7"/></svg>';
 $('#fol').innerHTML = `<button type="button" data-f="all">${TEAM_ICO}全隊</button>` + riders.map((m) => `<button type="button" data-f="${esc(m.uid)}">${avatar(m)}${esc(m.nickname)}</button>`).join('');
+// 騎士比畫面寬：右邊（或左邊）淡出，看得出來還可以往旁邊滑
+const folFade = () => { const f = $('#fol'), more = f.scrollWidth - f.clientWidth; f.classList.toggle('more-r', more > 2 && f.scrollLeft < more - 2); f.classList.toggle('more-l', f.scrollLeft > 2); };
+$('#fol').addEventListener('scroll', folFade, { passive: true }); addEventListener('resize', folFade); requestAnimationFrame(folFade);
 $('#fol').onclick = (e) => { const b = e.target.closest('[data-f]'); if (!b) return; if (b.dataset.f === 'all') setFollow('all'); else pick(b.dataset.f); };
 function renderFol() {
   $$('#fol [data-f]').forEach((b) => {
