@@ -379,12 +379,19 @@ function stageOf() {
   if (t.status === 'ended') return 'done';
   if (t.status === 'live') return me && !me.u.active && me.u.role !== 'viewer' ? 'done' : 'ride';  // 只看的人本來就不在紀錄裡，照樣看騎乘畫面  // 自己結束紀錄了：自己這邊算結束
   // 集合：至少兩個人在分享位置，或有人已經到集合點（只有自己一直開著 Traccar 不算，不然每趟準備中的行程都會變集合）
-  const meet = (S.wps || []).find((w) => w.kind === 'meet') || (S.wps || [])[0];
+  const meet = meetPoint();
   const atMeet = meet && [...S.members.values()].some((m) => statusOf(m) !== 'none' && statusOf(m) !== 'done' && hav(meet.lat, meet.lon, +m.state.lat, +m.state.lon) <= (meet.radius_m || 150) + 50);
   return sharing() >= 2 || atMeet ? 'gather' : 'prep';
 }
 // 路線摘要（起終點、公里、分鐘）：路線換了才重抓
 let routeSum = null, routeFor;
+// 集合點：團主設的集合點；沒設就用路線起點（以前拿第一個停靠站當集合點，全隊在起點卻顯示「0/3 人到關渡宮」）
+function meetPoint() {
+  const m = (S.wps || []).find((w) => w.kind === 'meet');
+  if (m) return m;
+  const p0 = routeSum?.points?.[0];
+  return p0 && Number.isFinite(+p0.lat) ? { name: p0.name || '起點', lat: +p0.lat, lon: +p0.lon, radius_m: 150, implicit: true } : null;
+}
 function loadRouteSum() {
   const rid = S.trip?.route || '';
   if (rid === routeFor) return;
@@ -406,7 +413,7 @@ function renderStage() {
     const others = list.filter((m) => m.u.uid !== S.me).map((m) => m.u.nickname);
     const p = routeSum?.points || [], sum = routeSum?.summary;
     const routeTxt = sum ? `${esc(p[0]?.name || '起點')} → ${esc(p.at(-1)?.name || '終點')}・${sum.km >= 10 ? Math.round(sum.km) : (+sum.km).toFixed(1)} 公里・約 ${sum.min} 分` : '還沒有路線（不規劃也可以，當天就自由騎）';
-    const meet = (S.wps || []).find((w) => w.kind === 'meet') || (S.wps || [])[0];
+    const meet = meetPoint();
     const startBtn = owner ? '<button class="btn main green" id="startBtn">開始行程</button>' : '';
     const waitBtn = `<button class="btn main wait" disabled>等 ${esc(ownerName)} 按開始…</button>`;
     let html;
@@ -419,7 +426,7 @@ function renderStage() {
         <div class="check">
           ${ci(!!sum, '規劃路線', routeTxt, owner ? (sum ? '修改' : '規劃 ›') : '看', 'cRoute')}
           ${ci(n > 1, '邀請隊友', invTxt, n > 1 ? '再邀' : '邀請 ›', 'cInvite')}
-          ${ci(!!meet, '集合點', meet ? esc(meet.name) : '還沒設定（在地圖上點一下就能加）', meet ? '看' : (owner ? '設定 ›' : '看'), 'cMeet')}
+          ${ci(!!meet, '集合點', meet ? (meet.implicit ? `沒另外設，在起點「${esc(meet.name)}」集合` : esc(meet.name)) : '還沒設定（在地圖上點一下就能加）', meet ? (meet.implicit && owner ? '改 ›' : '看') : (owner ? '設定 ›' : '看'), 'cMeet')}
         </div>
         ${owner
           ? (todo ? `<button class="btn main primary" id="todoBtn" data-go="${todo[0]}">${todo[1]}</button><p class="why">也可以不等，<button type="button" class="linkBtn" id="startBtn">直接開始行程</button>（會通知全隊）</p>`
