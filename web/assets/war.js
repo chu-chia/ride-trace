@@ -146,6 +146,8 @@ window.addEventListener('resize', () => { if (!mobile.matches) restoreLayout(); 
 $('#tripLink').href = `/trip?id=${encodeURIComponent(tid)}`;
 // 觀看連結：沒有行程頁、首頁可以回，也不能編輯版面以外的事
 if (WATCH) { $('#tripLink').hidden = true; document.querySelectorAll('.head .icon-btn[href="/"]').forEach((a) => { a.hidden = true; }); }
+// 返回：從行程頁進來就回行程頁（data-back 用 history.back）；直接開網址時備用回這趟的行程頁
+document.querySelectorAll('.war-back').forEach((a) => { if (WATCH) a.hidden = true; else a.href = `/trip?id=${encodeURIComponent(tid)}`; });
 styleMenu(M, $('#mapStyle'));
 // 電腦版也有 3D 鈕和指北針（跟手機版一樣）
 $('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };

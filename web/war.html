@@ -35,8 +35,8 @@
 <div class="mapwrap"><div id="map"></div></div>
 <div class="war-stage" id="stage">
   <header class="war-panel glass head" data-panel="head">
-    <div class="panel-top panel-grip"><a class="icon-btn" href="/" data-icon="back" aria-label="回首頁"></a><div class="head-copy"><b id="name">載入行程中</b><span class="sub" id="sub">連線中…</span></div><span class="clock num" id="clock"></span></div>
-    <div class="head-actions panel-body"><a class="panel-act" id="tripLink" href="/" data-icon="replay">行程頁</a><button class="panel-act" id="editLayout" type="button" aria-pressed="false" data-icon="edit">編輯版面</button><button class="panel-act" id="resetLayout" type="button" data-icon="reset">重設</button></div>
+    <div class="panel-top panel-grip"><a class="icon-btn war-back" href="/" data-back data-icon="back" aria-label="返回"></a><div class="head-copy"><b id="name">載入行程中</b><span class="sub" id="sub">連線中…</span></div><span class="clock num" id="clock"></span></div>
+    <div class="head-actions panel-body"><a class="panel-act" id="tripLink" href="/" data-back data-back-to="/trip" data-icon="replay">行程頁</a><button class="panel-act" id="editLayout" type="button" aria-pressed="false" data-icon="edit">編輯版面</button><button class="panel-act" id="resetLayout" type="button" data-icon="reset">重設</button></div>
     <button class="icon-btn panel-toggle" data-icon="collapse" aria-label="收合行程資訊" aria-expanded="true" type="button"></button><div class="panel-resize" role="button" aria-label="縮放行程資訊面板"></div>
   </header>
   <section class="war-panel glass cards" data-panel="cards" aria-label="騎士清單">
@@ -58,13 +58,13 @@
   </section>
 </div>
 <div class="tools" id="tools"><button class="tool glass on" id="centerTeam" data-icon="team" aria-pressed="true" type="button">全隊</button><button class="tool glass on" id="b3d" data-icon="cube" aria-pressed="true" type="button">3D</button><button class="tool glass" id="mapStyle" data-icon="layers" type="button">深色</button></div>
-<div class="mobile-sheet glass small" id="mobileSheet"><button id="sheetHandle" class="sheet-handle" type="button" aria-label="展開戰情室資訊" aria-expanded="false"></button><div class="sheet-summary"><a class="icon-btn" href="/" data-icon="back" aria-label="回首頁"></a><b>戰情室</b><span id="sheetBrief" class="muted">載入中…</span></div><nav class="seg sheet-tabs" aria-label="戰情室資訊"><button class="on" data-tab="cards">騎士</button><button data-tab="progress">進度</button><button data-tab="conditions">天氣路況</button><button data-tab="feed">事件</button></nav><div class="sheet-content" id="sheetContent"></div></div>
+<div class="mobile-sheet glass small" id="mobileSheet"><button id="sheetHandle" class="sheet-handle" type="button" aria-label="展開戰情室資訊" aria-expanded="false"></button><div class="sheet-summary"><a class="icon-btn war-back" href="/" data-back data-icon="back" aria-label="返回"></a><b>戰情室</b><span id="sheetBrief" class="muted">載入中…</span></div><nav class="seg sheet-tabs" aria-label="戰情室資訊"><button class="on" data-tab="cards">騎士</button><button data-tab="progress">進度</button><button data-tab="conditions">天氣路況</button><button data-tab="feed">事件</button></nav><div class="sheet-content" id="sheetContent"></div></div>
 <div class="sosbar" id="sosbar"></div>
 </template>
 <template id="warM">
 <div id="map" role="region" aria-label="地圖"></div>
 <header class="whd">
-  <a class="icon-btn" id="back" href="/" data-icon="back" aria-label="回行程頁"></a>
+  <a class="icon-btn" id="back" href="/" data-back data-icon="back" aria-label="返回"></a>
   <div class="wttl"><h1 id="name">戰情室</h1><div class="live" id="live"><i></i><span id="hT">連線中…</span></div></div>
   <span class="watch hidden" id="watch"></span>
 </header>

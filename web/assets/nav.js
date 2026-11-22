@@ -2,7 +2,7 @@
 // 不另開一頁：GPS 回報、WebSocket、偏離重算、SOS 都沿用行程頁（trip.js／trip-extra.js）。
 // 資料：window.qijiState（成員、位置）、window.qijiExtra（全隊路線 route、個人路線 nav、進度 prog、SOS）。
 // /nav?id=… 或「開始導航」進來；?preview=1＝從規劃頁預覽，沿路線模擬騎一遍（不回報位置）。
-import { api, $, esc, initialOf, sheetDrag, clock, dur, swipeAway } from '/assets/common.js';
+import { api, $, esc, initialOf, sheetDrag, clock, dur, swipeAway, goBackOr } from '/assets/common.js';
 
 const Q = new URLSearchParams(location.search);
 const tid = Q.get('id');
@@ -701,7 +701,7 @@ function exitNav() {
   for (const m of S.members.values()) { m.el?.classList.remove('nv-nearme', 'nv-merged'); const d = m.el?.querySelector('.dot'); if (d) d.dataset.more = ''; }
   $('#nvBanner').classList.add('nv-hidden');
   try { speechSynthesis.cancel(); } catch { /* 略過 */ }
-  if (PREVIEW) { location.href = `/plan?trip=${tid}`; return; }
+  if (PREVIEW) { goBackOr(`/plan?trip=${tid}`); return; }  // 預覽是從規劃頁進來的：回去，不要再疊一層規劃頁
   history.replaceState(null, '', `/trip?id=${tid}`);
   dispatchEvent(new Event('resize')); // 行程頁抽屜重新量高度
   S.fitFallback?.();

@@ -89,7 +89,7 @@
 </head>
 <body>
 <main class="page">
-  <header class="hd"><a class="ib" href="/" aria-label="回首頁"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a><h1>設定</h1></header>
+  <header class="hd"><a class="ib" href="/" data-back aria-label="返回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a><h1>設定</h1></header>
 
   <div class="sec-t">個人</div>
   <div class="list">
@@ -294,7 +294,7 @@ $('#logout').onclick = async () => {
   await dropLocalPush();
   await clearSwrCache();
   try { localStorage.removeItem(`qiji-footprint-preview:${me.uid}`); } catch { /* 儲存空間不可用 */ }
-  location.href = '/login';
+  location.replace('/login');
 };
 $('#trUrl').textContent = `${location.origin}/osmand`;
 api('/api/me/device').then((d) => ($('#trId').textContent = d.device_id)).catch(() => {});

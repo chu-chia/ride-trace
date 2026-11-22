@@ -27,7 +27,7 @@ const PANEL = initPanel($('#panel'), 'replay', { onChange: () => setTimeout(() =
 
 const tid = new URLSearchParams(location.search).get('id');
 await tripGate(tid);  // 錯誤 id／非成員／被移出：和行程頁、戰情室同一個錯誤畫面
-// 返回一律回首頁（行程結束後只剩回放，回行程頁沒有意義）
+// 返回：從哪裡進來就回哪裡（data-back，見 back.js）；直接開網址時備用回首頁
 $('#back').href = '/';
 
 const EV = { lost: 'var(--crit)', back: 'var(--ok)', start: 'var(--accent)', end: 'var(--muted)', stop: 'var(--muted)', join: 'var(--accent)', kick: 'var(--warn)', behind: 'var(--warn)', ahead: 'var(--warn)', regroup: 'var(--ok)', arrive: 'var(--ok)', allin: 'var(--ok)', speedcam: 'var(--warn)', roadevent: 'var(--warn)', weather: 'var(--accent)', msg: 'var(--accent)', chat: 'var(--accent)', mark: 'var(--warn)', sos: 'var(--crit)', sos_off: 'var(--ok)', route: 'var(--accent)', offroute: 'var(--warn)', onroute: 'var(--ok)', reroute: 'var(--accent)', stuck: 'var(--warn)', moving: 'var(--ok)', town: 'var(--accent)' };

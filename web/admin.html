@@ -86,7 +86,7 @@
 </head>
 <body>
 <main>
-  <header class="page-top"><a class="icon-btn" href="/" aria-label="回首頁"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a><h1>管理後台</h1><span id="upd">載入中…</span></header>
+  <header class="page-top"><a class="icon-btn" href="/settings" data-back aria-label="返回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></a><h1>管理後台</h1><span id="upd">載入中…</span></header>
   <div id="denied" class="denied card" hidden>只有管理者可以看後台</div>
   <div id="app" hidden>
     <div class="card" id="testCard" style="margin-bottom:14px">
@@ -153,6 +153,7 @@
 </main>
 <dialog id="opsDialog" aria-labelledby="opsDialogTitle"><h3 id="opsDialogTitle">確認操作</h3><p id="opsDialogText"></p><div class="ops-row"><button class="btn" id="opsCancel">取消</button><button class="btn danger" id="opsConfirm">確認</button></div></dialog>
 <script src="/vendor/maplibre-gl-5.24.0/maplibre-gl.js"></script>
+<script type="module" src="/assets/back.js"></script>
 <script type="module" src="/assets/admin.js"></script>
 <script type="module" src="/assets/admin-test.js"></script>
 <script type="module" src="/assets/admin-ops.js"></script>

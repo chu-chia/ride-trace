@@ -1,11 +1,11 @@
 // 規劃路線頁：版面照改版原型（ride-trace-redesign/plan.html，Google 地圖式），資料和 API 用正式版：
 // 地點搜尋 /api/poi/suggest／search、預覽 /api/routes/preview（1～3 個方案）、沿途 /api/poi/along、
 // Google Maps 匯入 /api/routes/parse-gmaps、套用 PUT /api/trips/{id}/route（停靠站可以順便加成休息點）。
-import { api, $, esc, setLabel, press, sheetDrag, armConfirm } from '/assets/common.js';
+import { api, $, esc, setLabel, press, sheetDrag, armConfirm, goBackOr } from '/assets/common.js';
 import { createMap, addCompass, styleMenu } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('trip');
-if (!tid) location.href = '/';
+if (!tid) location.replace('/');
 $('#back').href = `/trip?id=${tid}`;
 
 const M = createMap($('#map'), { style: 'dark', center: [121.0, 23.8], zoom: 7, terrain: false, interactive3d: false });
@@ -475,7 +475,7 @@ async function applyRoute() {
       }
     }
     ptoast(S.trip?.status === 'live' ? `已改路線：${r.summary.km} km，不在新路線上的人會自動規劃接回` : `已套用到這趟行程：${r.summary.km} km，隊友馬上看到新路線`);
-    setTimeout(() => (location.href = `/trip?id=${tid}`), 1100);
+    setTimeout(() => goBackOr(`/trip?id=${tid}`), 1100);  // 回到進來的行程頁，不要在歷史紀錄多疊一層（不然行程頁按返回又回到這裡）
   } catch (err) { ptoast(err.message); $('#apply').disabled = false; }
 }
 $('#imp').onclick = () => { $('#gForm').classList.toggle('hidden'); if (!$('#gForm').classList.contains('hidden')) $('#gUrl').focus(); };

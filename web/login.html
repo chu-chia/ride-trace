@@ -253,7 +253,7 @@ $('#f').onsubmit = async (e) => {
   try {
     await api('/api/' + mode, { method: 'POST', body });
     try { localStorage.setItem('qiji:hasAccount', '1'); } catch { /* 私密模式 */ }
-    location.href = next;
+    location.replace(next);  // 登入頁不留在歷史紀錄：之後按返回不會又回到登入頁
   } catch (err) { $('#err').textContent = err.message; }
 };
 
