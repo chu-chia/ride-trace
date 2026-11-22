@@ -287,9 +287,10 @@ function renderRiders() {
 function renderSummary() {
   const m = riders.find((x) => x.uid === R.sel) || riders[0], s = m.summary;
   $('#sumTitle').textContent = `整趟摘要 · ${m.nickname}`;
+  // 最高速度和平均一樣到小數一位（以前四捨五入成整數，會出現平均 25.2＞最高 25）
   const cells = [
     [s.km.toFixed(1), 'km 總里程'], [dur(s.duration_ms), '總時間'], [dur(s.moving_ms), '騎乘時間'],
-    [s.avg_kmh, 'km/h 平均（不含停車）'], [Math.round(s.max_kmh), 'km/h 最高'], [s.climb_m.toLocaleString(), 'm 累積爬升'],
+    [s.avg_kmh, 'km/h 平均（不含停車）'], [(+s.max_kmh || 0).toFixed(1), 'km/h 最高'], [s.climb_m.toLocaleString(), 'm 累積爬升'],
     [s.max_alt ?? '–', 'm 最高點'], [s.stops, '次停車休息'], [riders.length, '人同行'],
   ];
   $('#sum').innerHTML = cells.map(([a, b]) => `<div><b class="num">${a}</b><span>${b}</span></div>`).join('');
