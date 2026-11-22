@@ -155,10 +155,23 @@ body.nav .toast{top:var(--nv-top,140px)!important}
   body.nav.nv-open .nv-edges{display:block}
 }
 
+/* ── 電腦、平板橫向（寬螢幕）：版面跟手機橫向一樣——轉彎卡和抽屜靠左成一欄，地圖在右邊，按鈕排最右一欄。
+   只搬位置，字和按鈕大小照一般尺寸（手機橫向那段的縮小是為了矮螢幕） ── */
+@media (orientation:landscape) and (min-width:900px) and (min-height:521px){
+  body.nav{--pw:420px}
+  .nv-turn,.nv-banner,.nv-free{left:16px;right:auto;width:var(--pw);max-width:none}
+  .nv-sheet{left:16px;right:auto;width:var(--pw);max-width:none;margin:0;height:auto;max-height:calc(100% - 16px);padding-left:14px;padding-right:14px;bottom:0;border-radius:20px 20px 0 0}  /* 貼齊底部（跟手機橫向一樣），收起時下面的內容才不會從縫裡露出來 */
+  .nv-speed{flex-direction:row;align-items:flex-end}
+  body.nav.nv-open .nv-fabs,body.nav.nv-open .nv-speed,body.nav.nv-open .nv-recenter{opacity:1;pointer-events:auto}
+  body.nav.nv-open .nv-edges{display:block}
+  body.nav.nv-open .tools{opacity:1;pointer-events:auto}
+}
 /* 導航時右上工具列（全隊／3D／深色／指北）排在轉彎卡下面，抽屜打開時跟著滑出 */
 body.nav .tools{display:flex!important;top:calc(var(--nv-turn-b,130px) + 12px)!important}
 body.nav.nv-open .tools{opacity:0;pointer-events:none}
 @media (orientation:landscape) and (max-height:520px){ body.nav .tools{top:max(var(--edge),env(safe-area-inset-top,0px))!important} body.nav.nv-open .tools{opacity:1;pointer-events:auto} }
+/* 寬螢幕橫向：轉彎卡在左欄，按鈕不用讓到它下面（要寫在上面那條 body.nav .tools 之後才蓋得過） */
+@media (orientation:landscape) and (min-width:900px) and (min-height:521px){ body.nav .tools{top:max(var(--edge),env(safe-area-inset-top,0px))!important} }
 /* 隊友頭像：跟我疊在一起的縮小變淡、靠太近的合併成一顆＋數字 */
 body.nav .rider.nv-nearme{opacity:.35;transform-origin:center}
 body.nav .rider.nv-nearme .dot{transform:scale(.7)}

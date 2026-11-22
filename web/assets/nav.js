@@ -246,7 +246,8 @@ function clearArrow() { map.getSource('nv-mnv')?.setData(EMPTY); arrowHead.remov
 }
 
 /* ───── 鏡頭：車頭朝上、傾斜、自己在畫面下方約 1/3、依速度縮放，接近路口拉近 ───── */
-const LANDQ = matchMedia('(orientation:landscape) and (max-height:520px)');
+// 手機橫向（矮）或電腦／平板寬螢幕橫向：抽屜靠左成一欄（CSS 對應 nav.css 兩段 @media）
+const LANDQ = matchMedia('(orientation:landscape) and (max-height:520px), (orientation:landscape) and (min-width:900px)');
 const isLand = () => LANDQ.matches;
 const panelR = () => (isLand() ? $('#nvSheet').getBoundingClientRect().right + 8 : 0);
 function camPad(follow = true) {
