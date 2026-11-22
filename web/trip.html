@@ -57,7 +57,7 @@
   #teamAdmin{margin-top:10px}
   #teamAdmin summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:6px 4px}
   #teamAdmin .row{display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-top:1px solid var(--line);font-size:13px}
-  .li .kick,#teamAdmin .kick{border:0;background:none;color:var(--crit-ink);font-size:13px;cursor:pointer;padding:6px 10px;min-height:32px;margin-right:-10px;border-radius:8px}
+  .li .kick,#teamAdmin .kick{border:0;background:none;color:var(--crit-ink);font-size:13px;cursor:pointer;padding:6px 12px;min-height:44px;margin-right:-12px;border-radius:8px}  /* 觸控目標至少 44px */
   .ev{display:grid;grid-template-columns:42px 9px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)}
   .ev time{font-size:12px;color:var(--muted)} .ev i{width:8px;height:8px;border-radius:50%;background:var(--c);display:block}
   .code{font-size:34px;font-weight:700;letter-spacing:.14em;text-align:center}
@@ -103,7 +103,7 @@
   .btn.main.green{background:#0f6e45;color:#fff}
   .btn.main.wait{background:var(--surface-2);color:var(--muted)}
   .why{font-size:12.5px;color:var(--muted);text-align:center;margin:6px 0 0}
-  .why .linkBtn{border:0;background:none;color:var(--accent-ink);font:inherit;font-weight:700;padding:0;cursor:pointer;text-decoration:underline}
+  .why .linkBtn{border:0;background:none;color:var(--accent-ink);font:inherit;font-weight:700;padding:13px 6px;margin:-13px -6px;cursor:pointer;text-decoration:underline}  /* 字是一行，可點範圍上下各放大到 44px，版面不變 */
   .stat{display:flex;align-items:center;gap:10px;margin:2px 0 12px}
   .stat .big{font-size:26px;font-weight:800;line-height:1;white-space:nowrap}
   .stat .big small{font-size:14px;font-weight:600;color:var(--muted);margin-left:3px}

@@ -77,7 +77,8 @@
   .me-preview .rider .arrow{display:none}
   .me-preview .cap{position:absolute;left:12px;top:10px;font-size:12px;font-weight:600;letter-spacing:.06em;color:#98989d}
   .colors{display:flex;gap:10px;flex-wrap:wrap}
-  .colors button{width:36px;height:36px;border-radius:50%;border:3px solid var(--bg);box-shadow:0 0 0 2px transparent;background:var(--c);cursor:pointer;padding:0}
+  .colors button{position:relative;width:36px;height:36px;border-radius:50%;border:3px solid var(--bg);box-shadow:0 0 0 2px transparent;background:var(--c);cursor:pointer;padding:0}
+  .colors button::after{content:"";position:absolute;inset:-5px}  /* 看起來 36px，可點 46px（間距 10px，不會蓋到隔壁） */
   .colors button.on{box-shadow:0 0 0 2px var(--fg)}
   .colors button.auto{box-shadow:0 0 0 2px var(--muted);border-style:dashed}
 
