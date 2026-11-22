@@ -34,7 +34,7 @@ for _ in range(60):  # 等 api 起來
     try:
         if call("GET", "/api/health")["redis"]:
             break
-    except SystemExit:
+    except (SystemExit, OSError):  # 還沒起來：連線被拒／被重設
         pass
     time.sleep(2)
 else:
