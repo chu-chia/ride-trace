@@ -36,6 +36,7 @@
   .li[aria-expanded="true"] .chev{transform:rotate(90deg)}
   .li-body{padding:4px 14px 14px}
   .li-body[hidden]{display:none}
+  .li-body.adv{padding:0}
   .li-block{padding:12px 14px}
   /* 開關（照原型的 50×30） */
   .sw{appearance:none;-webkit-appearance:none;width:50px;height:30px;border-radius:15px;background:var(--surface-2);position:relative;flex:none;margin:0;cursor:pointer;transition:background var(--dur-2) var(--ease-out)}
@@ -135,7 +136,26 @@
       </div>
       <div class="glass-demo" aria-hidden="true"><span class="gd-road"></span><span class="gd-name">坪林</span><span class="gd-name n2">北宜公路</span><span class="tool glass gd-btn">3D</span><span class="glass gd-pill">12.4 km · 28 分</span></div>
     </div>
-    <div class="li wrap" id="glassX"><span class="m"><b>玻璃進階（測試用）</b><span>先全部放上來，調到喜歡的樣子後再決定哪些留下。改了立刻套用到整個網站</span></span>
+    <label class="li"><span class="m"><b>立體地形</b><span>按 3D 時把山立起來；關掉時只傾斜。較耗電，手機可能會卡（手機預設關閉）</span></span><input type="checkbox" class="sw" id="terrain3d"></label>
+  </div>
+
+  <div class="sec-t">通知與裝置</div>
+  <div class="list">
+    <div class="li-block"><div class="small muted" style="margin-bottom:10px">隊友 SOS、失聯、落隊會推播到這台裝置。每台手機、電腦要各自開一次；行程頁的「更多 → 裝置與通知」也是同一個開關。</div><div id="pushCard" style="display:flex;flex-direction:column;gap:10px"></div></div>
+    <button type="button" class="li" data-open="tr" aria-expanded="false"><span class="m"><b>Traccar Client</b><span>iPhone 背景定位用</span></span><span class="chev" aria-hidden="true">›</span></button>
+    <div class="li-body" id="tr" hidden>
+      <div class="row"><span>伺服器網址</span><code id="trUrl"></code></div>
+      <div class="row" style="margin-top:8px"><span>裝置 ID</span><code id="trId">…</code></div>
+      <p class="small muted" style="margin:10px 0 0">iPhone 背景定位要用 Traccar Client，把上面兩個值填進去；裝置 ID 是你專屬的，不要給別人。</p>
+    </div>
+  </div>
+
+  <div class="sec-t">進階</div>
+  <!-- 一般使用者用不到的調整、開發用選項收在這裡（第二輪 UX 報告：設定頁直接露出開發者選項） -->
+  <div class="list">
+    <button type="button" class="li" data-open="adv" aria-expanded="false"><span class="m"><b>進階與開發者選項</b><span>玻璃細節、效能量測浮層</span></span><span class="chev" aria-hidden="true">›</span></button>
+    <div class="li-body adv" id="adv" hidden>
+    <div class="li wrap" id="glassX"><span class="m"><b>玻璃細節</b><span>模糊、亮度、折射等，改了立刻套用到整個網站</span></span>
       <div class="gx">
         <label class="gx-r" for="gxBlur"><span>模糊</span><input type="range" id="gxBlur" min="0" max="30" step="1"><output id="gxBlurV"></output></label>
         <label class="gx-r" for="gxBri"><span>亮度</span><input type="range" id="gxBri" min="0" max="20" step="1"><output id="gxBriV"></output></label>
@@ -149,18 +169,7 @@
         <button type="button" class="btn" id="gxReset">進階全部回預設</button>
       </div>
     </div>
-    <label class="li"><span class="m"><b>立體地形</b><span>按 3D 時把山立起來；關掉時只傾斜。較耗電，手機可能會卡（手機預設關閉）</span></span><input type="checkbox" class="sw" id="terrain3d"></label>
     <label class="li"><span class="m"><b>效能量測浮層</b><span>開發用：在地圖頁左上角顯示 FPS、掉格與地圖重畫次數（只影響這台裝置）</span></span><input type="checkbox" class="sw" id="perfHud"></label>
-  </div>
-
-  <div class="sec-t">通知與裝置</div>
-  <div class="list">
-    <div class="li-block"><div class="small muted" style="margin-bottom:10px">隊友 SOS、失聯、落隊會推播到這台裝置。每台手機、電腦要各自開一次；行程頁的「更多 → 裝置與通知」也是同一個開關。</div><div id="pushCard" style="display:flex;flex-direction:column;gap:10px"></div></div>
-    <button type="button" class="li" data-open="tr" aria-expanded="false"><span class="m"><b>Traccar Client</b><span>iPhone 背景定位用</span></span><span class="chev" aria-hidden="true">›</span></button>
-    <div class="li-body" id="tr" hidden>
-      <div class="row"><span>伺服器網址</span><code id="trUrl"></code></div>
-      <div class="row" style="margin-top:8px"><span>裝置 ID</span><code id="trId">…</code></div>
-      <p class="small muted" style="margin:10px 0 0">iPhone 背景定位要用 Traccar Client，把上面兩個值填進去；裝置 ID 是你專屬的，不要給別人。</p>
     </div>
   </div>
 
