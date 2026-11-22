@@ -418,3 +418,11 @@ body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),va
 
 /* 面板收合／展開動畫中（common.js morphPanel）：標題一行到底，放不下就省略號 */
 .morphing :is(.panel-top h2,.head-copy b,.head-copy .sub,.panel-head b,.panel-head .sub){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 提示（toast）不蓋路口資訊和頂部按鈕：
+   導航時排在轉彎卡＋橫幅下面（nav.js layout 寫 --nv-top），一次只露一則；
+   手機行程頁排在標題列下面、讓出右邊的工具列 */
+body.nav .toasts{top:var(--nv-top,120px);left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));transform:none;width:min(440px,calc(100% - var(--tool) - var(--edge) - 24px))}
+body.nav .toasts>.toast:nth-child(n+2){display:none}
+@media (max-width:760px){
+  body:not(.nav):has(.rtop) .toasts{top:calc(env(safe-area-inset-top,0px) + 64px);left:8px;transform:none;width:calc(100% - var(--tool) - var(--edge) - 24px)}
+}
