@@ -486,8 +486,11 @@ const knob = () => { $('#knob').style.left = `${((R.t - t0) / Math.max(1, t1 - t
   });
 }
 function seek(t) { R.seekAt = performance.now(); R.t = Math.max(t0, Math.min(t1, t)); if (R.follow !== 'all') { R.zoomed = false; R.keepZoom = true; } update(true); }  // 拖時間軸：鏡頭飛到那人在該時間的位置，縮放維持
+// 手機橫向：倍速只露出目前那一顆（時間軸才夠長），點它就換下一個（10× → 60× → 300× → 10×）
+const RATE_ONE = matchMedia('(min-width:761px) and (max-height:520px)');
 $('#rate').onclick = (e) => {
-  const b = e.target.closest('[data-x]'); if (!b) return;
+  let b = e.target.closest('[data-x]'); if (!b) return;
+  if (RATE_ONE.matches && b.classList.contains('on')) { const all = $$('#rate button'); b = all[(all.indexOf(b) + 1) % all.length]; }
   R.rate = +b.dataset.x;
   $$('#rate button').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
 };

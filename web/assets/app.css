@@ -278,7 +278,7 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .icon-btn svg{width:20px;height:20px}
 
 /* ---------- 左側欄 ---------- */
-.panel{position:fixed;z-index:9;left:max(var(--edge),env(safe-area-inset-left,0px));top:max(var(--edge),env(safe-area-inset-top,0px));bottom:var(--edge);width:var(--panel-w);border-radius:var(--r-panel);display:flex;flex-direction:column;overflow:hidden;transition:width .25s ease}
+.panel{position:fixed;z-index:9;left:max(var(--edge),env(safe-area-inset-left,0px));top:max(var(--edge),env(safe-area-inset-top,0px));bottom:max(var(--edge),env(safe-area-inset-bottom,0px));width:var(--panel-w);border-radius:var(--r-panel);display:flex;flex-direction:column;overflow:hidden;transition:width .25s ease}
 .panel>*{flex:none}
 .panel .handle{display:none}
 /* 外觀照改版原型：面板不用玻璃，改成不透明的深灰（淺色是白）底、圓角 20；裡面的卡片用第二階灰 */
@@ -343,7 +343,7 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .tools .gap{height:var(--sp-1)}
 
 /* 地圖右下角的比例尺與來源，避開側欄 */
-body:has(.panel) .maplibregl-ctrl-bottom-left{left:calc(var(--panel-w) + var(--edge) * 2)}
+body:has(.panel) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-w) + var(--edge))}
 body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge))}
 
 /* 底部抽屜（common.js sheetDrag）：不是 peek 的內容跟著開合程度淡入，收合時看不到露出的半截 */

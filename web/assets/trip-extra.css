@@ -116,7 +116,7 @@
 .panel-body .qx-pop{width:100%;max-height:none;overflow:visible;border-radius:0;padding:0;box-shadow:none;background:none;border:0;backdrop-filter:none;-webkit-backdrop-filter:none;display:flex;flex-direction:column;gap:var(--sp-3)}
 /* 全隊進度、轉彎提示：放在側欄右邊的地圖區（跟著側欄寬度走） */
 .qx-prog{position:fixed;z-index:8;left:calc(50% + (var(--panel-w) + var(--edge)) / 2);bottom:max(var(--edge),env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(420px,calc(100vw - var(--panel-w) - 160px))}
-.qx-turn{left:calc(var(--panel-w) + var(--edge) * 2);top:max(var(--edge),env(safe-area-inset-top,0px));max-width:min(360px,calc(100vw - var(--panel-w) - 120px))}
+.qx-turn{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-w) + var(--edge));top:max(var(--edge),env(safe-area-inset-top,0px));max-width:min(360px,calc(100vw - var(--panel-w) - 120px))}
 body:has(#panel.small) .qx-prog{left:calc(50% + (max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w)) / 2);width:min(420px,calc(100vw - var(--panel-mini-w) - 160px))}
 /* 收合膠囊的左邊是 max(邊距, 瀏海安全區)：手機橫向時要一起算進去，轉彎卡才不會被膠囊蓋住 */
 body:has(#panel.small) .qx-turn{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge))}
