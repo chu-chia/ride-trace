@@ -53,7 +53,13 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Pack C:\ride-trace-pack
 ### 設定完的驗證
 
 - `docker compose ps`：redis（healthy）、api、worker、valhalla 都是 Up。
-- `docker compose exec redis redis-cli DBSIZE`：跟 Mac 打包時印的 keys 數差不多。
+- Redis key 數（密碼從 `.env` 讀、用環境變數傳，不會印出來）：
+  ```powershell
+  cd C:\ride-trace
+  $pw = (Select-String '^REDIS_PASSWORD=' .env).Line.Split('=', 2)[1]
+  docker compose exec -T -e REDISCLI_AUTH=$pw redis redis-cli DBSIZE
+  ```
+  跟 Mac 打包時印的 keys 數差不多（差幾個是 key 過期）。
 - `Invoke-RestMethod http://127.0.0.1:8750/api/health`：`deploy.commit` 是 GitLab main 最新的 commit。
 - `Get-ScheduledTask 'RideTrace 自動部署'`：State 是 Ready／Running；`C:\ride-trace-deploy\deploy.log` 有「寫入目前版本」。
 - 用另一台 Tailscale 裝置開 `https://node.tail866fc3.ts.net:8443`，看得到登入頁。
@@ -84,6 +90,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Pack C:\ride-trace-pack
 - **部署沒發生**：看 `C:\ride-trace-deploy\deploy.log`。「git fetch 失敗」＝網路或 deploy token 失效（`cd C:\ride-trace; git fetch origin main` 看錯誤）。排程沒在跑：`Get-ScheduledTaskInfo 'RideTrace 自動部署'` 看 LastRunTime／LastTaskResult；使用者登出了就不會跑。
 - **建置失敗**：log 裡有 `docker compose` 最後 30 行。通常是 Mac 那邊的程式問題：把錯誤告訴使用者，不要在這台改程式。
 - **api 起不來，log 說 REDIS_PASSWORD**：`.env` 要在 `C:\ride-trace\.env`（跟 `docker-compose.yml` 同一層）。
+- **redis-cli 回 NOAUTH**：照第 2 節驗證那段，用 `-e REDISCLI_AUTH=$pw` 把密碼傳進去。
 - **Redis 載入後 DBSIZE 是 0**：volume 名稱不對（要 `qiji_redis-data`），或檔案權限不是 999。
 - **Valhalla 一直在下載／建圖**：`data\valhalla\` 沒解好（要有 `valhalla_tiles.tar`、`file_hashes.txt`），重新解 `valhalla.tar`。路線規劃與地圖比對要等它好；即時定位、行程頁不需要它。
 - **CRLF**：`git config core.autocrlf` 必須是 false。不要用會轉換換行的工具重新存檔。

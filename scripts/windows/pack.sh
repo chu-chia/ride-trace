@@ -45,3 +45,6 @@ cp data/windows/deploy-token.txt "$OUT/"
 (cd "$OUT" && shasum -a 256 env.txt deploy-token.txt redis-data.tar.gz valhalla.tar tracks.tar.gz > SHA256SUMS)
 du -sh "$OUT"
 echo "完成：$OUT"
+# 包成一個 tar 方便用 Tailscale 傳。COPYFILE_DISABLE：不要把 macOS 的 ._* 附加檔包進去（Windows 解壓會報錯）
+(cd data/export && COPYFILE_DISABLE=1 tar cf "$(basename "$OUT").tar" "$(basename "$OUT")")
+echo "傳到 Windows：tailscale file cp $OUT.tar node:   （傳完刪掉 $OUT.tar）"
