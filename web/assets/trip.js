@@ -796,9 +796,11 @@ function handle(msg) {
       if (S.events.length > 200) S.events.shift();
       renderEvents();
       const meta = EV[msg.type];
-      if (meta && msg.type !== 'create') {
-        const who = S.members.get(msg.uid)?.u.nickname || S.trip?.people?.[msg.uid]?.nickname;
-        toast(`${who ? who + ' ' : ''}${msg.text}`, { icon: meta[2], color: meta[3], sub: clock(+msg.ts) });
+      // 自己的事件用「你」（不要自己收到「三號阿華 落隊」）；自己按的 SOS／解除畫面上已經有回饋，不再跳一則
+      const mine = String(msg.uid) === String(S.me);
+      if (meta && msg.type !== 'create' && !(mine && (msg.type === 'sos' || msg.type === 'sos_off'))) {
+        const who = mine ? '你' : S.members.get(msg.uid)?.u.nickname || S.trip?.people?.[msg.uid]?.nickname;
+        toast(`${who ? who + (mine ? '' : ' ') : ''}${msg.text}`, { icon: meta[2], color: meta[3], sub: clock(+msg.ts) });
       }
       break;
     }
