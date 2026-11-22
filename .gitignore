@@ -8,6 +8,9 @@ __pycache__/
 *.pyc
 .DS_Store
 
+# Windows 自動部署寫的版本檔
+web/deployed.json
+
 # 暫時的比較頁（含個人軌跡），不進版控
 web/assets/_*
 *.egg-info/

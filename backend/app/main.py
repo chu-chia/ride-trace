@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -39,7 +40,16 @@ for mod in (auth, trips, replay, ingest, live, footprint, system, waypoints, spe
 @app.get("/api/health")
 async def health():
     info = await r.info("server")
-    return {"ok": True, "redis": info.get("redis_version")}
+    return {"ok": True, "redis": info.get("redis_version"), "deploy": deployed()}
+
+
+def deployed() -> dict | None:
+    """Windows 自動部署（scripts/windows/autodeploy.ps1）寫的 web/deployed.json：現在跑的是哪個 commit、什麼時候部署的。
+    Mac 開發機沒有這個檔，回 None。"""
+    try:
+        return json.loads((WEB_DIR / "deployed.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
 
 
 def page(file: str):

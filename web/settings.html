@@ -177,6 +177,7 @@
     <a href="/admin" class="li" id="adminLink" hidden><span class="m"><b>管理後台</b></span><span class="chev" aria-hidden="true">›</span></a>
     <button type="button" class="li" id="logout"><span class="m"><b style="color:var(--crit-ink)">登出</b></span></button>
   </div>
+  <p class="small muted" id="deployVer" style="text-align:center;margin:14px 0 0" hidden></p>
 </main>
 <script type="module">
 import { api, $, esc, avatar, LOW_POWER, PERF, glassPrefs, applyGlass, saveGlass, GLASS_DEFAULT_A, GLASS_X_DEFAULT } from '/assets/common.js';
@@ -185,6 +186,14 @@ import { resumeMs } from '/assets/gestures.js';
 import { mountPushCard, pushEndpoint, dropLocalPush } from '/assets/push.js';
 import { clearSwrCache } from '/assets/swr.js';
 mountPushCard($('#pushCard'));  // 和行程頁同一張推播卡（UX-08）
+// 現在跑的版本（Windows 自動部署才有）：現場測試時看得出新版到了沒
+api('/api/health').then((h) => {
+  const d = h?.deploy; if (!d?.commit) return;
+  const t = new Date(d.at);
+  if (d.ok === false) $('#deployVer').style.color = 'var(--crit-ink)';
+  $('#deployVer').textContent = `${d.ok === false ? `部署失敗（${d.error}）・` : ''}版本 ${d.commit.slice(0, 7)}・${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')} 部署・${d.subject || ''}`;
+  $('#deployVer').hidden = false;
+}).catch(() => {});
 $('#lowPower').checked = LOW_POWER;
 // 玻璃效果：開關、濃淡滑桿、進階（測試用），改了立刻套用到整個網站（只存在這台裝置）
 {
