@@ -1,4 +1,4 @@
-import { api, tripGate, armConfirm, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, reduceMotion, gapGlow, markFocus, isWeak, eventFilter } from '/assets/common.js';
+import { api, tripGate, armConfirm, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, reduceMotion, gapGlow, parkedJitter, markFocus, isWeak, eventFilter } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -74,7 +74,7 @@ function upsertMember(u, state) {
     el.style.setProperty('--ink', inkOn(u.color));
     el.innerHTML = `<div class="arrow"></div><div class="dot">${esc(initialOf(u.nickname))}</div><div class="name">${esc(u.nickname)}</div>`;
     el.onclick = () => pick(u.uid);
-    m = { u, state: {}, el, marker: new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1', subpixelPositioning: true }), trail: [], onMap: false, pos: null, anim: null, lastAt: 0, lastTarget: null };
+    m = { u, state: {}, el, marker: new maplibregl.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1', subpixelPositioning: true }), trail: [], recent: [], onMap: false, pos: null, anim: null, lastAt: 0, lastTarget: null };
     S.members.set(u.uid, m);
   }
   m.u = { ...m.u, ...u };
@@ -749,6 +749,9 @@ function handle(msg) {
       const m = S.members.get(msg.uid);
       if (!m) break;
       m.state = { ...m.state, ...msg, status: 'ok', seen: Date.now() };
+      if (msg.speed != null && msg.speed !== '' && Number.isFinite(+msg.speed)) { m.recent.push({ at: Date.now(), kmh: +msg.speed * 3.6 }); m.recent = m.recent.slice(-10); }
+      // 停著時原地飄移：圖釘和鏡頭都不跟著跳（和戰情室一樣）；狀態、時間照常更新
+      if (!msg.pre && parkedJitter(m, +msg.lon, +msg.lat)) { m.lastAt = performance.now(); placeMarker(m); break; }
       // pre：行程開始前廣播的即時位置，跟精度差的點一樣只移動圖釘、不畫軌跡
       moveTo(m, msg.lon, msg.lat, !!msg.rough || !!msg.pre);
       placeMarker(m);

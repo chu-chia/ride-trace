@@ -443,7 +443,7 @@ export function frameGate() {
 // 最近 3 點速度的中位數低於 6 km/h、新位置又在目前圖釘 30 m 內，就當作停著沒動，圖釘不動。
 const PARK_KMH = 6, PARK_M = 30;
 export function parkedJitter(m, lon, lat) {
-  const anchor = m.to || m.pos;
+  const anchor = m.to || m.lastTarget || m.pos; // 戰情室用 to、行程頁用 lastTarget（圖釘正要滑去的位置）
   if (!anchor) return false;
   const v = (m.recent || []).slice(-3).map((x) => x.kmh).sort((a, b) => a - b);
   if (!v.length || v[Math.floor(v.length / 2)] >= PARK_KMH) return false;
