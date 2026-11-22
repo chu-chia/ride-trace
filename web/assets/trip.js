@@ -570,7 +570,10 @@ function renderTeam() {
   // 「進團」和「正在回報位置」分開寫：大家都開著網頁、但還沒人開始回報時，不會看起來像全員離線（UX-33）
   $('#quickTeam').textContent = `${list.length} 人進團・${online ? `${online} 人正在回報` : '還沒有人回報位置'}${lagging ? `・${lagging} 人落隊` : ''}`;
   $('#sOnline').title = `${list.length} 人進團，${online} 人正在回報位置`;
-  $('#tOnline').textContent = S.trip.status === 'live' ? `・${online}/${list.length} 在線` : '';
+  // 「在線」兩個字在手機橫向的窄標題裡會被截成「在糸」：空間不夠時只留數字（trip.html 的 .ol）
+  $('#tOnline').innerHTML = S.trip.status === 'live' ? `・${online}/${list.length}<span class="ol"> 在線</span>` : '';
+  const tSub = $('#tOnline').parentElement; tSub.classList.remove('tight');
+  if (tSub.scrollWidth > tSub.clientWidth + 1) tSub.classList.add('tight');
   // 騎乘中的收合區塊：已騎、海拔、在線、落隊、回報狀態
   const myKm = +me?.u.stats?.km || 0, myAlt = $('#sAlt').textContent;
   $('#rideA').innerHTML = `已騎 <b class="num">${myKm.toFixed(1)} km</b>${myAlt !== '–' ? `・海拔 <b class="num">${myAlt} m</b>` : ''}`;
