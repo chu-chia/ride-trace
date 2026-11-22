@@ -105,7 +105,8 @@ export const clock = (ms) => { const d = new Date(ms); return pad2(d.getHours())
 export const dur = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 3600) + ':' + pad2(Math.floor(s / 60) % 60); };
 export const ago = (ms) => { const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? `${s} 秒前` : s < 3600 ? `${Math.floor(s / 60)} 分前` : `${Math.floor(s / 3600)} 小時前`; };
 // 頭像字：一般取暱稱最後一個字（阿偉 → 偉）；結尾是日期（武嶺 25/12/12）就取最後兩位數
-export const initialOf = (name = '?') => (/\d$/.test(name) ? name.replace(/\D/g, '').slice(-2) : name.slice(-1));
+// 頭像字：暱稱第一個字（「克勞德團長」→「克」，英文轉大寫）；結尾是數字的（「車手07」）照舊顯示數字，才分得出測試1／測試2
+export const initialOf = (name = '?') => (/\d$/.test(name) ? name.replace(/\D/g, '').slice(-2) : (Array.from(String(name).trim())[0] || '?').toUpperCase());
 // 代表色上的字色：白字對比到 3:1（粗體門檻）就用白字，否則改深字（黃、淺藍、綠、橘這類亮色）
 const lum = (hex) => {
   const h = String(hex).replace('#', '');
