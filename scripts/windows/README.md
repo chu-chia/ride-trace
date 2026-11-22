@@ -68,7 +68,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Pack C:\ride-trace-pack
 
 ## 2.5 從 GitLab 換到 GitHub（2026-11-22 晚，已經設定好的這台只要做一次）
 
-使用者會在這台的瀏覽器產生 GitHub 唯讀 token（fine-grained，只限 `chu-chia/ride-trace`，權限 Contents、Checks 唯讀），自己貼進下面的指令。**不要把 token 印出來、存到別的地方或傳給 Mac。**
+使用者會在這台的瀏覽器產生 GitHub 唯讀 token（fine-grained，只限 `chu-chia/ride-trace`，權限 Contents、Actions 唯讀），自己貼進下面的指令。**不要把 token 印出來、存到別的地方或傳給 Mac。**
 
 ```powershell
 Disable-ScheduledTask 'RideTrace 自動部署'
@@ -85,7 +85,7 @@ Enable-ScheduledTask 'RideTrace 自動部署'
 ## 3. 自動部署怎麼運作（autodeploy.ps1）
 
 - 每分鐘 `git fetch origin main`。沒有新 commit：只檢查 api 有沒有回應，沒有就 `docker compose up -d`（例如重開機後 Docker 比較慢起來）。
-- 有新 commit：先查 GitHub 上這個 commit 的 CI（check run 名稱 `ci`，用 origin 網址裡的唯讀 token 查）：
+- 有新 commit：先查 GitHub Actions 上這個 commit 的 CI（`ci.yml` 的執行結果，用 origin 網址裡的唯讀 token 查）：
   - 還在跑：什麼都不做，下一分鐘再看（CI 約 1 分鐘，所以推完約 2～3 分鐘上線）。
   - 沒過：不部署，舊版繼續跑。log 記一行「CI 沒過」，`deployed.json` 加 `blocked`，手機設定頁會用紅字顯示「最新版 xxxxxxx 沒通過檢查，沒有部署」。
   - 通過：`git reset --hard origin/main`，然後看改了哪些檔案：
@@ -107,7 +107,7 @@ Enable-ScheduledTask 'RideTrace 自動部署'
 
 ## 5. 常見問題
 
-- **部署沒發生**：先看 GitHub Actions 有沒有過（沒過就是 Mac 那邊要修）。再看 `C:\ride-trace-deploy\deploy.log`。「查 CI 狀態失敗」＝token 沒有 Checks 讀取權限或過期。「git fetch 失敗」＝網路或 token 失效（`cd C:\ride-trace; git fetch origin main` 看錯誤）。排程沒在跑：`Get-ScheduledTaskInfo 'RideTrace 自動部署'` 看 LastRunTime／LastTaskResult；使用者登出了就不會跑。
+- **部署沒發生**：先看 GitHub Actions 有沒有過（沒過就是 Mac 那邊要修）。再看 `C:\ride-trace-deploy\deploy.log`。「查 CI 狀態失敗」＝token 沒有 Actions 讀取權限或過期。「git fetch 失敗」＝網路或 token 失效（`cd C:\ride-trace; git fetch origin main` 看錯誤）。排程沒在跑：`Get-ScheduledTaskInfo 'RideTrace 自動部署'` 看 LastRunTime／LastTaskResult；使用者登出了就不會跑。
 - **建置失敗**：log 裡有 `docker compose` 最後 30 行。通常是 Mac 那邊的程式問題：把錯誤告訴使用者，不要在這台改程式。
 - **api 起不來，log 說 REDIS_PASSWORD**：`.env` 要在 `C:\ride-trace\.env`（跟 `docker-compose.yml` 同一層）。
 - **redis-cli 回 NOAUTH**：照第 2 節驗證那段，用 `-e REDISCLI_AUTH=$pw` 把密碼傳進去。

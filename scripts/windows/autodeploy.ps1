@@ -46,15 +46,15 @@ try {
     exit 0
   }
 
-  # CI 閘門：查 GitHub 上這個 commit 的 check-runs（名稱 ci）。token 用 origin 網址裡的那組（唯讀）
+  # CI 閘門：查 GitHub Actions 上這個 commit 的 ci.yml 執行結果。token 用 origin 網址裡的那組（Contents、Actions 唯讀）
   $url = (git remote get-url origin).Trim()
   if ($url -match '^https://(?:[^:@/]+:(?<tok>[^@/]+)@)?github\.com/(?<slug>[^/]+/[^/]+?)(?:\.git)?$') {
     $hdr = @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'ride-trace-autodeploy' }
     if ($Matches.tok) { $hdr.Authorization = "Bearer $($Matches.tok)" }
     try {
-      $runs = (Invoke-RestMethod "https://api.github.com/repos/$($Matches.slug)/commits/$remote/check-runs?check_name=ci" -Headers $hdr -TimeoutSec 15).check_runs
+      $runs = (Invoke-RestMethod "https://api.github.com/repos/$($Matches.slug)/actions/workflows/ci.yml/runs?head_sha=$remote&event=push" -Headers $hdr -TimeoutSec 15).workflow_runs
     } catch { Log "查 CI 狀態失敗：$($_.Exception.Message)"; exit 0 }
-    $run = $runs | Sort-Object { $_.started_at } -Descending | Select-Object -First 1
+    $run = $runs | Sort-Object { $_.created_at } -Descending | Select-Object -First 1
     if (-not $run -or $run.status -ne 'completed') { exit 0 }  # 還沒開始或還在跑，下一分鐘再看
     if ($run.conclusion -ne 'success') {
       $vf = Join-Path $Root 'web\deployed.json'

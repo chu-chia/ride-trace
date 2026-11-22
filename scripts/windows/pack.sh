@@ -9,7 +9,7 @@
 #   redis-data.tar.gz  Redis volume 的 /data（AOF＋RDB），先 BGREWRITEAOF 確保一致
 #   valhalla.tar       data/valhalla（台灣路網，已建好，不用重算）
 #   tracks.tar.gz      data/tracks（模擬器軌跡，Demo 用，可不用）
-#   deploy-token.txt   GitHub 唯讀 token（fine-grained：Contents、Checks 唯讀）（data/windows/deploy-token.txt）
+#   deploy-token.txt   GitHub 唯讀 token（fine-grained：Contents、Actions 唯讀）（data/windows/deploy-token.txt）
 #   README.md／setup.ps1／autodeploy.ps1／pack-back.ps1  給 Windows 那邊的 agent（從 scripts/windows/ 複製）
 #   SHA256SUMS
 set -euo pipefail
