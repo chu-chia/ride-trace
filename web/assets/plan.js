@@ -135,6 +135,20 @@ function basis() {
   return { lon: c.lng, lat: c.lat, label: '離畫面中心' };
 }
 const near = (b) => `&lon=${b.lon.toFixed(5)}&lat=${b.lat.toFixed(5)}`;
+// 已經允許過定位的話，悄悄拿一次大概位置，搜尋距離就是「離你」（不主動跳權限詢問；以前只有點過「你的位置」才有）
+navigator.permissions?.query({ name: 'geolocation' }).then((st) => {
+  if (st.state !== 'granted' || S.me) return;
+  navigator.geolocation.getCurrentPosition((pos) => { S.me ||= { lon: pos.coords.longitude, lat: pos.coords.latitude }; }, () => {}, { enableHighAccuracy: false, maximumAge: 600000, timeout: 10000 });
+}).catch(() => {});
+// 同名、同類、位置又差不到約 500 公尺的結果只留一筆（「台北車站」會出現兩筆一樣的車站）
+function dedupe(items) {
+  const out = [];
+  for (const x of items) {
+    if (out.some((y) => y.name === x.name && y.kind_name === x.kind_name && Math.abs(y.lat - x.lat) < 0.005 && Math.abs(y.lon - x.lon) < 0.005)) continue;
+    out.push(x);
+  }
+  return out;
+}
 function openSearch(i, insert = false) {
   sTarget = i; sInsert = insert; $('#search').classList.remove('hidden');
   $('#sInput').value = ''; $('#sInput').placeholder = insert ? '新增停靠站' : i === 0 ? '選擇起點' : i === S.pts.length - 1 ? '選擇目的地' : '選擇停靠站';
@@ -161,7 +175,7 @@ async function runSearch(full) {
     let items = await api(`/api/poi/${full || /\s/.test(q) ? 'search' : 'suggest'}?q=${encodeURIComponent(q)}${near(b)}`);
     if (!items.length && !full && seq === sSeq) { items = await api(`/api/poi/search?q=${encodeURIComponent(q)}${near(b)}`); full = true; }
     if (seq !== sSeq) return;
-    sItems = items; renderSearch(full);
+    sItems = dedupe(items); renderSearch(full);
   } catch { /* 略過 */ }
 }
 $('#sInput').addEventListener('input', () => { clearTimeout(sTimer); sTimer = setTimeout(() => runSearch(false), 180); });
