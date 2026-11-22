@@ -121,6 +121,8 @@
   .done-l b{color:var(--fg)}
   .dl-ico{width:17px;height:17px;flex:none;margin-top:2px}.dl-ico.ok{color:var(--ok)}.dl-ico.star{color:#ffb020}
   body.trip-ended .sosFab{display:none!important}
+  /* 結束後不能再加入：邀請碼、QR、觀看連結、邀請按鈕都收起來 */
+  body.trip-ended :is([data-more-tab="invite"],[data-more="invite"],#bShare,#teamInvite){display:none!important}
   .acts2{display:flex;gap:8px;margin-top:8px}.acts2 .btn{flex:1;text-decoration:none}.acts2 .btn:not(.primary){color:var(--fg)}
   #tabs{margin-top:8px}
   /* 更多：圖示方格（照原型），點了在下面打開那一塊 */
