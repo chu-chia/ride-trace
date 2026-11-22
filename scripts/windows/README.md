@@ -18,7 +18,7 @@ Mac（開發）── git push main ──> GitLab（私人 jerry.20070419/ride-
 
 - **不要在 Windows 上改程式碼或 commit**。`C:\ride-trace` 每次部署都會 `git reset --hard origin/main`，改了會被蓋掉。發現 bug 記下來告訴使用者，交給 Mac 那邊修。
 - **機密不要外流**：`.env`（Redis 密碼、VAPID 私鑰、TDX／氣象署金鑰、機器人密碼）、`deploy-token.txt`、Redis 資料（帳號、使用者一整年的 GPS 足跡）。不要上傳到任何雲端、不要貼到聊天、不要印出來。設定完把打包資料夾刪掉。
-- **不要啟動模擬器**（`tools.simulate`），除非使用者要求。
+- **Demo #57 由 compose 的 `demo` 服務自動循環**（一圈約 5 小時，demo 行程不推播），不用另外啟動模擬器。不要再手動跑 `tools.simulate`，會跟 `demo` 服務搶同一個行程。
 - 回覆使用者一律用繁體中文。
 
 ## 1. 需要的東西（先確認、沒有就裝）
@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Pack C:\ride-trace-pack
 
 ### 設定完的驗證
 
-- `docker compose ps`：redis（healthy）、api、worker、valhalla 都是 Up。
+- `docker compose ps`：redis、api 是 Up (healthy)，worker、valhalla、demo 都是 Up。
 - Redis key 數（密碼從 `.env` 讀、用環境變數傳，不會印出來）：
   ```powershell
   cd C:\ride-trace

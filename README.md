@@ -96,7 +96,7 @@ Traccar Client 的 **SOS 按鈕**（送出 `alarm=sos`）會走跟網頁 SOS 一
 ## 模擬資料與 Demo 循環
 
 - `.env` 設 `FAKE_EXTERNAL=1`：天氣（氣象署）與路況（TDX）都不呼叫外部 API，改用固定規則產生的模擬資料（文字會標「模擬資料」），不消耗次數。真的出去騎之前改回空白並 `docker compose up -d api worker`。
-- Demo 循環：`cd backend && nohup uv run python -u -m tools.simulate --group zhongheng --trip 57 --speed 1 --interval 2 --loop > ../data/sim-demo.log 2>&1 &`。每一圈開始前清掉這趟的即時資料（與機器人的個人足跡）再重跑，跑完休息 30 秒再來；行程會標 `demo=1`，**demo 行程的事件不推播**。停止：`pkill -f tools.simulate`。
+- Demo 循環：docker compose 的 `demo` 服務（3/14 中橫真實版 `--group zh314 --trip 57 --loop`），跟著 `docker compose up -d` 一起啟動、當掉自動重啟；看紀錄 `docker compose logs -f demo`，不要的話 `docker compose stop demo`。每一圈開始前清掉這趟的即時資料（與機器人的個人足跡）再重跑，跑完休息 30 秒再來；行程會標 `demo=1`，**demo 行程的事件不推播**。
 
 ## 推播通知（Web Push）
 

@@ -55,6 +55,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    # Demo 要等 api 真的能回應才開始（不然第一次連線失敗、靠重啟才接上）
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8750/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
     restart: unless-stopped
 
   # 背景 Worker：Streams consumer group 消費 stream:ingest（統計、之後的落隊／抵達／測速警示）。
@@ -74,6 +81,23 @@ services:
       FAKE_EXTERNAL: ${FAKE_EXTERNAL:-}
     depends_on:
       redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Demo #57 無限循環：3/14 中橫真實版（你的紀錄＋4 個機器人），一圈約 5 小時，跑完休 30 秒重置再跑。
+  # 以前在 Mac 用 nohup 跑，筆電一闔就斷；放進 compose 後開機自動跑、當掉自動重啟。
+  # Demo 行程（trip hash demo=1）不推播。不要的話：docker compose stop demo
+  demo:
+    build: ./backend
+    command: ["python", "-u", "-m", "tools.simulate", "--group", "zh314", "--trip", "57", "--speed", "1",
+              "--interval", "2", "--loop", "--base", "http://api:8750", "--tracks", "/data/tracks"]
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SIM_BOT_PASSWORD: ${SIM_BOT_PASSWORD:-}
+    volumes:
+      - ./data/tracks:/data/tracks:ro
+    depends_on:
+      api:
         condition: service_healthy
     restart: unless-stopped
 
