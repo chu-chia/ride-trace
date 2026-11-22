@@ -126,7 +126,7 @@ async def login(body: LoginIn, resp: Response):
     uid = await r.get(K.username(body.username.strip().lower()))
     pw = await r.hget(K.user(uid), "pw") if uid else None
     if not uid or not pw or not check_pw(body.password, pw):
-        raise HTTPException(401, "帳號或密碼不對，請再確認一次（密碼有分大小寫）。忘記密碼請按下面的「忘記密碼？」")
+        raise HTTPException(401, "帳號或密碼不對，請再確認一次（密碼有分大小寫）。忘記密碼請按密碼欄下方的「忘記密碼？」")
     tok = await _new_session(resp, uid)
     return {"user": await public_user(uid), "token": tok}
 

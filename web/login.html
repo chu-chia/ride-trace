@@ -254,7 +254,7 @@ $('#f').onsubmit = async (e) => {
     await api('/api/' + mode, { method: 'POST', body });
     try { localStorage.setItem('qiji:hasAccount', '1'); } catch { /* 私密模式 */ }
     location.replace(next);  // 登入頁不留在歷史紀錄：之後按返回不會又回到登入頁
-  } catch (err) { $('#err').textContent = err.message; }
+  } catch (err) { $('#err').textContent = err.message; $('#err').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }  // 手機鍵盤開著時訊息常在畫面外
 };
 
 /* ---------- 左：經典路線巡航 ---------- */
