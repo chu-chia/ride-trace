@@ -1,0 +1,47 @@
+# 騎跡 CI：推到 main（或開 PR）就檢查。Windows 正式機的 autodeploy.ps1 只部署這裡通過的 commit。
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 語法
+        run: python3 -m compileall -q backend/app backend/tools
+
+      - name: 前端 JS 語法（ES module）
+        run: |
+          mkdir -p /tmp/js
+          for f in web/assets/*.js; do cp "$f" "/tmp/js/$(basename "$f" .js).mjs"; done
+          fail=0
+          for f in /tmp/js/*.mjs; do node --check "$f" || fail=1; done
+          exit $fail
+
+      - name: 啟動 redis／api／worker（測試用密碼、假的外部 API）
+        run: |
+          printf 'REDIS_PASSWORD=ci-%s\nFAKE_EXTERNAL=1\n' "$(openssl rand -hex 12)" > .env
+          docker compose up -d --build redis api worker
+
+      - name: 冒煙測試（註冊、建行程、回報位置、結束）
+        run: python3 scripts/ci/smoke.py
+
+      - name: worker 沒有當掉
+        run: |
+          sleep 3
+          test -n "$(docker compose ps -q --status running worker)" || { echo 'worker 停了'; exit 1; }
+
+      - name: 失敗時印出容器記錄
+        if: failure()
+        run: docker compose logs --tail 80 api worker redis
