@@ -511,6 +511,7 @@ const sosOpen = $('#sosOpen');
 const sosDialog = $('#sosDialog');
 const closeSosDialog = () => { sosDialog.hidden = true; sosOpen.focus(); };
 sosOpen.addEventListener('click', () => { sosDialog.hidden = false; sosBtn.focus(); });
+window.__qijiSosReady = true; document.getElementById('sosWait')?.remove();  // trip.html 載入中的 SOS 說明可以收了
 $('#sosClose').addEventListener('click', closeSosDialog);
 sosDialog.addEventListener('click', (e) => { if (e.target === sosDialog) closeSosDialog(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sosDialog.hidden) closeSosDialog(); });

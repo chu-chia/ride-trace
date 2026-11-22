@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-theme="dark"><!-- 地圖頁預設深色：網路慢、JS 還沒跑時就是深色（底圖切淺色時 mapbase.js 會改） -->
 <head>
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
@@ -286,6 +286,21 @@
 </main>
 <div class="rtop" id="rtop"></div>
 <button class="sosFab" id="sosFab" aria-label="開啟緊急求救選單">SOS</button>
+<script>
+// 網路很慢時，SOS 鈕在 JS 載好之前按了沒反應：先說明並給 112（trip-extra.js 接上 SOS 後設 __qijiSosReady）
+(() => {
+  const wait = () => {
+    if (window.__qijiSosReady || document.getElementById('sosWait')) return;
+    const d = document.createElement('div');
+    d.id = 'sosWait'; d.setAttribute('role', 'alert');
+    d.style.cssText = 'position:fixed;z-index:60;left:12px;right:12px;bottom:max(16px,env(safe-area-inset-bottom));max-width:420px;margin:0 auto;padding:16px;border-radius:16px;background:#2c2c2e;color:#f2f2f7;font:15px/1.5 -apple-system,"PingFang TC",sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.5)';
+    d.innerHTML = '<b style="font-size:17px">SOS 還在載入（網路很慢）</b><div style="margin:6px 0 12px;color:#aeaeb2">載好就能按住發出、通知全隊。緊急狀況請直接撥 112（沒有訊號也能撥）。</div><div style="display:flex;gap:8px"><a href="tel:112" style="flex:1;text-align:center;padding:12px;border-radius:12px;background:#ff3b30;color:#fff;font-weight:700;text-decoration:none">撥打 112</a><button type="button" style="flex:1;padding:12px;border:0;border-radius:12px;background:#3a3a3c;color:#f2f2f7;font:inherit">關閉</button></div>';
+    d.querySelector('button').onclick = () => d.remove();
+    document.body.append(d);
+  };
+  for (const id of ['sosFab', 'sosOpen']) document.getElementById(id)?.addEventListener('click', wait);
+})();
+</script>
 <div class="followPill" id="followPill" role="status"></div>
 <div class="sosDialog" id="sosDialog" hidden><div class="sosBox" role="dialog" aria-modal="true" aria-labelledby="sosTitle"><button class="sosClose" id="sosClose" aria-label="關閉緊急求救選單">✕</button><h2 id="sosTitle">緊急求救</h2><button class="qx-sos" id="qxSos" aria-describedby="sosHint"><i></i><span>按住 1.5 秒發出 SOS</span></button><p id="sosHint">按住不放 1.5 秒，圓環填滿就會發出，全隊都會收到通知和你的位置。</p></div></div>
 <div class="qx-prog glass" id="qxProg" hidden></div>
