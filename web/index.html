@@ -328,7 +328,8 @@ $('#planCancel').onclick = () => { $('#planF').hidden = true; };
 // 建立行程：先取名字，建好直接進規劃路線
 $('#planF').onsubmit = (e) => { e.preventDefault(); create($('#tripName').value.trim(), (id) => `/plan?trip=${id}`); };
 // 臨時開團：不用取名，交給後端用台灣日期命名（例如「11/19（四）臨時開團」，UX-44）
-$('#qNow').onclick = () => { $('#qNow').disabled = true; create('', (id) => `/trip?id=${id}`); };
+// 記一下是臨時開團：行程頁的主按鈕跳過「規劃路線」，直接是邀請／開始
+$('#qNow').onclick = () => { $('#qNow').disabled = true; create('', (id) => { try { localStorage.setItem(`qiji:quick:${id}`, '1'); } catch { /* 私密模式 */ } return `/trip?id=${id}`; }); };
 $('#joinF').onsubmit = (e) => { e.preventDefault(); document.activeElement?.blur(); join($('#code').value.trim().toUpperCase()); };
 
 const pending = new URLSearchParams(location.search).get('join');

@@ -425,7 +425,9 @@ function renderStage() {
     if (st === 'prep') {
       // 準備：路線、隊友、集合點三件事；主按鈕永遠是「下一件該做的事」（照原型），都好了才是開始
       const invTxt = n > 1 ? `${n} 人已加入：${esc(others.slice(0, 4).join('、') + (others.length > 4 ? ` 等 ${others.length} 人` : ''))}` : '現在只有你一個人';
-      const todo = owner ? (!sum ? ['cRoute', '規劃路線'] : n < 2 ? ['cInvite', '邀請隊友'] : !meet ? ['cMeet', '設定集合點'] : null) : null;
+      // 臨時開團（首頁「現在就出發」）：路線、集合點都不是必要的，主按鈕直接是邀請隊友，有人了就是開始
+      let quick = false; try { quick = localStorage.getItem(`qiji:quick:${tid}`) === '1'; } catch { /* 私密模式 */ }
+      const todo = owner ? (!sum && !quick ? ['cRoute', '規劃路線'] : n < 2 ? ['cInvite', '邀請隊友'] : !meet && !quick ? ['cMeet', '設定集合點'] : null) : null;
       html = `<p class="stage-h">出發前準備</p>
         <p class="stage-p">三件事打勾就準備好了；有人開始分享位置，就會進到「集合」。</p>
         <div class="check">
