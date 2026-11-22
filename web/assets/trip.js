@@ -400,8 +400,11 @@ function loadRouteSum() {
   api(`/api/trips/${tid}/route/summary`).then((r) => { routeSum = r?.summary ? r : null; renderStage(); }).catch(() => {});
 }
 const ci = (ok, title, sub, act, id) => `<button type="button" class="ci ${ok ? 'ok' : ''}" id="${id}"><span class="ck" aria-hidden="true">✓</span><span class="m"><b>${title}</b><span>${sub}</span></span><span class="go2">${act}</span></button>`;
-const meSharing = () => { const me = S.members.get(S.me); return !!S.gps || (me && statusOf(me) !== 'none'); };
+// 網頁 GPS 要第一次定位成功才算在回報（按下去到拿到位置之前是「等待定位」，權限被拒也不會誤顯示回報中）
+const gpsWaiting = () => !!S.gps && !S.gps.fixed;
+const meSharing = () => { const me = S.members.get(S.me); return !!S.gps?.fixed || (me && statusOf(me) !== 'none'); };
 function gpsAction() { if (!S.gps && !meSharing()) $('#gpsBtn').click(); else selectMore('report'); }
+const gpsWaitTxt = '等待定位…（瀏覽器問要不要分享位置時請按「允許」）';
 function renderStage() {
   const t = S.trip, st = stageOf(), owner = t.is_owner;
   $('#stepper').innerHTML = stepperHtml(st);
@@ -446,7 +449,7 @@ function renderStage() {
       html = `<p class="stage-h">${meet ? `集合中・${here.length}／${n} 人到「${esc(meet.name)}」` : `集合中・${sh}／${n} 人在分享位置`}</p>
         <p class="stage-p">${owner ? '人到齊就按開始，全隊會收到通知、開始記錄軌跡。' : `${esc(ownerName)}（建立者）按「開始」之後，全隊一起進入騎乘。`}</p>
         <div class="check">
-          ${ci(on, '開啟我的位置回報', on ? (S.gps ? '網頁 GPS 回報中・隊友看得到你' : '位置回報中・隊友看得到你') : '還沒開，隊友看不到你在哪', on ? '設定' : '開啟 ›', 'cGps')}
+          ${ci(on, '開啟我的位置回報', on ? (S.gps?.fixed ? '網頁 GPS 回報中・隊友看得到你' : '位置回報中・隊友看得到你') : gpsWaiting() ? gpsWaitTxt : '還沒開，隊友看不到你在哪', on ? '設定' : gpsWaiting() ? '' : '開啟 ›', 'cGps')}
           ${ci(meet ? here.length >= n : off === 0, meet ? `到集合點 ${here.length}／${n} 人` : `分享位置 ${sh}／${n} 人`, hereTxt, '看地圖', 'cHere')}
           ${ci(!!sum, '路線', routeTxt, owner ? (sum ? '修改' : '規劃 ›') : '看', 'cRoute')}
         </div>
@@ -571,9 +574,9 @@ function renderTeam() {
   renderRideB();
   const rg = $('#rideGps'), on = meSharing();
   const viewer = me?.u.role === 'viewer';
-  rg.textContent = viewer ? '👀 只看中（不回報位置）' : S.gps ? '● 網頁 GPS 回報中' : on ? '● 位置回報中' : '開始回報我的位置';
+  rg.textContent = viewer ? '👀 只看中（不回報位置）' : S.gps?.fixed ? '● 網頁 GPS 回報中' : on ? '● 已有裝置在回報（不是這個網頁）' : gpsWaiting() ? '等待定位…' : '開始回報我的位置';
   rg.disabled = viewer;
-  rg.classList.toggle('on', on && !viewer); rg.classList.toggle('primary', !on && !viewer);
+  rg.classList.toggle('on', on && !viewer); rg.classList.toggle('primary', !on && !viewer && !gpsWaiting());
   $('#gpsBtn').hidden = viewer;
   $('#goNav').hidden = viewer;  // 只看的人不導航
   if (S.trip.status === 'planned') renderStage();  // 有人開始分享位置：準備 → 集合
@@ -830,13 +833,15 @@ $('#gpsBtn').onclick = () => {
   S.gps.watch = navigator.geolocation.watchPosition(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
   wakeLock();
   $('#gpsBtn').textContent = '停止回報'; $('#gpsBtn').className = 'btn';
-  $('#gpsInfo').textContent = '等待定位…';
+  $('#gpsInfo').textContent = gpsWaitTxt;
+  renderTeam();
 };
 function stopGps(info) {
   if (S.gps) navigator.geolocation.clearWatch(S.gps.watch);
   S.gps = null; S.wake?.release?.(); S.wake = null;
   $('#gpsBtn').textContent = '開始回報我的位置'; $('#gpsBtn').className = 'btn primary';
   $('#gpsInfo').textContent = info;
+  if (S.trip) renderTeam();
 }
 // 定位權限被拒：停止回報、按鈕改回去、面板上方顯示怎麼打開（UX-31）。逾時、暫時抓不到就繼續等
 function onGpsError(err) {
@@ -877,6 +882,7 @@ function renderGpsInfo({ pending, sent, error, dup }) {
 }
 async function onFix(p) {
   if (!S.gps) return;
+  if (!S.gps.fixed) { S.gps.fixed = true; renderTeam(); }
   const c = p.coords, now = Date.now();
   const moving = c.speed == null || c.speed > 1.5;
   if (now - S.gps.last < (moving ? 2500 : 30000)) return;   // 騎乘中 2.5 秒一點，停車時 30 秒一點
