@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter, WATCH } from '/assets/common.js';
+import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, parkedJitter, reduceMotion, markFocus, isWeak, eventFilter, WATCH } from '/assets/common.js';
 import { createMap } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -321,7 +321,7 @@ function frame(now) {
   const target = !autoFollow || S.profiling ? '' : fm?.pos ? `f${S.focus}` : pts.length === 1 ? `o${live[0].u.uid}` : pts.length ? 'g' : 'last';
   if (target !== lastTarget) { if (target && lastTarget) M.retarget(); lastTarget = target; }
   if (S.styleReady && pts.length && !S.profiling && autoFollow) {
-    if (!LOW_POWER && !M.busy) map.setBearing((map.getBearing() + dt * 2) % 360); // 慢慢旋轉；省電時不轉，鏡頭不動地圖就不必重畫
+    if (!LOW_POWER && !reduceMotion() && !M.busy) map.setBearing((map.getBearing() + dt * 2) % 360); // 慢慢旋轉；省電時不轉，鏡頭不動地圖就不必重畫
     if (fm?.pos) M.follow(fm.pos, { padding: pad() });  // 點了隊員表：鏡頭跟著他
     else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
     else M.followGroup(pts, { padding: pad(), maxZoom: 14 });
@@ -593,6 +593,7 @@ function handle(msg) {
       // 動畫長度＝跟上一點的間隔（和行程頁一樣）：固定 1 秒的話，2 秒回報一次的人會「走一秒停一秒」，跟隨他時鏡頭一頓一頓
       const tnow = performance.now(), gap = m.lastAt ? tnow - m.lastAt : 1000;
       m.lastAt = tnow;
+      if (!msg.pre && parkedJitter(m, +msg.lon, +msg.lat)) break; // 停著時原地飄移：圖釘和鏡頭都不跟著跳
       m.from = m.pos || [msg.lon, msg.lat]; m.to = [msg.lon, msg.lat]; m.t0 = tnow; m.dur = Math.min(3000, Math.max(250, gap * 1.1));
       if (m.pos && !m.lastRough) m.trail.push(m.pos);
       m.lastRough = !!msg.rough || !!msg.pre;  // 精度太差的點、行程開始前的即時位置只移動圖釘，不接進軌跡線

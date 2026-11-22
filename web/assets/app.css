@@ -251,7 +251,10 @@ html.glass-panel:not(.no-glass) :is(.panel.glass,.panel.solid){
   --surface:var(--lg-surface); --surface-2:var(--lg-surface-2); --surface-3:var(--lg-surface-2);
   background:var(--lg-big); border:1px solid var(--lg-edge); box-shadow:var(--lg-rim),var(--shadow);
   -webkit-backdrop-filter:var(--lg-bf); backdrop-filter:var(--liquid-filter,) var(--lg-bf)}
-html.glass-panel:not(.no-glass) .panel :is(.handle,.keep){background:transparent}
+html.glass-panel:not(.no-glass) .panel .keep{background:transparent}
+/* 玻璃抽屜的把手黏在最上面：完全透明的話，捲上來的內容會直接從把手底下透出來。
+   改成上濃下淡的同色帶（Apple 的 scroll edge 效果），內容捲到這裡會慢慢淡掉，不會跟把手疊在一起 */
+html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bottom,var(--lg-big) 0,var(--lg-big) 55%,rgb(var(--lg-rgb) / 0) 100%)}
 .low-power.glass-panel:not(.glass-sheet-lp) :is(.panel.glass,.panel.solid){-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:var(--solid)!important}
 .low-power.glass-panel:not(.glass-sheet-lp) .panel :is(.handle,.keep){background:var(--solid)}
 @media (prefers-reduced-transparency: reduce){

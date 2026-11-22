@@ -1,4 +1,4 @@
-import { api, tripGate, armConfirm, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, gapGlow, markFocus, isWeak, eventFilter } from '/assets/common.js';
+import { api, tripGate, armConfirm, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, reduceMotion, gapGlow, markFocus, isWeak, eventFilter } from '/assets/common.js';
 import { createMap, declutter, addCompass } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -274,7 +274,7 @@ function tick(now) {
       S.followZoomed = true;
       const c = map.getCenter(), km = hav(c.lat, c.lng, t.pos[1], t.pos[0]) / 1000;
       S.fly = { at: now, from: [c.lng, c.lat], z0: map.getZoom(), z1: S.keepZoom ? map.getZoom() : Math.max(map.getZoom(), 14.5),
-                dur: Math.min(1800, 700 + km * 40), dip: Math.max(0, Math.min(5, Math.log2(Math.max(1, km / 2)))) };
+                dur: reduceMotion() ? 1 : Math.min(1800, 700 + km * 40), dip: reduceMotion() ? 0 : Math.max(0, Math.min(5, Math.log2(Math.max(1, km / 2)))) };
     }
     if (now > (S.easeUntil || 0)) {
       let center = t.pos, extra = {};

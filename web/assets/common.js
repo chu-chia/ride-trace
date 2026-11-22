@@ -438,10 +438,27 @@ export function frameGate() {
 }
 
 // 地圖留白平滑過渡：抽屜或側欄開合後，鏡頭用 0.45 秒滑到新的置中位置，不會一下子閃過去
+// 停車時的 GPS 飄移：手機停著時位置會在原地跳十幾到幾十公尺，速度也會跟著亂跳（有時算出 7 km/h）。
+// 圖釘照著跳，跟隨／全隊鏡頭也會跟著來回追，3D 傾斜時看起來就是畫面上下抖。
+// 最近 3 點速度的中位數低於 6 km/h、新位置又在目前圖釘 30 m 內，就當作停著沒動，圖釘不動。
+const PARK_KMH = 6, PARK_M = 30;
+export function parkedJitter(m, lon, lat) {
+  const anchor = m.to || m.pos;
+  if (!anchor) return false;
+  const v = (m.recent || []).slice(-3).map((x) => x.kmh).sort((a, b) => a - b);
+  if (!v.length || v[Math.floor(v.length / 2)] >= PARK_KMH) return false;
+  const kx = Math.cos((lat * Math.PI) / 180) * 111320;
+  return Math.hypot((lon - anchor[0]) * kx, (lat - anchor[1]) * 110540) < PARK_M;
+}
+
+// 系統「減少動態效果」：鏡頭不做飛行、旋轉、慢慢追的動畫，直接到位（MapLibre 自己的 easeTo／flyTo 已經會略過動畫）
+const RM_Q = matchMedia('(prefers-reduced-motion: reduce)');
+export const reduceMotion = () => RM_Q.matches;
+
 export function smoothPad(compute, ms = 450) {
   let from = compute(), to = from, t0 = 0;
   const get = () => {
-    const k = Math.min(1, (performance.now() - t0) / ms);
+    const k = RM_Q.matches ? 1 : Math.min(1, (performance.now() - t0) / ms);
     if (k >= 1) return to;
     const e = 1 - (1 - k) ** 3;
     return Object.fromEntries(Object.keys(to).map((key) => [key, (from[key] ?? to[key]) + (to[key] - (from[key] ?? to[key])) * e]));

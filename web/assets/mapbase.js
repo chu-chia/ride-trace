@@ -385,7 +385,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   const RESUME_MS = 450;
   let retargetMs = 0;  // retarget() 指定的滑動時間
   let busyUntil = 0;  // 鏡頭動畫（指北針、2D/3D）結束前，跟隨模式不要每格重設鏡頭把動畫打斷
-  const animate = (opts) => { busyUntil = performance.now() + (opts.duration ?? 500) + 80; map.easeTo(opts); };
+  const RM = matchMedia('(prefers-reduced-motion: reduce)');  // 減少動態效果：鏡頭動畫一律直接到位
+  const animate = (opts) => { if (RM.matches) opts = { ...opts, duration: 0 }; busyUntil = performance.now() + (opts.duration ?? 500) + 80; map.easeTo(opts); };
   let grp = null, grpT = 0; // 全隊鏡頭目前的（平滑後）中心與縮放
   function fixElevation() {
     if (following || !is3d || !map.getTerrain() || map.isMoving()) return;
@@ -424,6 +425,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       lastT = now;
       if (!following || wasBusy) { const c = map.getCenter(); resume = { at: now, from: [c.lng, c.lat], ms: retargetMs || RESUME_MS, io: !!retargetMs }; wasBusy = false; retargetMs = 0; }
       if (!following) { following = true; map.setCenterClampedToGround(false); smoothEl = is3d && map.getTerrain() ? map.getCenterElevation() : null; }  // 從目前鏡頭高度開始追，不會一接手就跳
+      if (resume && RM.matches) resume = null;
       if (resume) {
         // 換對象用前後都慢的曲線（每格位移小、沒有一開始的猛衝）；手勢後接回用先快後慢
         const k = Math.min(1, (now - resume.at) / resume.ms), e = resume.io ? k * k * (3 - 2 * k) : 1 - (1 - k) ** 3;
@@ -479,8 +481,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       // zoom 遲滯：要拉遠（有人快出畫面）就跟；要拉近，差超過 0.4 級才慢慢拉近，小幅變化不理，畫面不會一直呼吸
       if (tz > grp.zoom && tz - grp.zoom < 0.4) tz = grp.zoom;
       else if (tz > grp.zoom) tz -= 0.2;
-      const kc = 1 - Math.exp(-dt / 0.7);
-      const kz = 1 - Math.exp(-dt / (tz < grp.zoom ? 0.5 : 2.2));
+      const kc = RM.matches ? 1 : 1 - Math.exp(-dt / 0.7);
+      const kz = RM.matches ? 1 : 1 - Math.exp(-dt / (tz < grp.zoom ? 0.5 : 2.2));
       grp.lon += (c.lng - grp.lon) * kc;
       grp.lat += (c.lat - grp.lat) * kc;
       grp.zoom += (tz - grp.zoom) * kz;
