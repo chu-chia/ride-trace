@@ -187,8 +187,8 @@
     .followPill button{border:0;background:var(--surface-2,#2c2c2e);color:var(--fg);width:32px;height:32px;border-radius:50%;font:inherit;cursor:pointer}
     /* 轉彎小卡、全隊進度條：原型把它們放在導航畫面（第 5 塊做），行程頁手機版先收起來；下一站寫在收合區塊 */
     #qxProg,#qxTurn{display:none!important}
-    /* SOS 是安全功能：抽屜拉到滿版也不滑出去，停在上方標題列下面 */
-    .sosFab{bottom:min(calc(var(--sheet-h,200px) + 14px), calc(100dvh - env(safe-area-inset-top,0px) - 128px))}
+    /* SOS 是安全功能：抽屜拉到滿版也不滑出去，停在右上角標題列旁邊（工具列那時已經滑走），疊在抽屜上面 */
+    .sosFab{z-index:10;bottom:min(calc(var(--sheet-h,200px) + 14px), calc(100dvh - env(safe-area-inset-top,0px) - 8px - 54px))}
     /* 抽屜拉到很高時，跟隨膠囊淡出（SOS 一直留著） */
     .followPill{opacity:clamp(0,calc((1 - var(--sheet-t,0)) * 3),1);transform:translate(-50%, calc(clamp(0, (var(--sheet-t,0) - .3) / .5, 1) * -220px))}
   }
