@@ -66,7 +66,7 @@ function fmtDist(m) {
   if (m >= 100) return `${Math.round(m / 50) * 50} 公尺`;
   return `${Math.max(10, Math.round(m / 10) * 10)} 公尺`;
 }
-const fmtGap = (g) => { const a = Math.abs(g); const d = a >= 1000 ? `${(a / 1000).toFixed(1)} 公里` : `${Math.round(a / 10) * 10} 公尺`; return a < 30 ? '並行' : `${g > 0 ? '前' : '後'} ${d}`; };
+const fmtGap = (g) => { const a = Math.abs(g); const d = a >= 1000 ? `${(a / 1000).toFixed(1)} 公里` : `${Math.round(a / 10) * 10} 公尺`; return a < 30 ? '就在你附近' : `${g > 0 ? '前' : '後'} ${d}`; };
 
 /* ───── 畫面 ───── */
 const ICO = {
