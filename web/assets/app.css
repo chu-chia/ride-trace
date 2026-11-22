@@ -309,7 +309,7 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .panel-mini{display:none;padding:0 var(--sp-4) var(--sp-3);gap:var(--sp-3);flex-wrap:wrap;font-size:var(--fs-s);color:var(--muted)}
 .panel-mini b{color:var(--fg)}
 /* 收合：只留頂列＋一行摘要（.panel-mini），寬度一致。動畫由 common.js animatePanel 用 clip-path 做（以前是 width .25s，內容會瞬間消失） */
-.panel.small:not(.closing){width:var(--panel-mini-w);bottom:auto}
+@media (min-width:761px){.panel.small:not(.closing){width:var(--panel-mini-w);bottom:auto}}  /* 只限側欄；手機直向的抽屜由下面 max-width:760px 那段決定（寫成全域會因為權重較高蓋掉抽屜的 width:auto） */
 @media (min-width:761px){.panel.small:not(.closing)>:not(.panel-head):not(.panel-mini):not(.handle):not(.keep){display:none!important}}
 .panel.small:not(.closing) .panel-mini{display:flex}
 /* 跟著側欄寬度移動的元件：收合／展開時用同一條彈簧曲線一起滑 */
