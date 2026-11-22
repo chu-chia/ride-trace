@@ -569,7 +569,11 @@ sosBtn.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter'
 sosBtn.addEventListener('click', () => {
   if (!mineSos()) return;
   armConfirm(sosBtn, '再點一次解除 SOS', async () => {
-    try { await api(`/api/trips/${tid}/sos`, { method: 'DELETE' }); } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
+    try {
+      await api(`/api/trips/${tid}/sos`, { method: 'DELETE' });
+      if (!sosDialog.hidden) closeSosDialog();  // 解除成功就關掉對話框，不要停在「按住 1.5 秒發出 SOS」
+      toast('已解除 SOS，隊友會收到「沒事了」', { icon: '✓', color: '#30d158', ms: 4000 });
+    } catch (err) { toast(err.message, { icon: '!', color: '#ff3b30' }); }
     syncSosBtn();
   });
 });
