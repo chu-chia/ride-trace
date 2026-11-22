@@ -1,11 +1,12 @@
 // 規劃路線頁：版面照改版原型（ride-trace-redesign/plan.html，Google 地圖式），資料和 API 用正式版：
 // 地點搜尋 /api/poi/suggest／search、預覽 /api/routes/preview（1～3 個方案）、沿途 /api/poi/along、
 // Google Maps 匯入 /api/routes/parse-gmaps、套用 PUT /api/trips/{id}/route（停靠站可以順便加成休息點）。
-import { api, $, esc, setLabel, press, sheetDrag, armConfirm, goBackOr } from '/assets/common.js';
+import { api, tripGate, $, esc, setLabel, press, sheetDrag, armConfirm, goBackOr } from '/assets/common.js';
 import { createMap, addCompass, styleMenu } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('trip');
 if (!tid) location.replace('/');
+await tripGate(tid);  // 錯誤 id／非成員／被移出：和行程頁同一個錯誤畫面（以前非成員會看到空白規劃頁）
 $('#back').href = `/trip?id=${tid}`;
 
 const M = createMap($('#map'), { style: 'dark', center: [121.0, 23.8], zoom: 7, terrain: false, interactive3d: false });
