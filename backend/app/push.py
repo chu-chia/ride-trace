@@ -72,6 +72,7 @@ RULES = {
     "speedcam": {"who": "self",   "calm": 0,   "urgent": False, "title": "前方測速"},
     "offroute": {"who": "self",   "calm": 300, "urgent": False, "title": "偏離路線"},
     "start":    {"who": "others", "calm": 0,   "urgent": False, "title": "行程開始"},
+    "end":      {"who": "others", "calm": 0,   "urgent": False, "title": "行程結束"},
     "kick":     {"who": "self",   "calm": 0,   "urgent": False, "title": "你被移出行程", "fixed": True},
     "msg":      {"who": "others", "calm": 0,   "urgent": False, "title": "快速訊息"},
     "chat":     {"who": "others", "calm": 0,   "urgent": False, "title": "聊天"},
@@ -83,7 +84,7 @@ DESC = {
     "lost": "隊友超過門檻沒有回報位置", "behind": "有人沿路線落後全隊中心", "ahead": "有人跑太前面",
     "stuck": "隊友在非休息點停太久", "allin": "全員抵達集合點", "roadevent": "前方 5 km 內有施工、事故",
     "weather": "前方路段可能下雨", "speedcam": "你前方 1 km 有測速照相", "offroute": "你偏離規劃路線",
-    "start": "團主按下開始", "kick": "你被團主移出行程", "msg": "隊友送出快速訊息", "chat": "聊天室的新訊息",
+    "start": "團主按下開始", "end": "整趟行程結束（點通知看回放）", "kick": "你被團主移出行程", "msg": "隊友送出快速訊息", "chat": "聊天室的新訊息",
 }
 # 這幾類常常好幾個人同時發生（一起停、一起進山區沒訊號），45 秒內跨人合併成一則
 GROUP_TYPES = {"lost", "behind", "stuck"}
@@ -131,6 +132,8 @@ async def build_payload(f: dict) -> dict:
         title, body = f"{rule['title']}・{trip_name}", f"{nick}：{text}" if nick else text
     if etype == "kick":  # 被移出的人已經進不了行程頁，點通知回首頁並說明（UX-03）
         url = f"/?kicked={tid}&name={quote(trip_name)}"
+    elif etype == "end":  # 行程結束：點通知直接看回放
+        url = f"/replay?id={tid}"
     else:
         url = f"/trip?id={tid}"
     # 同一行程同一類收在同一則（聊天一直來只留最新），SOS 每次都要跳出來；
@@ -190,6 +193,13 @@ async def send_to_user(uid: str, payload: dict) -> int:
     return ok
 
 
+def self_payload(payload: dict, f: dict) -> dict:
+    """收件人就是當事人（落隊、超前、前方路況這類推給全隊的）：改成第二人稱，不要自己收到「三號阿華：落隊…」。"""
+    if f.get("type") in ("msg", "chat") or RULES[f["type"]]["who"] == "self":
+        return payload
+    return {**payload, "body": f"你{f.get('text', '')}"[:160]}
+
+
 async def handle_push(msgs: list[tuple[str, dict]]) -> list[str]:
     """worker 的 consumer group「push」。"""
     for _, f in msgs:
@@ -206,7 +216,7 @@ async def handle_push(msgs: list[tuple[str, dict]]) -> list[str]:
         for to in await recipients(tid, etype, uid):
             if not await r.set(f"push:sent:{eid}:{to}", 1, nx=True, ex=86400):
                 continue  # 這則已經推過（worker 重送）
-            await send_to_user(to, payload)
+            await send_to_user(to, self_payload(payload, f) if uid and to == uid else payload)
     return [i for i, _ in msgs]
 
 
@@ -258,7 +268,7 @@ async def flush_groups():
             if not [p for p in subj if p["uid"] != first_uid]:
                 continue  # 對這個人來說沒有新的人（第一則已經收過）
             if len(subj) == 1:
-                body = f"{names[subj[0]['uid']]}：{subj[0]['text']}"
+                body = f"你{subj[0]['text']}" if subj[0]["uid"] == to else f"{names[subj[0]['uid']]}：{subj[0]['text']}"
             else:
                 body = f"{len(subj)} 人{GROUP_VERB[etype]}：" + "、".join("你" if p["uid"] == to else names[p["uid"]] for p in subj)
             await send_to_user(to, {"title": f"{RULES[etype]['title']}・{trip_name}", "body": body[:160],
