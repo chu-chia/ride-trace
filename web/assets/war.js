@@ -1,7 +1,7 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
 import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, parkedJitter, reduceMotion, markFocus, isWeak, eventFilter, WATCH } from '/assets/common.js';
-import { createMap } from '/assets/mapbase.js';
+import { createMap, addCompass, styleMenu } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
 
@@ -146,7 +146,11 @@ window.addEventListener('resize', () => { if (!mobile.matches) restoreLayout(); 
 $('#tripLink').href = `/trip?id=${encodeURIComponent(tid)}`;
 // 觀看連結：沒有行程頁、首頁可以回，也不能編輯版面以外的事
 if (WATCH) { $('#tripLink').hidden = true; document.querySelectorAll('.head .icon-btn[href="/"]').forEach((a) => { a.hidden = true; }); }
-$('#mapStyle').onclick = () => setLabel($('#mapStyle'), M.nextStyle());
+styleMenu(M, $('#mapStyle'));
+// 電腦版也有 3D 鈕和指北針（跟手機版一樣）
+$('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
+press($('#b3d'), M.is3d);
+addCompass(M, $('#tools'));
 panels.forEach((el) => liquidGlass(el));
 // 工具列放在右上、右側面板的左邊；面板被拖動或縮放後重新計算
 function placeTools() {

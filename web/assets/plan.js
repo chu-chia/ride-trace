@@ -2,7 +2,7 @@
 // 地點搜尋 /api/poi/suggest／search、預覽 /api/routes/preview（1～3 個方案）、沿途 /api/poi/along、
 // Google Maps 匯入 /api/routes/parse-gmaps、套用 PUT /api/trips/{id}/route（停靠站可以順便加成休息點）。
 import { api, $, esc, setLabel, press, sheetDrag, armConfirm } from '/assets/common.js';
-import { createMap, addCompass } from '/assets/mapbase.js';
+import { createMap, addCompass, styleMenu } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('trip');
 if (!tid) location.href = '/';
@@ -69,7 +69,7 @@ M.onStyle(() => {
   setLabel($('#bStyle'), M.styleName);
 });
 map.on('click', 'alt-hit', (e) => { const i = e.features?.[0]?.properties?.i; if (i != null && !S.lineDrag) select(+i); });
-$('#bStyle').onclick = () => setLabel($('#bStyle'), M.nextStyle());
+styleMenu(M, $('#bStyle'));
 $('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 
 /* ───── 起終點列表 ───── */

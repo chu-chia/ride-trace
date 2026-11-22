@@ -1,5 +1,5 @@
 import { api, tripGate, armConfirm, $, $$, esc, avatar, initialOf, inkOn, press, clock, dur, ago, toast, teamTable, initPanel, setLabel, smoothPad, frameGate, LOW_POWER, reduceMotion, gapGlow, parkedJitter, markFocus, isWeak, eventFilter } from '/assets/common.js';
-import { createMap, declutter, addCompass } from '/assets/mapbase.js';
+import { createMap, declutter, addCompass, styleMenu } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
 import { gpsQueue } from '/assets/gpsqueue.js';
@@ -321,7 +321,7 @@ function syncTools() {
 }
 $('#bAll').onclick = () => setFollow('all');
 $('#bMe').onclick = () => pick(S.me);
-$('#bStyle').onclick = () => setLabel($('#bStyle'), M.nextStyle());
+styleMenu(M, $('#bStyle'));
 $('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 
 /* ---------- 面板 ---------- */

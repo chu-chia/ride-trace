@@ -24,7 +24,7 @@
   html,body{height:100%;overflow:hidden;background:#111;color:var(--ink)}
   .hidden{display:none!important}
   .maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{display:none}
-  .pl button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+  .pl button:not(.tool){font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}  /* 地圖按鈕（.tool）用共用樣式，不要被這裡洗掉 */
   .pl svg{display:block}
   .ib{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;flex:none}
   .ib svg{width:22px;height:22px}

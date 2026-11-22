@@ -4,7 +4,7 @@
 // 全螢幕地圖＋底部抽屜（收起：全程進度條＋三個數字＋分頁鈕；拉開：騎士／路線／事件／剖面），重要事件跳通知橫幅（往上滑掉）。
 // 身分：role＝viewer（只看）的人不出現在畫面上，只算「N 人觀看」；car（後援車）用方塊圖示、不算名次和帶頭距離。
 import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, ago, press, setLabel, frameGate, LOW_POWER, gapGlow, parkedJitter, reduceMotion, markFocus, isWeak, eventFilter, WATCH } from '/assets/common.js';
-import { createMap, addCompass } from '/assets/mapbase.js';
+import { createMap, addCompass, styleMenu } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
 
@@ -22,7 +22,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 $('#back').href = `/trip?id=${encodeURIComponent(tid)}`;
 if (WATCH) $('#back').hidden = true;  // 觀看連結：沒有行程頁可以回
-$('#mapStyle').onclick = () => setLabel($('#mapStyle'), M.nextStyle());
+styleMenu(M, $('#mapStyle'));
 $('#b3d').onclick = () => { M.set3d(!M.is3d); press($('#b3d'), M.is3d); };
 press($('#b3d'), M.is3d);
 addCompass(M, document.querySelector('.tools'));  // 指北針：點一下北方朝上

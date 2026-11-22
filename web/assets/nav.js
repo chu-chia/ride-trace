@@ -274,7 +274,17 @@ function resume() {
 }
 $('#nvRecenter').onclick = resume;
 $('#nvFocus').addEventListener('click', (e) => { if (e.target.closest('button')) resume(); });
-$('#nvCompass').onclick = () => { st.northUp = !st.northUp; $('#nvCompass').classList.toggle('on', st.northUp); if (!st.follow) resume(); };
+// 指北針（參考 Google／Apple 導航）：車頭朝上＋傾斜 ↔ 北方朝上＋俯視。2D 也能傾斜（M.allowTilt），2D 只是不畫立體建築、地形。
+// 右上那顆看得到的指北針轉按到這裡，文字顯示「目前」是哪一種
+function syncNavCompass() {
+  const b = document.querySelector('.tools .compass'); if (!b) return;
+  if (!S.navMode) { b.classList.remove('nav'); b.sync?.(); return; }
+  b.classList.add('nav'); b.classList.remove('idle', 'off-north');
+  b.querySelector('.clabel').textContent = st.northUp ? '朝北' : '車頭';
+  const t = st.northUp ? '目前北方朝上（俯視），點一下改成車頭朝上' : '目前車頭朝上，點一下改成北方朝上（俯視）';
+  b.title = t; b.setAttribute('aria-label', t);
+}
+$('#nvCompass').onclick = () => { st.northUp = !st.northUp; $('#nvCompass').classList.toggle('on', st.northUp); syncNavCompass(); if (!st.follow) resume(); };
 $('#nvOverview').onclick = () => {
   const R = active(); if (!R) return;
   stopFollow(); clearArrow();
@@ -663,6 +673,7 @@ document.addEventListener('click', (e) => {
 function enterNav() {
   if (S.navMode) return;
   S.navMode = true;
+  M.allowTilt(true);
   document.body.classList.add('nav');
   document.body.dataset.nvtheme = document.documentElement.dataset.theme || 'dark';
   // 樣式還沒載完就先不加圖層（載完時 M.onStyle 會加，並依 navMode 開關）
@@ -672,6 +683,7 @@ function enterNav() {
   $('#nvRecenter').classList.add('nv-hidden');
   setSheet(false);
   history.replaceState(null, '', `/nav?id=${tid}${PREVIEW ? '&preview=1' : ''}`);
+  syncNavCompass();
   dispatchEvent(new Event('resize')); // 抽屜量一次收起來的高度
   layout();
   if (PRE) showBanner('info', '預覽導航：沿路線模擬騎一遍（4 倍速）<br><small>不會回報位置；按左下 ✕ 回到規劃</small>', null, 6000);
@@ -679,6 +691,8 @@ function enterNav() {
 function exitNav() {
   if (!S.navMode) return;
   S.navMode = false;
+  M.allowTilt(false);
+  syncNavCompass();
   document.body.classList.remove('nav', 'nv-open');
   setLayersVisible(false);
   puck.remove(); dest.remove(); clearArrow(); M.unfollow();

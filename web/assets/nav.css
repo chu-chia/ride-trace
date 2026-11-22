@@ -1,6 +1,8 @@
 /* 行程頁的導航模式（nav.js）：數值照改版原型 ride-trace-redesign/nav.html（隊伍呈現選 A：地圖為主，只放頭像） */
 .nv{display:none}
 body.nav .nv{display:block}
+/* 自己是橫排的元件：上面那行權重比較高，會把 display:flex 蓋成 block（圖示、文字、按鈕變成上下疊） */
+body.nav .nv-free,body.nav .nv-banner,body.nav .nv-focus{display:flex}
 body.nav{
   --nv-green:#0f6e45; --nv-green-2:#0a5434; --nv-sheet:#1e1f22; --nv-sheet-2:#2a2b2f; --nv-ink:#fff; --nv-ink-2:#b9bcc3; --nv-eta:#3ccf83;
   --nv-fab:#2a2b2f; --nv-fab-ink:#e8eaed; --nv-warn:#f4b400; --nv-shadow:0 2px 10px rgba(0,0,0,.35);
@@ -42,6 +44,8 @@ body.nav .nv svg{display:block}
 /* 沒有路線：自由騎乘 */
 .nv-free{position:fixed;left:8px;right:8px;max-width:440px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:12;background:var(--nv-sheet);color:var(--nv-ink);border-radius:16px;box-shadow:var(--nv-shadow);padding:12px 14px;display:flex;align-items:center;gap:10px;font-weight:600}
 .nv-free small{font-weight:500;color:var(--nv-ink-2)}
+.nv-free>span{flex:1;min-width:0;line-height:1.35}  /* 說明文字自己換行，不要貼到右邊的按鈕 */
+.nv-free a{flex:none}
 .nv-free a{margin-left:auto;padding:8px 14px;border-radius:999px;background:var(--nv-green);color:#fff;font-size:14px;text-decoration:none;white-space:nowrap}
 
 /* ── 橫幅（偏離、測速、隊友 SOS）── */

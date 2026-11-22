@@ -2,7 +2,7 @@
 // 「迷霧模式」是選配：地圖蓋一層霧，去過的格子把霧擦掉。
 import { api, $, $$, initPanel, setLabel } from '/assets/common.js';
 import { swr } from '/assets/swr.js';
-import { createMap, addCompass, labelLayerId } from '/assets/mapbase.js';
+import { createMap, addCompass, labelLayerId, styleMenu } from '/assets/mapbase.js';
 import { initRecords } from '/assets/fp-records.js';
 
 const TAIWAN = [[119.3, 21.85], [122.1, 25.35]];
@@ -128,7 +128,7 @@ M.onStyle((style) => {
   setLabel($('#bStyle'), M.styleName);
   draw();
 });
-$('#bStyle').onclick = () => setLabel($('#bStyle'), M.nextStyle());
+styleMenu(M, $('#bStyle'));
 
 /* ---------- 讀資料 ---------- */
 let timer = null;

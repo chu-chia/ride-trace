@@ -184,6 +184,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   const ORDER = styles;
   let cur = style;
   let is3d = terrain;
+  let tiltOK = false; // 導航模式：2D 也可以傾斜（只是不畫立體建築、地形），跟 Google／Apple 導航一樣
   let useTerrain = terrainPref();
   window.__qiji3d = terrain;
   // 浮在地圖上的面板跟著底圖深淺走（深色、衛星 → 深色面板；淺色 → 淺色面板），不跟系統
@@ -307,10 +308,10 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     const vis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
     vis(BUILDING_ID, is3d);
     vis(BUILDING_FLAT_ID, !is3d);
-    map.setMaxPitch(is3d ? 80 : 0);
+    map.setMaxPitch(is3d || tiltOK ? 80 : 0);
     if (interactive && interactive3d) {
       // 2D 仍可旋轉（右鍵／Ctrl 拖曳、雙指旋轉），只是不會傾斜
-      if (is3d) { map.touchPitch.enable(); map.dragRotate.enable(); } else map.touchPitch.disable();
+      if (is3d || tiltOK) { map.touchPitch.enable(); map.dragRotate.enable(); } else map.touchPitch.disable();
     }
   }
 
@@ -413,6 +414,16 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     get is3d() { return is3d; },
     // 樣式已經載入過就立刻執行一次（isStyleLoaded() 在圖磚載入中會是 false，不能用）
     onStyle(fn) { hooks.push(fn); if (styleLoaded) fn(cur); },
+    get styles() { return ORDER.map((id) => ({ id, name: STYLES[id].name })); },
+    // 導航模式開關：開著時 2D 也能傾斜，3D 鈕只管立體建築／地形，傾斜交給導航自己的鏡頭
+    get tiltOK() { return tiltOK; },
+    allowTilt(on) {
+      tiltOK = !!on;
+      const apply = () => { if (styleLoaded) applyDim(); else map.setMaxPitch(is3d || tiltOK ? 80 : 0); };
+      // 離開導航回到 2D：先把鏡頭放平再鎖（直接鎖會瞬間跳平）
+      if (!tiltOK && !is3d && map.getPitch() > 0.5) { animate({ pitch: 0, duration: 500 }); setTimeout(() => { if (!tiltOK) apply(); }, 550); }
+      else apply();
+    },
     setStyle(name) { cur = name; theme(); map.setStyle(STYLES[name].url, { diff: false }); },
     nextStyle() { this.setStyle(ORDER[(ORDER.indexOf(cur) + 1) % ORDER.length]); return STYLES[cur].name; },
     // 跟隨模式：每一格把鏡頭中心移到 center。高度不直接貼地形（地形有細小起伏，鏡頭會上下彈），
@@ -506,6 +517,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     // 以畫面中心縮放（跟隨中點兩下、雙指點一下用；MapLibre 內建的是以手指位置為中心）
     zoomBy(d) { animate({ zoom: map.getZoom() + d, duration: 300 }); },
     resetNorth() { animate({ bearing: 0, duration: 500 }); },
+    // 指北針第二下：已經朝北，把傾斜放平成俯視
+    flatten() { animate({ pitch: 0, duration: 500 }); },
     // 抽屜全開、地圖被蓋住時暫停重畫（見 createMap 裡的說明）
     pauseRender(on) { map._qijiPause?.(on); },
     set3d(on) {
@@ -516,7 +529,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
         map.setTerrain(on && useTerrain ? { source: 'dem', exaggeration: 1.4 } : null);
         if (on) map.setSky(LOOK[cur].sky);
       }
-      if (on) { applyDim(); animate({ pitch: 60, duration: 800 }); }
+      if (tiltOK) applyDim();  // 導航中：傾斜由導航鏡頭控制，這裡只換建築／地形
+      else if (on) { applyDim(); animate({ pitch: 60, duration: 800 }); }
       // 先把鏡頭放平，再鎖住 pitch（直接鎖會瞬間跳平）
       else { animate({ pitch: 0, duration: 600 }); setTimeout(() => { if (!is3d) applyDim(); }, 650); }
       if (!styleLoaded) applyDim();
@@ -555,26 +569,93 @@ export function declutter(map, items, gap = 40) {
 }
 
 // 指北針：指針跟著地圖方向轉，點一下讓北方朝上（3D 保留傾斜角度）。放進各頁右上的 .tools 按鈕列。
+// 指北針（參考 Google／Apple 地圖）：
+//   地圖有轉 → 按一下北方朝上（傾斜不動）
+//   已經朝北但有傾斜 → 再按一下放平成俯視
+//   已經朝北又是平的 → 收起來（跟 Google／Apple 一樣，沒事做的按鈕不佔眼睛）
+// 導航模式由 nav.js 接手（車頭朝上＋傾斜 ↔ 北方朝上＋俯視），會加 .nav 讓它一直顯示並帶文字
 export function addCompass(M, tools) {
   const map = M.map;
   if (M.down || !tools) return null;
   const b = document.createElement('button');
   b.className = 'tool glass compass';
   b.type = 'button';
-  b.title = '指北針：點一下讓北方朝上';
-  b.setAttribute('aria-label', '指北針，點一下讓北方朝上');
-  b.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><g class="needle"><path d="M12 3 L15.5 12 L8.5 12 Z" fill="#ff453a"/><path d="M12 21 L8.5 12 L15.5 12 Z" fill="currentColor" opacity=".55"/></g></svg>';
+  b.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><g class="needle"><path d="M12 3 L15.5 12 L8.5 12 Z" fill="#ff453a"/><path d="M12 21 L8.5 12 L15.5 12 Z" fill="currentColor" opacity=".55"/></g></svg><span class="clabel"></span>';
   const needle = b.querySelector('.needle');
+  let next = null;  // null＝還沒設定過，第一次一定要套用
   const sync = () => {
-    const bearing = map.getBearing();
+    const bearing = map.getBearing(), pitch = map.getPitch();
     needle.setAttribute('transform', `rotate(${-bearing} 12 12)`);
-    b.classList.toggle('off-north', Math.abs(bearing) > 0.5);
+    if (b.classList.contains('nav')) return;  // 導航模式的文字、說明由 nav.js 設定
+    const act = Math.abs(bearing) > 0.5 ? 'north' : pitch > 1 ? 'flat' : '';
+    if (act === next) return;
+    next = act;
+    b.classList.toggle('off-north', act === 'north');
+    b.classList.toggle('idle', !act);
+    const t = act === 'north' ? '指北針：點一下讓北方朝上' : act === 'flat' ? '指北針：點一下放平成俯視' : '指北針：目前北方朝上';
+    b.title = t; b.setAttribute('aria-label', t);
   };
   map.on('rotate', sync);
+  map.on('pitch', sync);
   sync();
-  b.onclick = () => M.resetNorth();
+  b.onclick = () => {
+    if (Math.abs(map.getBearing()) > 0.5) M.resetNorth();
+    else if (map.getPitch() > 1) M.flatten();
+  };
+  b.sync = () => { next = null; sync(); };
   tools.append(b);
   return b;
+}
+
+// 地圖樣式（參考 Apple 地圖的「地圖模式」選單）：按一下在按鈕旁邊打開選單，列出所有樣式、目前的打勾，
+// 選了就換並關掉；再按一次按鈕、點外面、按 Esc 都會關。按鈕文字＝目前的樣式。
+// before(id)：換之前（例如回放頁先停用 3D 鈕）；after(id)：換之後
+export function styleMenu(M, btn, { before, after } = {}) {
+  if (!btn) return;
+  const sync = () => { const s = btn.querySelector('span'); if (s) s.textContent = M.styleName; else btn.textContent = M.styleName; };
+  sync();
+  btn.setAttribute('aria-haspopup', 'menu');
+  btn.setAttribute('aria-expanded', 'false');
+  let menu = null;
+  const close = () => {
+    if (!menu) return;
+    menu.remove(); menu = null;
+    btn.setAttribute('aria-expanded', 'false');
+    btn.classList.remove('open');
+    removeEventListener('pointerdown', outside, true); removeEventListener('keydown', esc, true); removeEventListener('resize', close);
+  };
+  const outside = (e) => { if (menu && !menu.contains(e.target) && !btn.contains(e.target)) close(); };
+  const esc = (e) => { if (e.key === 'Escape') { close(); btn.focus(); } };
+  btn.onclick = () => {
+    if (menu) { close(); return; }
+    menu = document.createElement('div');
+    menu.className = 'style-menu glass';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', '地圖樣式');
+    menu.innerHTML = `<div class="sm-t">地圖樣式</div>${M.styles.map((x) => `<button type="button" role="menuitemradio" aria-checked="${x.id === M.style}" data-id="${x.id}"><span class="sm-sw sw-${x.id}"></span><span class="sm-n">${x.name}</span><svg class="sm-ok" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`).join('')}`;
+    document.body.append(menu);
+    const r = btn.getBoundingClientRect(), mw = menu.offsetWidth, mh = menu.offsetHeight;
+    // 預設開在按鈕左邊、上緣對齊；靠左的按鈕就開右邊；超出畫面底就往上推
+    const left = r.left - mw - 8 >= 8 ? r.left - mw - 8 : Math.min(innerWidth - mw - 8, r.right + 8);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${Math.max(8, Math.min(r.top, innerHeight - mh - 8))}px`;
+    menu.style.transformOrigin = left < r.left ? 'top right' : 'top left';
+    btn.setAttribute('aria-expanded', 'true');
+    btn.classList.add('open');
+    menu.onclick = (e) => {
+      const it = e.target.closest('button[data-id]'); if (!it) return;
+      const id = it.dataset.id;
+      close();
+      if (id === M.style) return;
+      before?.(id);
+      M.setStyle(id);
+      sync();
+      after?.(id);
+    };
+    (menu.querySelector('[aria-checked="true"]') || menu.querySelector('button'))?.focus({ preventScroll: true });
+    addEventListener('pointerdown', outside, true); addEventListener('keydown', esc, true); addEventListener('resize', close);
+  };
+  return { close, sync };
 }
 
 // 自己的圖層要插在哪裡：所有底圖形狀（道路、橋、高架、建築）之後的第一個文字層之前。

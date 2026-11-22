@@ -1,6 +1,6 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
 import { api, tripGate, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate, reduceMotion, markFocus, avatar } from '/assets/common.js';
-import { createMap, declutter, addCompass, flatZoom } from '/assets/mapbase.js';
+import { createMap, declutter, addCompass, flatZoom, styleMenu } from '/assets/mapbase.js';
 import { cameraGestures } from '/assets/gestures.js';
 
 // 側欄收合（電腦收合鈕／手機拉把手）與其他地圖頁一致
@@ -534,11 +534,7 @@ $('#colorBy').onclick = (e) => {
   }
   applyLayerState();
 };
-$('#bStyle').onclick = () => {
-  R.styleReady = false;
-  $('#b3d').disabled = true;
-  setLabel($('#bStyle'), M.nextStyle());
-};
+styleMenu(M, $('#bStyle'), { before: () => { R.styleReady = false; $('#b3d').disabled = true; } });
 $('#b3d').onclick = () => {
   M.unfollow();
   R.easeUntil = performance.now() + 850;
