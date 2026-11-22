@@ -1,5 +1,5 @@
 // 回放：全隊同步、時間軸＋倍速、事件標記、跟拍鏡頭、依速度／海拔上色、海拔與速度曲線
-import { api, tripGate, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate, markFocus, avatar } from '/assets/common.js';
+import { api, tripGate, $, $$, esc, teamTable, initialOf, inkOn, press, clock, dur, initPanel, setLabel, smoothPad, frameGate, reduceMotion, markFocus, avatar } from '/assets/common.js';
 import { createMap, declutter, addCompass, flatZoom } from '/assets/mapbase.js';
 import { cameraGestures } from '/assets/gestures.js';
 
@@ -122,6 +122,25 @@ function segGeo() {
   return { type: 'FeatureCollection', features };
 }
 const SEG = segGeo();
+// 規劃路線：騎到一半改過路線的話有好幾條（後端 routes：from～to 這段時間走哪條）。
+// 播放到哪個時間，那時候的路線是藍色，其他（原本的／之後換上的）是灰色虛線
+const ROUTES = data.routes || [];
+const routeAt = (t) => { let k = -1; ROUTES.forEach((x, i) => { if (x.from <= t) k = i; }); return Math.max(0, k); };
+function routeGeo() {
+  return { type: 'FeatureCollection', features: ROUTES.map((x, i) => ({ type: 'Feature', properties: { i }, geometry: { type: 'LineString', coordinates: x.coords } })) };
+}
+let curRoute = -1;
+function styleRoutes(force) {
+  const k = routeAt(R.t);
+  if (!force && k === curRoute) return;
+  curRoute = k;
+  if (!map.getLayer('rp-route')) return;
+  const on = ['==', ['get', 'i'], k];
+  map.setPaintProperty('rp-route', 'line-color', ['case', on, '#3d9bff', '#9aa0a6']);
+  map.setPaintProperty('rp-route', 'line-opacity', ['case', on, 0.55, ROUTES.length > 1 ? 0.7 : 0]);
+  map.setPaintProperty('rp-route', 'line-width', ['case', on, 5, 3]);
+  map.setPaintProperty('rp-route', 'line-dasharray', ROUTES.length > 1 ? [2, 1.5] : [1, 0]);
+}
 function colorExpr() {
   if (R.color === 'speed') return ['interpolate', ['linear'], ['get', 'spd'], ...SPEED_STOPS];
   if (R.color === 'alt') return ['interpolate', ['linear'], ['get', 'alt'], ...ALT_STOPS];
@@ -130,9 +149,12 @@ function colorExpr() {
 M.onStyle(() => {
   if (!map.getSource('rp-ghost')) map.addSource('rp-ghost', { type: 'geojson', data: ghostGeo() });
   if (!map.getSource('rp-seg')) map.addSource('rp-seg', { type: 'geojson', data: SEG });
+  if (ROUTES.length && !map.getSource('rp-route')) map.addSource('rp-route', { type: 'geojson', data: routeGeo() });
+  if (ROUTES.length && !map.getLayer('rp-route')) map.addLayer({ id: 'rp-route', type: 'line', source: 'rp-route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3d9bff', 'line-width': 5, 'line-opacity': 0.55 } });
   if (!map.getLayer('rp-ghost')) map.addLayer({ id: 'rp-ghost', type: 'line', source: 'rp-ghost', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 3, 'line-opacity': 0.22 } });
   if (!map.getLayer('rp-seg')) map.addLayer({ id: 'rp-seg', type: 'line', source: 'rp-seg', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': colorExpr(), 'line-width': 4, 'line-opacity': 0.95 } });
   applyLayerState();
+  styleRoutes(true);
   setLabel($('#bStyle'), M.styleName);
   R.styleReady = true;
   $('#b3d').disabled = false;
@@ -183,15 +205,46 @@ const padRaw = () => (innerWidth <= 760
 PADS = smoothPad(padRaw);
 const pad = () => PADS.get(); // 抽屜／側欄開合後鏡頭慢慢滑到新位置
 addEventListener('resize', () => PADS.refresh());
+// 「全隊」＝框住現在這個時間點的所有騎士（跟行程頁、戰情室一樣），騎士在畫面中央。
+// 以前框整條軌跡：剛打開時大家都在起點，起點又剛好在框的最邊邊，騎士就貼在畫面最左邊。
+// 大家擠在一起時至少框約 3 km，看得到周圍的路
+const MIN_SPAN = 0.015;
 function fitAll(dur = 900) {
-  const pts = riders.flatMap((m) => m.track.filter((_, i) => i % 10 === 0).map((p) => [p[2], p[1]]));
-  const b = pts.reduce((bb, p) => bb.extend(p), new maplibregl.LngLatBounds(pts[0], pts[0]));
+  const now = riders.map((m) => stateAt(m, R.t).pos);
+  const lo = [Math.min(...now.map((p) => p[0])), Math.min(...now.map((p) => p[1]))], hi = [Math.max(...now.map((p) => p[0])), Math.max(...now.map((p) => p[1]))];
+  const cx = (lo[0] + hi[0]) / 2, cy = (lo[1] + hi[1]) / 2, hx = Math.max(MIN_SPAN, (hi[0] - lo[0]) / 2), hy = Math.max(MIN_SPAN * 0.9, (hi[1] - lo[1]) / 2);
+  const pts = [...now, [cx - hx, cy - hy], [cx + hx, cy + hy], [cx - hx, cy + hy], [cx + hx, cy - hy]];
+  const b = new maplibregl.LngLatBounds([cx - hx, cy - hy], [cx + hx, cy + hy]);
   // 縮放用平面換算、留白只交給 easeTo 一次：地圖已經記著跟拍用的 padding，cameraForBounds 會再疊一次，
   // 加上 3D 傾斜和手機直向的高畫面，算出來會拉到整個北台灣（UX：一進回放看不到軌跡）
   PADS.refresh();
   const padding = padRaw();
   R.easeUntil = performance.now() + dur + 50;
-  map.easeTo({ center: b.getCenter(), zoom: flatZoom(b, padding, 15, map), padding, pitch: M.is3d ? 50 : 0, bearing: 0, duration: dur });
+  map.easeTo({ ...fitCam(pts, b, padding), duration: dur });
+}
+// 平面換算在 3D 傾斜時會偏：近處（畫面下方）放大、遠處縮小，軌跡整體偏到一邊，起點的騎士常被擠到畫面最左邊。
+// 先把鏡頭放到估算位置（不畫出來），量軌跡在畫面上的實際範圍，把它的中心移到可視區中央、照比例調縮放，做兩次就很準
+function fitCam(pts, b, padding) {
+  let cam = { center: b.getCenter(), zoom: flatZoom(b, padding, 15, map), padding, pitch: M.is3d ? 50 : 0, bearing: 0 };
+  if (!cam.pitch) return cam;
+  const saved = { center: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), padding: map.getPadding() };
+  const W = map.getContainer().clientWidth, H = map.getContainer().clientHeight;
+  const L = padding.left, Rt = W - padding.right, T = padding.top, B = H - padding.bottom;
+  const step = Math.max(1, Math.floor(pts.length / 300));
+  for (let n = 0; n < 2; n++) {
+    map.jumpTo(cam);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i < pts.length; i += step) {
+      const q = map.project(pts[i]);
+      x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y);
+    }
+    const r = Math.max((x1 - x0) / Math.max(40, Rt - L), (y1 - y0) / Math.max(40, B - T));
+    if (!Number.isFinite(r) || r <= 0) break;
+    const c = map.unproject([(x0 + x1) / 2, (y0 + y1) / 2]);  // 鏡頭中心換成這一點，軌跡中心就會落在可視區中央
+    cam = { ...cam, center: [c.lng, c.lat], zoom: Math.min(15, cam.zoom - Math.log2(r * 1.04)) };
+  }
+  map.jumpTo(saved);
+  return cam;
 }
 function syncFollowUi() {
   press($('#bAll'), R.follow === 'all' && !R.away);
@@ -503,7 +556,7 @@ function update(force) {
     m.el.style.opacity = st.before ? 0.35 : 1;
   }
   const now = performance.now();
-  if (force || now - lastFilter > 100) { lastFilter = now; if (map.getLayer('rp-seg')) map.setFilter('rp-seg', ['<=', ['get', 't'], R.t]); }
+  if (force || now - lastFilter > 100) { lastFilter = now; if (map.getLayer('rp-seg')) map.setFilter('rp-seg', ['<=', ['get', 't'], R.t]); styleRoutes(); }
   if (force || now - lastUi > 250) {
     lastUi = now;
     knob();
@@ -536,7 +589,7 @@ function frame(now) {
       const c = map.getCenter();
       const km = hav(c.lat, c.lng, st.pos[1], st.pos[0]) / 1000;
       R.fly = { at: now, from: [c.lng, c.lat], z0: map.getZoom(), p0: map.getPitch(), z1: R.keepZoom ? map.getZoom() : Math.max(map.getZoom(), 15), p1: R.keepZoom ? map.getPitch() : M.is3d ? 62 : 0,
-                dur: Math.min(1800, 700 + km * 40), dip: Math.max(0, Math.min(5, Math.log2(Math.max(1, km / 2)))) };
+                dur: reduceMotion() ? 1 : Math.min(1800, 700 + km * 40), dip: reduceMotion() ? 0 : Math.max(0, Math.min(5, Math.log2(Math.max(1, km / 2)))) };
     }
     let center = st.pos, extra = {};
     if (R.fly) {

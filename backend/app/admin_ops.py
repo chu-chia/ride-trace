@@ -108,6 +108,10 @@ async def delete_trip(tid: str):
         async for key in r.scan_iter(match=pattern, count=500):
             keys.add(key)
     # 路線是獨立 RedisJSON key，只刪沒有其他行程引用的路線。
+    # 騎到一半換過的舊路線記在 trip:{tid}:routes（Stream），只屬於這趟，一起刪
+    for _, f in await r.xrange(K.routes(tid)):
+        if f.get("rid") and f["rid"] != trip.get("route"):
+            keys.add(K.route(f["rid"]))
     rid = trip.get("route")
     if rid:
         shared = False

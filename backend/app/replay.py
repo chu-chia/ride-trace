@@ -193,7 +193,33 @@ async def replay(tid: str, uid: str = Depends(current_uid)):
         ends = [e for e in evs if e.get("type") == "end"]
         detail["ended_reason"] = ends[-1]["text"] if ends else ""
     detail["t0"], detail["t1"] = t0, t1
+    detail["routes"] = await route_history(tid)
     return detail
+
+
+ROUTE_PTS = 1500  # 回放只是畫線，抽稀到 1500 點內
+
+
+async def route_history(tid: str) -> list[dict]:
+    """這趟用過的每一條路線（Stream trip:{tid}:routes，ID＝換上的時間）：from～to 這段時間走的是哪條。
+    舊行程沒有 Stream，就只回目前那一條（from=0）。"""
+    items = [(int(i.split("-")[0]), f) for i, f in await r.xrange(K.routes(tid))]
+    if not items:
+        rid = await r.hget(K.trip(tid), "route")
+        items = [(0, {"rid": rid})] if rid else []
+    out = []
+    for n, (ts, f) in enumerate(items):
+        res = await r.json().get(K.route(f["rid"]), "$.coords", "$.summary.km", "$.by")
+        if not res or not res["$.coords"]:
+            continue
+        c = res["$.coords"][0]
+        step = max(1, len(c) // ROUTE_PTS)
+        coords = c[::step]
+        if coords[-1] != c[-1]:
+            coords.append(c[-1])
+        out.append({"id": f["rid"], "from": ts, "to": items[n + 1][0] if n + 1 < len(items) else None,
+                    "by": (res["$.by"] or [""])[0], "km": (res["$.summary.km"] or [None])[0], "coords": coords})
+    return out
 
 
 @router.get("/{tid}/series")

@@ -1,7 +1,7 @@
 // 規劃路線頁：版面照改版原型（ride-trace-redesign/plan.html，Google 地圖式），資料和 API 用正式版：
 // 地點搜尋 /api/poi/suggest／search、預覽 /api/routes/preview（1～3 個方案）、沿途 /api/poi/along、
 // Google Maps 匯入 /api/routes/parse-gmaps、套用 PUT /api/trips/{id}/route（停靠站可以順便加成休息點）。
-import { api, $, esc, setLabel, press, sheetDrag } from '/assets/common.js';
+import { api, $, esc, setLabel, press, sheetDrag, armConfirm } from '/assets/common.js';
 import { createMap, addCompass } from '/assets/mapbase.js';
 
 const tid = new URLSearchParams(location.search).get('trip');
@@ -335,7 +335,7 @@ function renderSheet() {
   const r = route(), owner = !!S.trip?.is_owner && S.trip?.status !== 'ended';
   $('#goNav').disabled = !r;
   $('#apply').disabled = !r || !owner;
-  $('#apply').textContent = !S.trip || owner ? '套用到行程' : S.trip.status === 'ended' ? '行程已結束' : '只有建立者能套用';
+  if ($('#apply').dataset.armed !== '1') $('#apply').textContent = !S.trip || owner ? (S.trip?.status === 'live' ? '改用這條路線' : '套用到行程') : S.trip.status === 'ended' ? '行程已結束' : '只有建立者能套用';
   $('#clr').classList.toggle('hidden', !owner || !S.saved);
   $('#asRestWrap').classList.toggle('hidden', !owner);
   if (!r) {
@@ -457,7 +457,13 @@ $('#goNav').onclick = () => {
   try { sessionStorage.setItem(`qiji:navPreview:${tid}`, JSON.stringify({ coords: r.coords, cum_km: r.cum_km, maneuvers: r.maneuvers, summary: r.summary, points: cleanPts(), vehicle: S.vehicle })); } catch { /* 存不了就算了 */ }
   location.href = `/nav?id=${tid}&preview=1`;
 };
-$('#apply').onclick = async () => {
+// 騎乘中套用＝全隊改走這條路：先要再按一次確認。後端會幫已經不在新路線上的人（例如過了分岔口）各自算接回的路，
+// 原本的路線留在回放
+$('#apply').onclick = () => {
+  if (S.trip?.status === 'live') armConfirm($('#apply'), '再按一次：全隊改走這條', applyRoute);
+  else applyRoute();
+};
+async function applyRoute() {
   $('#apply').disabled = true;
   try {
     const r = await api(`/api/trips/${tid}/route`, { method: 'PUT', body: { points: cleanPts(), vehicle: S.vehicle, source_url: S.sourceUrl, alt: S.sel } });
@@ -468,10 +474,10 @@ $('#apply').onclick = async () => {
         await api(`/api/trips/${tid}/waypoints`, { method: 'POST', body: { name: p.name || `停靠站 ${i + 1}`, lat: p.lat, lon: p.lon, kind: 'rest' } }).catch(() => {});
       }
     }
-    ptoast(`已套用到這趟行程：${r.summary.km} km，隊友馬上看到新路線`);
+    ptoast(S.trip?.status === 'live' ? `已改路線：${r.summary.km} km，不在新路線上的人會自動規劃接回` : `已套用到這趟行程：${r.summary.km} km，隊友馬上看到新路線`);
     setTimeout(() => (location.href = `/trip?id=${tid}`), 1100);
   } catch (err) { ptoast(err.message); $('#apply').disabled = false; }
-};
+}
 $('#imp').onclick = () => { $('#gForm').classList.toggle('hidden'); if (!$('#gForm').classList.contains('hidden')) $('#gUrl').focus(); };
 $('#gForm').addEventListener('submit', async (e) => {
   e.preventDefault();

@@ -550,6 +550,7 @@ addEventListener('qiji:msg', (e) => {
     case 'behind': if (!mine) { showBanner('info', esc(msg.text || `${who} 落後了`), '設集合點', 8000, setMeet); say(`${who}落後了`); } break;
     case 'offroute': if (mine) { showBanner('warn', '已偏離路線<br><small>再偏離 10 秒就幫你從目前位置重新規劃</small>', null, 4000); say('已偏離路線'); } break;
     case 'reroute': if (mine) { showBanner('info', `${esc(msg.text || '已重新規劃')}<br><small>虛線是車隊的路線，到了就接回</small>`, null, 8000); say('已重新規劃'); } break;
+    case 'route': if (!mine && /改了路線/.test(msg.text || '')) { showBanner('info', `${esc(who)} ${esc(msg.text)}`, null, 8000); say(`${who}改了路線`); } break;
     case 'onroute': if (mine) { showBanner('info', '已接回車隊路線', null, 5000); say('已接回車隊路線'); } break;
     case 'allin': case 'arrive': case 'regroup': showBanner('info', esc(msg.text || ''), null, 5000); break;
     default: break;

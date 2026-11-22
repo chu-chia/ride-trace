@@ -619,12 +619,18 @@ function styleNav() {
   map.setPaintProperty('qx-route', 'line-width', on ? 4 : 6);
   map.setPaintProperty('qx-route-casing', 'line-opacity', on ? 0 : 0.75);
 }
-async function loadNav() {
-  const had = !!X.nav;
+async function loadNav(reason) {
+  const had = !!X.nav, quiet = X.quietNavDrop;
+  X.quietNavDrop = false;
   try { const r = await api(`/api/trips/${tid}/navroute`); X.nav = r?.coords ? r : null; } catch { X.nav = null; }
   map.getSource('qx-nav')?.setData(navGeo());
   styleNav();
-  if (had && !X.nav && S.trip?.status === 'live') toast('已接回車隊路線', { icon: '回', color: '#30a46c' });
+  if (had && !X.nav && !quiet && S.trip?.status === 'live') toast('已接回車隊路線', { icon: '回', color: '#30a46c' });
+  if (reason === 'routechange' && X.nav) {
+    // 建立者改了路線、我不在新路線上（例如已經過了分岔口）：後端從我目前的位置幫我算好接回新路線的路
+    X.offSince = 0; X.lastReroute = Date.now();
+    toast(`你不在新路線上，已幫你規劃接回`, { icon: '算', color: '#0a84ff', sub: `${fmtKm(X.nav.summary.km)} 到「${X.nav.target.name}」，到了就接上新路線` });
+  }
   renderTurn();
 }
 // 偏離 10 秒就從我目前的位置（含車頭方向）重算到下一個停靠點
@@ -762,8 +768,15 @@ addEventListener('qiji:msg', (e) => {
   }
   if ((msg.kind === 'event' && (msg.type === 'sos' || msg.type === 'sos_off')) || msg.kind === 'sos_refresh') loadSos();
   if (msg.kind === 'snapshot') { loadWps(); loadMarks(); loadSos(); loadRoute(); loadNav(); }
-  if (msg.kind === 'route') { X.prog = {}; X.nav = null; loadRoute(); loadNav(); } // 全隊路線換了，後端也刪了個人路線
-  if (msg.kind === 'navroute' && msg.uid === S.me) loadNav();
+  if (msg.kind === 'route') {
+    X.prog = {}; X.nav = null; X.quietNavDrop = true; loadRoute(); loadNav(); // 全隊路線換了，後端也刪了個人路線
+    // 騎到一半建立者改路線：告訴大家改走哪、多或少幾公里；已經過分岔口的人，後端會另外送 navroute（reason=routechange）
+    if (msg.changed && msg.by !== S.me) {
+      const d = msg.diff_km;
+      toast(`${nameOf(msg.by)} 改了路線`, { icon: '改', color: '#0a84ff', sub: `新路線 ${fmtKm(msg.km)}${d == null ? '' : `・${d >= 0 ? '多' : '少'} ${fmtKm(Math.abs(d))}`}・原本的路線保留在回放` });
+    }
+  }
+  if (msg.kind === 'navroute' && msg.uid === S.me) loadNav(msg.reason);
   if (msg.kind === 'progress') { X.prog[msg.uid] = { km: msg.km, off: msg.off_m, nkm: msg.nkm }; if (msg.uid === S.me) renderTurn(); }
   if (msg.kind === 'speedcam' && msg.uid === S.me) camAlert(msg);
 });

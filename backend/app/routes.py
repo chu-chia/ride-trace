@@ -6,6 +6,7 @@ Redis：
                 不必像存成字串那樣每次整包讀出來再解析。
 - trip:{id} 的 route 欄位指向 route:{rid}
 """
+import asyncio
 import math
 import os
 import re
@@ -418,19 +419,39 @@ async def set_route(tid: str, body: PlanIn, uid: str = Depends(current_uid)):
     routes = await valhalla_routes(pts, vehicle, uid)
     route = routes[min(body.alt, len(routes) - 1)]
     rid = str(await r.incr("seq:route"))
-    doc = {"id": rid, "trip": tid, "by": uid, "created": int(time.time() * 1000), "points": pts,
+    now = int(time.time() * 1000)
+    doc = {"id": rid, "trip": tid, "by": uid, "created": now, "points": pts,
            "vehicle": vehicle, "avoid_highways": vehicle == "scooter", "source_url": body.source_url, **route}
     await r.json().set(K.route(rid), "$", doc)
     old = t.get("route")
-    await r.hset(K.trip(tid), "route", rid)
-    if old:
+    live = t.get("status") == "live"
+    old_km = None
+    if old and live:
+        # 騎到一半改路線：舊路線留著（第 4 點：回放看得到原本要走哪），只標上被換掉的時間
+        old_km = ((await r.json().get(K.route(old), "$.summary.km")) or [None])[0]
+        await r.json().set(K.route(old), "$.replaced", now)
+    elif old:
         await r.delete(K.route(old))
+    if not live:
+        await r.delete(K.routes(tid))  # 還沒出發前改幾次都不算紀錄，只留最後一條
+    s = route["summary"]
+    # Stream：ID 就是換路線的時間，回放用 XRANGE 依時間讀出每一段該走哪條路
+    await r.xadd(K.routes(tid), {"rid": rid, "by": uid, "km": s["km"]}, id=f"{now}-*")
+    await r.hset(K.trip(tid), "route", rid)
     await r.delete(K.progress(tid))
     await drop_navroutes(tid)  # 全隊路線換了，每個人的個人路線都作廢
-    s = route["summary"]
-    await events.emit(tid, "route", uid, f"設定路線（{VEHICLES[vehicle]['name']}）：{s['km']:.1f} km，"
-                                          f"預估 {s['min'] // 60} 小時 {s['min'] % 60} 分")
-    await events.publish(tid, {"kind": "route", "id": rid})
+    msg = {"kind": "route", "id": rid}
+    if live and old:
+        diff = s["km"] - old_km if old_km is not None else None
+        await r.delete(K.offroute(tid))  # 舊路線的偏離標記作廢；離新路線太遠的人下面會先標上，避免誤報「偏離」
+        await events.emit(tid, "route", uid, f"改了路線：{s['km']:.1f} km" +
+                          (f"（{'多' if diff >= 0 else '少'} {abs(diff):.1f} km）" if diff is not None else "") + "，原本的路線保留在回放")
+        msg.update(changed=True, by=uid, km=s["km"], diff_km=None if diff is None else round(diff, 2))
+        asyncio.create_task(rejoin_all(tid, doc))
+    else:
+        await events.emit(tid, "route", uid, f"設定路線（{VEHICLES[vehicle]['name']}）：{s['km']:.1f} km，"
+                                              f"預估 {s['min'] // 60} 小時 {s['min'] % 60} 分")
+    await events.publish(tid, msg)
     return {"id": rid, "summary": s}
 
 
@@ -489,6 +510,67 @@ async def next_stop(tid: str, route: dict, from_km: float) -> dict:
     return {"name": end.get("name") or "終點", "lat": end["lat"], "lon": end["lon"], "km": cum[-1], "kind": "end"}
 
 
+async def make_navroute(tid: str, uid: str, team: dict, lat: float, lon: float, heading: float | None,
+                        from_km: float, reason: str = "offroute") -> dict:
+    """從 (lat, lon, heading) 算到全隊路線上 from_km 之後的下一個停靠點，存成這個人的個人路線。"""
+    stop = await next_stop(tid, team, from_km)
+    vehicle = team.get("vehicle") or ("scooter" if team.get("avoid_highways", True) else "heavy")
+    end = {"lat": stop["lat"], "lon": stop["lon"]}
+    try:
+        route = (await valhalla_routes([{"lat": lat, "lon": lon, "heading": heading}, end], vehicle))[0]
+    except HTTPException:
+        # 附近沒有和車頭方向相符的路（GPS 飄、在停車場裡繞）：不限方向再算一次
+        if heading is None:
+            raise
+        route = (await valhalla_routes([{"lat": lat, "lon": lon}, end], vehicle))[0]
+    doc = {"by": uid, "created": int(time.time() * 1000), "team_route": team.get("id"), "target": stop, "reason": reason,
+           "team_from_km": round(from_km, 3), "team_to_km": round(stop["km"], 3), "vehicle": vehicle, **route}
+    key = K.navroute(tid, uid)
+    await r.json().set(key, "$", doc)
+    await r.expire(key, NAVROUTE_TTL)
+    await r.hdel(K.offroute(tid), uid)  # 換成新路線了：之後再偏離這條才會重新通知
+    s = route["summary"]
+    extra = s["km"] - (stop["km"] - from_km)
+    head = "接回新路線" if reason == "routechange" else "重新規劃"
+    await events.emit(tid, "reroute", uid, f"{head}：到「{stop['name']}」{s['km']:.1f} km"
+                                            f"（{'多' if extra >= 0 else '少'} {abs(extra):.1f} km）")
+    await events.publish(tid, {"kind": "navroute", "uid": uid, "reason": reason})
+    return doc
+
+
+REJOIN_FRESH_MS = 10 * 60_000  # 位置 10 分鐘內有更新的人才幫他算（太久沒回報的，等他回來偏離時再自動算）
+
+
+async def rejoin_all(tid: str, team: dict):
+    """第 3 點：建立者騎到一半改路線。每個正在騎的人用自己目前的位置判斷：
+    還在新路線上（150 m 內）就照常；不在（已經過了分岔口、或本來就在別條路）就各自算一條接回新路線的個人路線。"""
+    try:
+        uids = await r.smembers(K.active(tid))
+        roles = await r.hgetall(K.role(tid))
+        now = int(time.time() * 1000)
+        for u in uids:
+            if roles.get(u) == "viewer":
+                continue
+            lat, lon, heading, speed, seen = await r.hmget(K.state(tid, u), "lat", "lon", "heading", "speed", "seen")
+            if not lat or not lon or not seen or now - int(float(seen)) > REJOIN_FRESH_MS:
+                continue
+            lat, lon = float(lat), float(lon)
+            km, off, _ = project_on_route(team["coords"], team["cum_km"], lat, lon)
+            if off <= OFF_NEW_ROUTE_M:
+                continue
+            await r.hsetnx(K.offroute(tid), u, round(km, 2))  # 先占住：worker 才不會在算好之前推「你偏離路線」
+            hd = float(heading) if heading and speed and float(speed) > 1 else None
+            try:
+                await make_navroute(tid, u, team, lat, lon, hd, km, "routechange")
+            except Exception:  # noqa: BLE001  算不出來：交給前端偏離 10 秒自動重算
+                await r.hdel(K.offroute(tid), u)
+    except Exception:  # noqa: BLE001  背景工作，失敗不影響改路線本身
+        pass
+
+
+OFF_NEW_ROUTE_M = 150  # 跟 worker 的 OFF_ROUTE_M 一樣
+
+
 @router.post("/trips/{tid}/reroute")
 async def reroute(tid: str, body: RerouteIn, uid: str = Depends(current_uid)):
     await require_member(tid, uid)
@@ -501,28 +583,7 @@ async def reroute(tid: str, body: RerouteIn, uid: str = Depends(current_uid)):
     # 我在全隊路線上的里程：偏離當下記下的那個值（offroute），沒有就用最新進度
     from_km = await r.hget(K.offroute(tid), uid) or await r.hget(K.progress(tid), uid)
     from_km = float(from_km) if from_km is not None else project_on_route(team["coords"], team["cum_km"], body.lat, body.lon)[0]
-    stop = await next_stop(tid, team, from_km)
-    vehicle = team.get("vehicle") or ("scooter" if team.get("avoid_highways", True) else "heavy")
-    end = {"lat": stop["lat"], "lon": stop["lon"]}
-    try:
-        route = (await valhalla_routes([{"lat": body.lat, "lon": body.lon, "heading": body.heading}, end], vehicle))[0]
-    except HTTPException:
-        # 附近沒有和車頭方向相符的路（GPS 飄、在停車場裡繞）：不限方向再算一次
-        if body.heading is None:
-            raise
-        route = (await valhalla_routes([{"lat": body.lat, "lon": body.lon}, end], vehicle))[0]
-    doc = {"by": uid, "created": int(time.time() * 1000), "team_route": t.get("route"), "target": stop,
-           "team_from_km": round(from_km, 3), "team_to_km": round(stop["km"], 3), "vehicle": vehicle, **route}
-    key = K.navroute(tid, uid)
-    await r.json().set(key, "$", doc)
-    await r.expire(key, NAVROUTE_TTL)
-    await r.hdel(K.offroute(tid), uid)  # 換成新路線了：之後再偏離這條才會重新通知
-    s = route["summary"]
-    extra = s["km"] - (stop["km"] - from_km)
-    await events.emit(tid, "reroute", uid, f"重新規劃：到「{stop['name']}」{s['km']:.1f} km"
-                                            f"（{'多' if extra >= 0 else '少'} {abs(extra):.1f} km）")
-    await events.publish(tid, {"kind": "navroute", "uid": uid})
-    return doc
+    return await make_navroute(tid, uid, team, body.lat, body.lon, body.heading, from_km)
 
 
 @router.get("/trips/{tid}/navroute")

@@ -51,6 +51,7 @@ class K:
     progress = staticmethod(lambda tid: f"trip:{tid}:progress")     # Hash：uid → 沿路線里程（km）
     offroute = staticmethod(lambda tid: f"trip:{tid}:offroute")     # Hash：uid → 偏離路線中（只通知一次）
     navroute = staticmethod(lambda tid, uid: f"trip:{tid}:navroute:{uid}")  # RedisJSON：偏離後幫這個人重算的個人路線（接回車隊前用）
+    routes = staticmethod(lambda tid: f"trip:{tid}:routes")         # Stream：騎乘中每次換路線一筆（rid、誰改的、km），回放畫舊路線用
     stuck = staticmethod(lambda tid: f"trip:{tid}:stuck")           # Hash：異常久停中的人（只通知一次）
     lagchk = staticmethod(lambda tid: f"trip:{tid}:lagchk")       # 節流鎖：一個行程 2 秒判斷一次
     ingest = "stream:ingest"
