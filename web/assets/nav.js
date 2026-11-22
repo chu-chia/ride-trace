@@ -189,6 +189,8 @@ const roadOf = (R, m) => {
   const n = (m.street || '').split(' · ')[0];
   return n || '無名道路';
 };
+// 轉彎卡路名：「中橫公路霧社支線 / 台14甲」只能在「/」後面換行，道路編號（台14甲、縣道 136）不會被拆成兩行
+const roadHTML = (t) => String(t).split(/\s*[/／]\s*/).map((x) => (/\d/.test(x) ? `<span class="rn">${esc(x)}</span>` : esc(x))).join('<span class="rs"> / </span><wbr>');
 function buildCards(R) {
   track.innerHTML = ''; cards.length = 0;
   const P = pathOf(R);
@@ -197,7 +199,7 @@ function buildCards(R) {
     const m = R.maneuvers[i], n2 = R.maneuvers[i + 1];
     const c = document.createElement('div'); c.className = 'tcard';
     c.innerHTML = `<div class="turn-main"><div class="turn-ico">${iconFor(m.type)}<div class="turn-dist"></div></div>
-      <div class="turn-txt"><div class="turn-verb"></div><div class="turn-road">${esc(roadOf(R, m))}</div></div></div>
+      <div class="turn-txt"><div class="turn-verb"></div><div class="turn-road">${roadHTML(roadOf(R, m))}</div></div></div>
       <div class="turn-then">接下來 ${n2 ? iconFor(n2.type) : ''}</div>`;
     track.append(c); cards.push(c);
   }
@@ -510,7 +512,7 @@ function ui(R, P, ni, toTurn) {
     c.classList.remove('off');
     setHTML(c.querySelector('.turn-dist'), done && isLive ? '' : d > 0 ? fmtDist(d).replace(/ (公里|公尺)/, '<small>$1</small>') : '已經過');
     setText(c.querySelector('.turn-verb'), done && isLive ? '已抵達' : isArrive(m.type) ? (m.act === '抵達停靠點' ? '停靠點在前方' : '目的地在前方') : `${VERB[m.type] || m.act || '繼續'}進入`);
-    setText(c.querySelector('.turn-road'), roadOf(R, m));
+    setHTML(c.querySelector('.turn-road'), roadHTML(roadOf(R, m)));
     const n2 = R.maneuvers[i + 1];
     c.classList.toggle('has-then', !!(isLive && !done && n2 && manS[i + 1] - manS[i] < 600));
   });
