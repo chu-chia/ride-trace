@@ -347,12 +347,12 @@ function renderSheet() {
   $('#sTm').textContent = fmtMin(minOf(r)); $('#sKm').textContent = `(${fmtKm(r.summary.km)})`;
   $('#sTag').textContent = tagOf(S.sel);
   const stops = S.pts.filter((p, i) => i > 0 && i < S.pts.length - 1 && !p.via).length;
-  $('#sVia').textContent = `經 ${r.via || '—'}${stops ? `・${stops} 個停靠站` : ''}${VEH_TXT[S.vehicle]}`;
+  $('#sVia').textContent = [r.via ? `經 ${r.via}` : '', stops ? `${stops} 個停靠站` : '', VEH_TXT[S.vehicle].replace(/^・/, '')].filter(Boolean).join('・');
   const w = r.warnings || [];
   $('#sWarn').innerHTML = (w.length ? `<div class="pwarn">注意：這條路線用到${{ scooter: '機車', heavy: '重機' }[S.vehicle] || ''}不能走的路段：${w.map(esc).join('、')}。可能是沒有其他路可以到，請加停靠站改道。</div>` : '')
     + (r.uses_3a ? '<div class="pnote" style="margin-bottom:10px">這條路線有走國道3甲（重機可以行駛）。</div>' : '');
   $('#alts').innerHTML = S.routes.map((x, i) => `<button type="button" class="alt ${i === S.sel ? 'sel' : ''}" data-a="${i}" aria-pressed="${i === S.sel}">
-      <span class="l"><span class="a">${fmtMin(minOf(x))}</span><span class="b">經 ${esc(x.via || '—')}${x.summary.min_personal ? `・一般估計 ${fmtMin(x.summary.min)}` : ''}</span></span>
+      <span class="l"><span class="a">${fmtMin(minOf(x))}</span><span class="b">${[x.via ? `經 ${esc(x.via)}` : '', x.summary.min_personal ? `一般估計 ${fmtMin(x.summary.min)}` : ''].filter(Boolean).join('・')}</span></span>
       <span class="r">${fmtKm(x.summary.km)}<br><span style="color:var(--eta);font-weight:700;font-size:12px">${tagOf(i)}</span></span></button>`).join('');
   $('#altNote').textContent = S.pts.length > 2 ? '' : `${S.routes.length} 條`;
   if (S.pts.length > 2) $('#alts').insertAdjacentHTML('beforeend', '<div class="pnote">有停靠站或經過點時只會算一條路線；想比較方案，先把停靠站移掉。</div>');

@@ -307,6 +307,15 @@ def build_route(trip: dict, edges: list[dict] | None, vehicle: str, pace: dict) 
         name = m["street"].split(" · ")[0].split("／")[-1] if m["street"] else ""
         if name and m["len_km"] > 8 and name not in via:
             via.append(name)
+    if not via:  # 市區短程沒有超過 8 km 的路：改列最長的兩條（照路線順序），不要只印「—」
+        named = [(m["len_km"], k, m["street"].split(" · ")[0].split("／")[-1]) for k, m in enumerate(maneuvers) if m["street"]]
+        top: list[tuple[int, str]] = []
+        for _, k, name in sorted(named, reverse=True):
+            if name not in [n for _, n in top]:
+                top.append((k, name))
+            if len(top) == 2:
+                break
+        via = [n for _, n in sorted(top)]
     s = trip["summary"]
     return {
         "coords": [coords[i] for i in idx], "cum_km": [round(cum[i], 4) for i in idx], "maneuvers": maneuvers,
