@@ -9,7 +9,7 @@ const tid = new URLSearchParams(location.search).get('id');
 await tripGate(tid);
 
 const STATUS = {
-  ride: ['騎乘中', 'ok'], rest: ['停車中', 'info'], weak: ['訊號弱', 'warn'],
+  ride: ['騎乘中', 'ok'], rest: ['停車中', 'info'], slow: ['慢行', 'info'], weak: ['訊號弱', 'warn'],
   lost: ['失聯', 'crit'], done: ['已結束紀錄', ''], none: ['尚未回報', ''],
 };
 const TRIP_ST = { planned: ['等待開始', 'info'], live: ['進行中', 'ok'], ended: ['已結束', ''] };
@@ -53,7 +53,9 @@ function statusOf(m) {
   // 開始前的即時位置（後端 10 分鐘 TTL）：太久沒新點就不算正在回報
   if (S.trip?.status === 'planned' && s.seen && Date.now() - +s.seen > PRE_STALE_MS) return 'none';
   if (isWeak(s)) return 'weak';
-  return (+s.speed || 0) * 3.6 < 5 ? 'rest' : 'ride';
+  // 1 km/h 以下才算停車；1～5 km/h 是牽車、塞車、慢慢找路（以前 4 km/h 也寫「停車中」）
+  const kmh = (+s.speed || 0) * 3.6;
+  return kmh < 1 ? 'rest' : kmh < 5 ? 'slow' : 'ride';
 }
 
 // 身分：只看的人（role＝viewer）不畫在地圖、不列在隊伍裡，只在隊友分頁寫「觀看中」；自己是只看時照樣留著（畫面很多地方要用到我）
@@ -552,11 +554,11 @@ function renderTeam() {
   // 固定順序：我在最上面，其他人依加入順序（uid），不會因為狀態變化跳來跳去（UX-60）
   // 自己是「只看」時不列在隊伍裡、不算人數（S.members 裡還留著我，畫面其他地方要用）
   const list = [...S.members.values()].filter((m) => m.u.role !== 'viewer').sort((a, b) => (b.u.uid === S.me) - (a.u.uid === S.me) || (+a.u.uid - +b.u.uid));
-  const online = list.filter((m) => ['ride', 'rest', 'weak'].includes(statusOf(m))).length;
+  const online = list.filter((m) => ['ride', 'slow', 'rest', 'weak'].includes(statusOf(m))).length;
   $('#sOnline').textContent = `${online}/${list.length}`;
   const me = S.members.get(S.me);
   // 失聯、訊號弱、還沒回報、已結束：最後的速度不是現在的速度，不要大字顯示（UX-46）
-  const meLive = me && ['ride', 'rest'].includes(statusOf(me));
+  const meLive = me && ['ride', 'slow', 'rest'].includes(statusOf(me));
   $('#sSpeed').textContent = meLive && me.state.speed != null && me.state.speed !== '' ? Math.round(+me.state.speed * 3.6) : '–';
   $('#sAlt').textContent = me?.state.alt != null && me.state.alt !== '' ? Math.round(+me.state.alt) : '–';
   $('#sSpeed').title = meLive ? '' : '目前沒有即時位置';
@@ -586,7 +588,7 @@ function renderTeam() {
     const st = statusOf(m), [label, cls] = STATUS[st], s = m.state;
     const isMe = m.u.uid === S.me, km = S.nearby[m.u.uid];
     const gap = S.trip.gaps?.[m.u.uid], flag = S.trip.flags?.[m.u.uid];
-    const moving = st === 'ride' || st === 'rest' || st === 'weak';
+    const moving = st === 'ride' || st === 'slow' || st === 'rest' || st === 'weak';
     const sub = [m.u.role === 'car' ? '後援車' : m.u.role === 'viewer' ? '只看' : '', label, flag && st !== 'done' ? `${flag === 'behind' ? '落隊' : '超前'}${gap != null ? ' ' + fmtKm(gap) : ''}` : '',
                  !moving && (s.seen || s.ts) ? ago(+s.seen || +s.ts) : ''].filter(Boolean).join(' · ');
     return {
@@ -718,7 +720,7 @@ function renderAll() { renderHeader(); renderTeam(); renderEvents(); renderInvit
 setInterval(() => { if (S.trip) { renderHeader(); renderTeam(); S.members.forEach(placeMarker); describeMap(); } }, 1000);
 // 地圖給螢幕報讀器一段文字（UX-61）
 function describeMap() {
-  const list = [...S.members.values()], on = list.filter((m) => ['ride', 'rest', 'weak'].includes(statusOf(m)));
+  const list = [...S.members.values()], on = list.filter((m) => ['ride', 'slow', 'rest', 'weak'].includes(statusOf(m)));
   const who = S.follow === 'all' ? '全隊' : S.members.get(S.follow)?.u.nickname || '';
   const txt = `地圖：${S.trip.name}，${list.length} 名隊友，${on.length} 人正在回報位置${who && !S.away ? `，鏡頭跟著${who}` : ''}`;
   if ($('#map').getAttribute('aria-label') !== txt) { $('#map').setAttribute('aria-label', txt); map.getCanvas().setAttribute('aria-label', txt); }
@@ -939,4 +941,4 @@ navigator.permissions?.query({ name: 'geolocation' }).then((p) => {
   setTimeout(check, 1500);  // 等 snapshot
   p.onchange = () => { if (p.state !== 'denied') $('#gpsBar').hidden = true; else check(); };
 }).catch(() => {});
-S.isLive = (uid) => { const m = S.members.get(uid); return !!m && ['ride', 'rest'].includes(statusOf(m)); }; // trip-extra.js：轉彎提示只在位置是即時的時候顯示
+S.isLive = (uid) => { const m = S.members.get(uid); return !!m && ['ride', 'slow', 'rest'].includes(statusOf(m)); }; // trip-extra.js：轉彎提示只在位置是即時的時候顯示
