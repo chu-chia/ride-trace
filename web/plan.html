@@ -30,7 +30,7 @@
   .ib svg{width:22px;height:22px}
 
   /* ── 上方：起終點卡 ── */
-  .top{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));top:calc(env(safe-area-inset-top,0px) + 8px);z-index:6;max-width:440px;transition:opacity .2s,transform .2s}
+  .top{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));top:calc(var(--sat) + 8px);z-index:6;max-width:440px;transition:opacity .2s,transform .2s}
   body.sheet-open .top{opacity:0;transform:translateY(-16px);pointer-events:none}
   .dir{background:var(--sheet);border-radius:18px;box-shadow:var(--pshadow);padding:6px 6px 2px 40px;position:relative}
   .dir .back{position:absolute;left:0;top:4px;color:var(--ink)}
@@ -138,18 +138,18 @@
   .restOpt input{width:20px;height:20px;accent-color:var(--pblue)}
 
   /* ── 搜尋畫面 ── */
-  .search{position:fixed;inset:0;z-index:20;background:var(--sheet);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+  .search{position:fixed;inset:0;z-index:20;background:var(--sheet);display:flex;flex-direction:column;padding-top:var(--sat)}
   .sbar{display:flex;align-items:center;gap:4px;padding:8px}
   .sbar input{flex:1;height:46px;border-radius:12px;border:0;background:var(--sheet-2);color:var(--ink);padding:0 14px;font-size:16px;outline:none}
   .slist{flex:1;overflow-y:auto;padding:0 12px 20px}
   .slist .pnote{margin-top:12px}
 
-  .ptoast{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 12px);z-index:30;background:#e8eaed;color:#202124;padding:12px 18px;border-radius:12px;font-weight:600;font-size:14px;box-shadow:var(--pshadow);max-width:calc(100% - 32px);display:flex;align-items:center}
+  .ptoast{position:fixed;left:50%;transform:translateX(-50%);top:calc(var(--sat) + 12px);z-index:30;background:#e8eaed;color:#202124;padding:12px 18px;border-radius:12px;font-weight:600;font-size:14px;box-shadow:var(--pshadow);max-width:calc(100% - 32px);display:flex;align-items:center}
   .ptoast button{margin-left:14px;color:#1a73e8!important;font-weight:700}
   /* 右上工具列：排在起終點卡下面（高度會變，plan.js 寫 --top-h） */
   .tools{top:calc(var(--top-h,120px) + 8px)}
   body.sheet-open .tools{opacity:0;pointer-events:none}
-  @media (min-width:700px){ .top,.pick{left:max(16px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:420px} .tools{top:max(var(--edge),env(safe-area-inset-top,0px))} }
+  @media (min-width:700px){ .top,.pick{left:max(16px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:420px} .tools{top:max(var(--edge),var(--sat))} }
 
   /* ── 手機橫向（照 Google 地圖橫向）：起終點卡和抽屜疊在左邊一欄，地圖在右邊 ── */
   @media (orientation:landscape) and (max-height:520px){
@@ -159,7 +159,7 @@
     .psheet{left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:var(--pw);max-width:none;margin:0;height:calc(100% - 16px);bottom:8px;border-radius:20px}
     .sum .tm{font-size:24px}
     .pick{left:calc(max(8px,var(--sai-l,env(safe-area-inset-left,0px))) + var(--pw) + 8px);right:auto;width:min(360px,calc(100% - var(--pw) - 90px));max-width:none}
-    .tools{top:max(var(--edge),env(safe-area-inset-top,0px))}
+    .tools{top:max(var(--edge),var(--sat))}
     body.sheet-open .top{opacity:1;transform:none;pointer-events:auto}
   }
 </style>

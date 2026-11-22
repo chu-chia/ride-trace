@@ -173,7 +173,7 @@
   .rtop{display:none}
   .sosFab,.followPill{display:none}
   @media(max-width:760px){
-    .rtop{display:block;position:fixed;z-index:9;top:calc(env(safe-area-inset-top,0px) + 8px);left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:calc(var(--tool) + var(--edge) + 16px)}
+    .rtop{display:block;position:fixed;z-index:9;top:calc(var(--sat) + 8px);left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:calc(var(--tool) + var(--edge) + 16px)}
     .rtop .panel-head{padding:0;gap:8px}
     .rtop #back{width:48px;height:48px;border-radius:50%;background:var(--solid);box-shadow:var(--shadow)}
     .rtop #back svg{width:22px;height:22px}
@@ -191,7 +191,7 @@
     /* 轉彎小卡、全隊進度條：原型把它們放在導航畫面（第 5 塊做），行程頁手機版先收起來；下一站寫在收合區塊 */
     #qxProg,#qxTurn{display:none!important}
     /* SOS 是安全功能：抽屜拉到滿版也不滑出去，停在右上角標題列旁邊（工具列那時已經滑走），疊在抽屜上面 */
-    .sosFab{z-index:10;bottom:min(calc(var(--sheet-h,200px) + 14px), calc(100dvh - env(safe-area-inset-top,0px) - 8px - 54px))}
+    .sosFab{z-index:10;bottom:min(calc(var(--sheet-h,200px) + 14px), calc(100dvh - var(--sat) - 8px - 54px))}
     /* 抽屜拉到很高時，跟隨膠囊淡出（SOS 一直留著） */
     .followPill{opacity:clamp(0,calc((1 - var(--sheet-t,0)) * 3),1);transform:translate(-50%, calc(clamp(0, (var(--sheet-t,0) - .3) / .5, 1) * -220px))}
   }

@@ -6,7 +6,7 @@ const STALE_MS = 40_000;   // 這麼久沒收到任何訊息 → 視為斷線
 const GRACE_MS = 3_000;    // 短暫重連（例如伺服器重啟）不要閃橫幅
 
 const css = `
-.qx-conn{position:fixed;z-index:45;top:max(10px,calc(env(safe-area-inset-top,0px) + 8px));left:50%;transform:translateX(-50%);
+.qx-conn{position:fixed;z-index:45;top:max(10px,calc(var(--sat) + 8px));left:50%;transform:translateX(-50%);
   width:min(440px,calc(100% - 24px));display:flex;align-items:center;gap:10px;padding:9px 10px 9px 14px;border-radius:14px;
   background:#ff9f0a;color:#1d1d1f;font:13px/1.35 system-ui,-apple-system,"PingFang TC",sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .qx-conn[hidden]{display:none}

@@ -1,4 +1,7 @@
 /* 騎跡：元件沿用系統樣式；品牌色是「日出／大燈」琥珀色，只用在主要動作、自己的位置與足跡 */
+/* 頂部安全區：iPhone 主畫面 App（black-translucent）狀態列下方 iOS 會加一條邊緣模糊，頂部按鈕、標題再往下 16px 才不會糊在裡面。
+   只在安全區大於 0 時才多加（min(16px, 安全區×100)）：電腦、橫向、一般瀏覽器都不變 */
+:root{--sat:calc(env(safe-area-inset-top,0px) + min(16px, env(safe-area-inset-top,0px) * 100))}
 :root{
   --bg:#f5f5f7; --surface:#ffffff; --solid:#ffffff; --surface-2:#ececf0; --fg:#1d1d1f; --muted:#6e6e73; --line:rgba(0,0,0,.08);
   /* --solid：完全不透明的底，玻璃面板裡的下拉選單用（.glass 會把 --surface 換成半透明） */
@@ -87,7 +90,7 @@ a.li{color:inherit}
 .err{color:var(--crit-ink);font-size:13px;min-height:1em}
 
 /* 通知 */
-.toasts{position:fixed;top:max(12px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(380px,calc(100% - 24px));display:flex;flex-direction:column;gap:8px;z-index:50;pointer-events:none}
+.toasts{position:fixed;top:max(12px,var(--sat));left:50%;transform:translateX(-50%);width:min(380px,calc(100% - 24px));display:flex;flex-direction:column;gap:8px;z-index:50;pointer-events:none}
 .toast{pointer-events:auto;cursor:grab;user-select:none;-webkit-user-select:none;background:var(--glass);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border-radius:16px;padding:10px 12px;box-shadow:0 10px 28px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center;animation:tin var(--dur-3) var(--ease-bounce) both}
 .toast .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ink,#fff);font-weight:800;font-size:12px;flex:none;background:var(--c)}
 .toast .tx{font-size:13.5px;font-weight:600}
@@ -97,7 +100,7 @@ a.li{color:inherit}
 @media (prefers-reduced-motion:reduce){.toast{animation:none}}
 
 /* 一般頁面 */
-.page{max-width:560px;margin:0 auto;padding:max(var(--sp-5),env(safe-area-inset-top,0px)) max(var(--sp-4),var(--sai-l,env(safe-area-inset-left,0px))) 48px max(var(--sp-4),var(--sai-r,env(safe-area-inset-right,0px)));display:flex;flex-direction:column;gap:var(--sp-3)}
+.page{max-width:560px;margin:0 auto;padding:max(var(--sp-5),var(--sat)) max(var(--sp-4),var(--sai-l,env(safe-area-inset-left,0px))) 48px max(var(--sp-4),var(--sai-r,env(safe-area-inset-right,0px)));display:flex;flex-direction:column;gap:var(--sp-3)}
 /* 一般頁的頁首：返回鈕和地圖頁側欄同一顆（.icon-btn） */
 .page-top{display:flex;align-items:center;gap:var(--sp-2);margin-left:calc(var(--sp-2) * -1)}
 .page-top h1{margin:0;font-size:22px;line-height:1.2}
@@ -290,7 +293,7 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .icon-btn svg{width:20px;height:20px}
 
 /* ---------- 左側欄 ---------- */
-.panel{position:fixed;z-index:9;left:max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px)));top:max(var(--edge),env(safe-area-inset-top,0px));bottom:max(var(--edge),env(safe-area-inset-bottom,0px));width:var(--panel-w);border-radius:var(--r-panel);display:flex;flex-direction:column;overflow:hidden;}
+.panel{position:fixed;z-index:9;left:max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px)));top:max(var(--edge),var(--sat));bottom:max(var(--edge),env(safe-area-inset-bottom,0px));width:var(--panel-w);border-radius:var(--r-panel);display:flex;flex-direction:column;overflow:hidden;}
 .panel>*{flex:none}
 .panel .handle{display:none}
 /* 外觀照改版原型：面板不用玻璃，改成不透明的深灰（淺色是白）底、圓角 20；裡面的卡片用第二階灰 */
@@ -321,7 +324,7 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .panel .seg{margin:0 var(--sp-4) var(--sp-3)}
 
 /* ---------- 右上工具列 ---------- */
-.tools{position:fixed;z-index:8;top:max(var(--edge),env(safe-area-inset-top,0px));right:max(var(--edge),var(--sai-r,env(safe-area-inset-right,0px)));display:flex;flex-direction:column;gap:var(--sp-2)}
+.tools{position:fixed;z-index:8;top:max(var(--edge),var(--sat));right:max(var(--edge),var(--sai-r,env(safe-area-inset-right,0px)));display:flex;flex-direction:column;gap:var(--sp-2)}
 .tool{width:var(--tool);height:var(--tool);padding:0;border-radius:var(--r-card);cursor:pointer;color:var(--fg);font-size:12px;font-weight:600;line-height:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-decoration:none}
 .tool.glass{background:var(--lg-float)}
 .tool svg{width:20px;height:20px;flex:none}
@@ -377,7 +380,7 @@ body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),va
     transform:translateY(var(--sheet-off,0px));transition:transform var(--dur-3) var(--ease-spring);will-change:transform}
   .panel.dragging{transition:none}
   /* 打開時拉到滿版（停在上方標題列下面），整個抽屜一起上下捲；收起來時不能捲 */
-  :root{--panel-h:calc(100dvh - env(safe-area-inset-top,0px) - 66px)}
+  :root{--panel-h:calc(100dvh - var(--sat) - 66px)}
   .panel{overflow:hidden}
   .panel:not(.small){overflow-y:auto;overscroll-behavior:contain}
   .panel>.panel-body,.panel:not(.small)>.panel-body{flex:none;min-height:auto;overflow:visible}
@@ -429,5 +432,5 @@ body.nav .toasts>.toast:nth-child(n+2){display:none}
   body:not(.nav):has(>.panel.small) .toasts{left:calc((max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-mini-w) + 100vw) / 2);width:min(380px,calc(100vw - var(--panel-mini-w) - var(--tool) - 72px))}
 }
 @media (max-width:760px){
-  body:not(.nav):has(.rtop) .toasts{top:calc(env(safe-area-inset-top,0px) + 64px);left:8px;transform:none;width:calc(100% - var(--tool) - var(--edge) - 24px)}
+  body:not(.nav):has(.rtop) .toasts{top:calc(var(--sat) + 64px);left:8px;transform:none;width:calc(100% - var(--tool) - var(--edge) - 24px)}
 }

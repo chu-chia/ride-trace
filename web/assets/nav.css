@@ -21,7 +21,7 @@ body.nav .nv svg{display:block}
 .nv-sheet button,.nv-fabs button,.nv-recenter,.nv-edge{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
 
 /* ── 轉彎卡 ── */
-.nv-turn{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));top:calc(env(safe-area-inset-top,0px) + 8px);max-width:440px;z-index:12;color:#fff;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.nv-turn{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));top:calc(var(--sat) + 8px);max-width:440px;z-index:12;color:#fff;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .nv-track{display:flex;gap:10px;align-items:flex-start;transition:transform var(--dur-3) var(--ease-spring);will-change:transform}
 .nv-turn.dragging .nv-track{transition:none}
 .tcard{flex:0 0 100%;--c:#5f6368;--c2:#4a4d51}
@@ -43,7 +43,7 @@ body.nav .nv svg{display:block}
 .turn-then svg{width:24px;height:24px}
 .tcard.near .turn-dist{font-size:28px}
 /* 沒有路線：自由騎乘 */
-.nv-free{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));max-width:440px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:12;background:var(--nv-sheet);color:var(--nv-ink);border-radius:16px;box-shadow:var(--nv-shadow);padding:12px 14px;display:flex;align-items:center;gap:10px;font-weight:600}
+.nv-free{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));max-width:440px;top:calc(var(--sat) + 8px);z-index:12;background:var(--nv-sheet);color:var(--nv-ink);border-radius:16px;box-shadow:var(--nv-shadow);padding:12px 14px;display:flex;align-items:center;gap:10px;font-weight:600}
 .nv-free small{font-weight:500;color:var(--nv-ink-2)}
 .nv-free>span{flex:1;min-width:0;line-height:1.35}  /* 說明文字自己換行，不要貼到右邊的按鈕 */
 .nv-free a{flex:none}
@@ -173,9 +173,9 @@ body.nav .toast{top:var(--nv-top,140px)!important}
 /* 導航時右上工具列（全隊／3D／深色／指北）排在轉彎卡下面，抽屜打開時跟著滑出 */
 body.nav .tools{display:flex!important;top:calc(var(--nv-turn-b,130px) + 12px)!important}
 body.nav.nv-open .tools{opacity:0;pointer-events:none}
-@media (orientation:landscape) and (max-height:520px){ body.nav .tools{top:max(var(--edge),env(safe-area-inset-top,0px))!important} body.nav.nv-open .tools{opacity:1;pointer-events:auto} }
+@media (orientation:landscape) and (max-height:520px){ body.nav .tools{top:max(var(--edge),var(--sat))!important} body.nav.nv-open .tools{opacity:1;pointer-events:auto} }
 /* 寬螢幕橫向：轉彎卡在左欄，按鈕不用讓到它下面（要寫在上面那條 body.nav .tools 之後才蓋得過） */
-@media (orientation:landscape) and (min-width:900px) and (min-height:521px){ body.nav .tools{top:max(var(--edge),env(safe-area-inset-top,0px))!important} }
+@media (orientation:landscape) and (min-width:900px) and (min-height:521px){ body.nav .tools{top:max(var(--edge),var(--sat))!important} }
 /* 隊友頭像：跟我疊在一起的縮小變淡、靠太近的合併成一顆＋數字 */
 body.nav .rider.nv-nearme{opacity:.35;transform-origin:center}
 body.nav .rider.nv-nearme .dot{transform:scale(.7)}

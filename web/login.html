@@ -28,7 +28,7 @@
   .stage::before,.stage::after{content:"";position:absolute;left:0;right:0;z-index:2;pointer-events:none}
   .stage::before{top:0;height:220px;background:linear-gradient(#07090c 10%,rgba(7,9,12,0))}
   .stage::after{bottom:0;height:240px;background:linear-gradient(rgba(7,9,12,0),#07090c 85%)}
-  .hero-brand{position:absolute;z-index:3;top:max(36px,env(safe-area-inset-top,0px));left:clamp(24px,4vw,56px);right:24px}
+  .hero-brand{position:absolute;z-index:3;top:max(36px,var(--sat));left:clamp(24px,4vw,56px);right:24px}
   .hero-brand .row{display:flex;align-items:center;gap:14px}
   .hero-brand svg{width:48px;height:48px;flex:none}
   .hero-brand h1{margin:0;font-size:clamp(34px,4vw,48px);line-height:1;letter-spacing:.06em}
@@ -84,7 +84,7 @@
   @media (max-width:900px){
     .wrap{grid-template-columns:1fr}
     .stage{min-height:0;height:clamp(300px,42dvh,380px)}
-    .hero-brand{top:max(20px,env(safe-area-inset-top,0px))}
+    .hero-brand{top:max(20px,var(--sat))}
     .hero-brand svg{width:40px;height:40px}
     .hero-brand .slogan{margin-top:24px;font-size:23px}
     .hero-brand .slogan-zh{font-size:13px}

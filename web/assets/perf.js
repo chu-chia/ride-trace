@@ -70,8 +70,8 @@ html.perf-blur .glass{background:rgba(22,22,28,.45)!important;-webkit-backdrop-f
 #qiji-perf .fl{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-width:240px}
 #qiji-perf .fl button{font:600 11px/1 system-ui;color:#cfd8e6;background:#1e2633;border:1px solid #3a4558;border-radius:6px;padding:6px 7px}
 #qiji-perf .fl button[aria-pressed="true"]{background:#b45309;border-color:#f59e0b;color:#fff}
-#qiji-perf[data-pos="0"]{top:calc(env(safe-area-inset-top,0px) + 56px);left:calc(env(safe-area-inset-left,0px) + 8px)}
-#qiji-perf[data-pos="1"]{top:calc(env(safe-area-inset-top,0px) + 56px);right:calc(env(safe-area-inset-right,0px) + 8px)}
+#qiji-perf[data-pos="0"]{top:calc(var(--sat) + 56px);left:calc(env(safe-area-inset-left,0px) + 8px)}
+#qiji-perf[data-pos="1"]{top:calc(var(--sat) + 56px);right:calc(env(safe-area-inset-right,0px) + 8px)}
 #qiji-perf[data-pos="2"]{bottom:calc(env(safe-area-inset-bottom,0px) + 8px);right:calc(env(safe-area-inset-right,0px) + 8px)}
 #qiji-perf[data-pos="3"]{bottom:calc(env(safe-area-inset-bottom,0px) + 8px);left:calc(env(safe-area-inset-left,0px) + 8px)}`;
 let pos = 0;
