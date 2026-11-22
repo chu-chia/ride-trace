@@ -111,7 +111,21 @@ function syncLayers() {
   // 只看一段時間時，其他時間去過的路淡淡留著當參考（迷霧模式下改由迷霧呈現）
   vis('fp-all', lines && $('#optAll').checked && !$('#optFog').checked && !isAll());
 }
+// 地名、路名在黃色軌跡上要讀得到：文字層一律加粗的深色外框（淺色底圖用白框）
+function boostLabels(map, style) {
+  const light = style === 'light';
+  for (const l of map.getStyle().layers) {
+    if (l.type !== 'symbol' || !l.layout?.['text-field']) continue;
+    try {
+      map.setPaintProperty(l.id, 'text-halo-color', light ? 'rgba(255,255,255,.95)' : 'rgba(8,12,24,.92)');
+      map.setPaintProperty(l.id, 'text-halo-width', 2.2);
+      map.setPaintProperty(l.id, 'text-halo-blur', 0.4);
+      if (style === 'dark') map.setPaintProperty(l.id, 'text-color', '#dfe3ec');  // 深色底圖的字是灰的，壓在黃線上看不到；深藍底圖保留原本分層的顏色
+    } catch { /* 有些圖層沒有文字 */ }
+  }
+}
 M.onStyle((style) => {
+  boostLabels(map, style);
   if (!map.getSource('fp-lines')) map.addSource('fp-lines', { type: 'geojson', data: F.lines || EMPTY });
   if (!map.getSource('fp-all')) map.addSource('fp-all', { type: 'geojson', data: F.allLines || EMPTY });
   const c = LINE_COLOR[style] || '#ffe14d';
@@ -388,7 +402,7 @@ const PANEL = initPanel($('#side'), 'footprint', { onChange: () => map.resize() 
 function setTab(next, writeUrl = true) {
   if (!TABS.has(next)) return;
   tab = next;
-  if (writeUrl) { const u = new URL(location.href); if (next === 'footprint') u.searchParams.delete('tab'); else u.searchParams.set('tab', next); history.pushState(null, '', u); }
+  if (writeUrl) { const u = new URL(location.href); if (next === 'footprint') u.searchParams.delete('tab'); else u.searchParams.set('tab', next); history.replaceState(null, '', u); }  // 換分頁不疊歷史紀錄：返回（含 iOS 左滑）直接離開足跡頁，不會一格一格退回上一個分頁
   $$('#tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === tab); b.setAttribute('aria-selected', b.dataset.t === tab); });
   $$('.panel-body').forEach((b) => { b.hidden = b.dataset.b !== tab; });
   records.applyTab(); syncLayers(); draw();

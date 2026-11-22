@@ -255,7 +255,7 @@ a.li{color:inherit}
 .low-power :is(.panel,.war-panel,.mobile-sheet).glass,.low-power :is(.nv-sheet,.wsheet,.psheet){-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:var(--glass)!important}
 /* ── 玻璃進階（設定頁，測試用；common.js 在 <html> 加 class） ── */
 /* 各頁浮在地圖上的小元件（手機版上方返回鈕、標題膠囊、跟隨膠囊、足跡模式鈕、回放播放列、戰情室提示列）：跟 .tool 一樣用玻璃 */
-html:not(.no-glass) :is(.rtop #back,.rtop #bFog,.rtop .pill,.rtop .panel-title,.fpmode button:not(.on),.followPill,.wnote,.pbar){
+html:not(.no-glass) :is(.rtop #back,.rtop #bFog,.rtop .pill,.rtop .panel-title:not(.pill .panel-title),.fpmode button:not(.on),.followPill,.wnote,.pbar){
   background:var(--lg-float)!important; box-shadow:var(--lg-rim),var(--lg-shadow)!important;
   -webkit-backdrop-filter:var(--lg-bf)!important; backdrop-filter:var(--liquid-filter,) var(--lg-bf)!important}
 /* 側邊面板／手機行程抽屜（預設開，設定頁可關）：大面板，底色比按鈕濃 12%；裡面的卡片改半透明填色 */
