@@ -712,7 +712,7 @@ function renderProgress() {
   dispatchEvent(new Event('qiji:next'));
   bar.hidden = false;
   bar.innerHTML = `
-    <div class="qx-prog-h"><b>全隊進度</b><span>${me ? `我 ${fmtKm(me.km)} / ${fmtKm(total)} · 剩 ${fmtKm(left)} · 約 ${etaClock((left / speedKmh(S.me)) * 60)} 到` : `全長 ${fmtKm(total)}`}</span></div>
+    <div class="qx-prog-h"><b>全隊進度</b><span>${me ? `我在路線 ${fmtKm(me.km)} 處 / 全長 ${fmtKm(total)} · 剩 ${fmtKm(left)} · 約 ${etaClock((left / speedKmh(S.me)) * 60)} 到` : `全長 ${fmtKm(total)}`}</span></div>
     <div class="qx-track">
       ${ticks.map(({ w, km }) => `<i class="qx-tick" data-kind="${w.kind}" style="left:${(km / total) * 100}%" title="${esc(w.name)} · ${fmtKm(km)}"></i>`).join('')}
       ${riders.map((m) => `<b class="qx-dot${m.u.uid === S.me ? ' me' : ''}${X.prog[m.u.uid].off > 150 ? ' off' : ''}" style="left:${Math.min(100, (X.prog[m.u.uid].km / total) * 100)}%;--c:${m.u.color}" title="${esc(m.u.nickname)} · ${fmtKm(X.prog[m.u.uid].km)}"></b>`).join('')}
