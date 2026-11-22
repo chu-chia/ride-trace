@@ -320,6 +320,9 @@ $('#play').onclick = async () => {
   if (F.playing) { F.playing = false; return; }
   F.playing = true;
   $('#play').textContent = '■ 停止播放';
+  // 播放時把抽屜收起來才看得到地圖；停止（或播完）後還原成播放前的時間範圍，統計和標題才對得上
+  const before = { from: F.from, to: F.to, mode: rangeMode };
+  PANEL.set(true, false);
   const { first } = F.summary;
   const months = $$('#months button').map((b) => b.dataset.m);
   map.fitBounds(TAIWAN, { padding: sidePad(), duration: 800 });
@@ -334,10 +337,10 @@ $('#play').onclick = async () => {
     await new Promise((ok) => setTimeout(ok, 1100));
   }
   F.playing = false;
-  rangeMode = 'custom';
+  rangeMode = before.mode;
   $('#play').textContent = '▶ 逐月播放';
-  syncChips();
-  schedule(false);
+  setRange(before.from, before.to, false);
+  renderRange();
 };
 
 /* ---------- 開始 ---------- */
@@ -362,8 +365,11 @@ function loadAllCells() {
 
 function applySummary(s, meta) {
   if (meta.unchanged) return;
+  document.body.classList.toggle('fp-empty', !s.points);
   if (!s.points) {
-    $('#overall').textContent = '還沒有足跡。騎完第一趟，走過的路就會亮起來。';
+    // 空狀態：抽屜收起來，只留一張說明卡（篩選、播放在沒有資料時沒有意義）
+    $('#overall').textContent = '還沒有足跡';
+    PANEL.set(true, false);
     return;
   }
   const previous = F.summary;
@@ -399,14 +405,15 @@ swr('/api/footprint/summary', { key: uid, onData: applySummary })
 // 側欄收合與手機抽屜：和其他地圖頁同一套（common.js initPanel）
 const PANEL = initPanel($('#side'), 'footprint', { onChange: () => map.resize() });
 // 網址分頁與手機抽屜。
-function setTab(next, writeUrl = true) {
+function setTab(next, writeUrl = true, open = writeUrl) {
   if (!TABS.has(next)) return;
   tab = next;
   if (writeUrl) { const u = new URL(location.href); if (next === 'footprint') u.searchParams.delete('tab'); else u.searchParams.set('tab', next); history.replaceState(null, '', u); }  // 換分頁不疊歷史紀錄：返回（含 iOS 左滑）直接離開足跡頁，不會一格一格退回上一個分頁
   $$('#tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === tab); b.setAttribute('aria-selected', b.dataset.t === tab); });
   $$('.panel-body').forEach((b) => { b.hidden = b.dataset.b !== tab; });
   records.applyTab(); syncLayers(); draw();
-  PANEL.set(false, false);
+  // 換地圖模式（軌跡線、鄉鎮、熱力圖）不動抽屜高度，地圖才看得到；只有統計是純文字，收著時才打開
+  if (open && next === 'stats') PANEL.set(false, false);
   map.resize();
 }
 $('#tabs').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b) setTab(b.dataset.t); };
