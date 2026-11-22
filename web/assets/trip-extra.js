@@ -194,6 +194,7 @@ async function loadWps() {
 X.cams = new Map();        // 單獨顯示的測速點 id → { cam, el, marker }（camAlert 用它標「經過了」）
 X.camGroups = new Map();   // 聚合圓 key → { el, marker }
 X.camList = [];
+const CAM_ICO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg>';
 const CAM_CELL = (z) => (z < 12 ? 120 : z < 13 ? 100 : z < 14 ? 72 : 56);   // 一格多大（px）：越遠格子越大
 function drawCams() {
   const z = Math.floor(map.getZoom());
@@ -215,7 +216,7 @@ function drawCams() {
     el.className = 'qx-cam group';
     el.title = `這附近有 ${list.length} 個測速照相，點一下放大`;
     el.setAttribute('aria-label', el.title);
-    el.innerHTML = `<b>${list.length}</b>`;
+    el.innerHTML = `${CAM_ICO}<b>${list.length}</b>`;
     el.addEventListener('click', (e) => { e.stopPropagation(); map.easeTo({ center: [lon, lat], zoom: Math.min(16, map.getZoom() + 2) }); });
     X.camGroups.set(key, { el, marker: new maplibregl.Marker({ element: el }).setLngLat([lon, lat]).addTo(map) });
   }
@@ -223,10 +224,13 @@ function drawCams() {
   for (const [id, m] of X.cams) if (!singles.has(id)) { m.marker.remove(); X.cams.delete(id); }
   for (const cam of X.camList) {
     if (!singles.has(cam.id) || X.cams.has(cam.id)) continue;
-    const el = document.createElement('div');
+    const el = document.createElement('button');
+    el.type = 'button';
     el.className = 'qx-cam';
-    el.title = `${cam.addr}（${cam.direct}，速限 ${cam.limit}）`;
+    el.title = `測速照相：${cam.addr}（${cam.direct}，速限 ${cam.limit}）`;
+    el.setAttribute('aria-label', el.title);
     el.innerHTML = `<b>${cam.limit}</b>`;
+    el.addEventListener('click', (e) => { e.stopPropagation(); toast(`測速照相・速限 ${cam.limit}`, { icon: '速', color: '#e5352b', sub: [cam.addr, cam.direct].filter(Boolean).join('・'), ms: 4000 }); });
     X.cams.set(cam.id, { cam, el, marker: new maplibregl.Marker({ element: el }).setLngLat([cam.lon, cam.lat]).addTo(map) });
   }
 }
@@ -238,6 +242,13 @@ async function loadCams() {
   try { list = await api(`/api/speedcam/near?lon=${c.lng.toFixed(5)}&lat=${c.lat.toFixed(5)}&km=${km.toFixed(1)}`); } catch { return; }
   X.camList = list;
   drawCams();
+  camHint();
+}
+// 第一次看到測速點時說明一次（紅框數字像隊友或事件數，第一次來看不懂）；導航中不跳
+function camHint() {
+  if (!X.camList.length || document.body.classList.contains('nav')) return;
+  try { if (localStorage.getItem('qiji:camHint')) return; localStorage.setItem('qiji:camHint', '1'); } catch { return; }
+  toast('地圖上紅框的數字是測速照相的速限', { icon: '速', color: '#e5352b', sub: '相機圖示＋數字＝那一帶有幾支，點一下放大；騎到前方 1 公里會提醒', ms: 8000 });
 }
 // 跟隨模式每一格都 jumpTo（每一格都有 moveend），不能用「停下來再載」；改成每 2 秒看一次，移動超過 300 m 或縮放改變才重載
 let camAt = null;
