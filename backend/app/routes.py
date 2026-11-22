@@ -329,13 +329,24 @@ def build_route(trip: dict, edges: list[dict] | None, vehicle: str, pace: dict) 
     }
 
 
+STOP_MIN_CLASS = "tertiary"
+
+
 async def valhalla_routes(points: list[dict], vehicle: str, uid: str | None = None) -> list[dict]:
     """回傳 1～3 條路線（只有起終點時，Valhalla 會另外給替代路線；有停靠點就只有一條）。"""
     v = VEHICLES[vehicle]
     # heading：重算個人路線時帶上目前車頭方向，Valhalla 才不會叫人原地迴轉
-    locs = [{"lat": p["lat"], "lon": p["lon"], "type": "break" if i in (0, len(points) - 1) else "through",
-             **({"heading": round(p["heading"]) % 360, "heading_tolerance": 60} if p.get("heading") is not None else {})}
-            for i, p in enumerate(points)]
+    # 搜尋來的停靠站（有名字的）：只吸附到 tertiary 以上的路。地點座標常落在巷子裡，以前會繞進巷子再連續迴轉出來；
+    # 拖曳出來的經過點、地圖上長按的點是使用者指定的路，不限制。附近沒有大路（山區）就退回不限制
+    def stop_filter(i, p):
+        named = p.get("name") and p["name"] != "地圖上的點"
+        return {"search_filter": {"min_road_class": STOP_MIN_CLASS}} if 0 < i < len(points) - 1 and named else {}
+    def mklocs(filtered):
+        return [{"lat": p["lat"], "lon": p["lon"], "type": "break" if i in (0, len(points) - 1) else "through",
+                 **(stop_filter(i, p) if filtered else {}),
+                 **({"heading": round(p["heading"]) % 360, "heading_tolerance": 60} if p.get("heading") is not None else {})}
+                for i, p in enumerate(points)]
+    locs = mklocs(True)
 
     def body(opts, alternates=0):
         b = {"locations": locs, "costing": v["costing"], "costing_options": {v["costing"]: opts} if opts else {},
@@ -345,6 +356,9 @@ async def valhalla_routes(points: list[dict], vehicle: str, uid: str | None = No
         return b
 
     d = await _post("/route", body(v["options"], alternates=2))
+    if "trip" not in d and any("search_filter" in x for x in locs):
+        locs = mklocs(False)
+        d = await _post("/route", body(v["options"], alternates=2))
     if "trip" not in d:
         raise HTTPException(422, f"算不出路線：{d.get('error', d)}")
     trips = [d["trip"]] + [a["trip"] for a in d.get("alternates", []) if "trip" in a]
