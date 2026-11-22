@@ -104,7 +104,8 @@ async def expiry_listener():
                     continue
                 hbs = int(await r.hget(K.state(tid, uid), "hbs") or 90)
                 await r.hset(K.state(tid, uid), "status", "lost")
-                text = "失聯：90 秒沒有回報位置" if hbs < 120 else f"失聯：停車後 {hbs // 60} 分鐘沒有回報位置"
+                # 事件時間是最後一次回報（回放才放得在最後位置上），推播在判定時才發：文字寫「最後回報後」，不然看起來事件比推播早
+                text = "失聯：最後回報後 90 秒沒有新位置" if hbs < 120 else f"失聯：停車時最後回報後 {hbs // 60} 分鐘沒有新位置"
                 await events.emit(tid, "lost", uid, text, ts=await events.last_fix_ts(tid, uid))
                 await events.publish(tid, {"kind": "status", "uid": uid, "status": "lost"})
         except asyncio.CancelledError:
