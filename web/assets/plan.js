@@ -425,13 +425,18 @@ function pad() {
   const top = $('#top').getBoundingClientRect().bottom + 16;
   // 抽屜收起來時露出的高度（不管現在開到哪），才不會因為抽屜還沒收好就把地圖拉很遠
   const peek = +$('#sheet').dataset.minH || 200;
-  return { top: Math.min(top, innerHeight * 0.45), bottom: Math.min(peek + 16, innerHeight * 0.45), left: 30, right: 70 };
+  // 上下加起來最多佔地圖高度 70%（停靠點多、上方欄位很高時按比例縮），不然 fitBounds 會放棄、停在全台灣
+  let t = Math.min(top, innerHeight * 0.45), bt = Math.min(peek + 16, innerHeight * 0.45);
+  const k = Math.min(1, (innerHeight * 0.7) / (t + bt));
+  return { top: Math.round(t * k), bottom: Math.round(bt * k), left: 30, right: 70 };
 }
 function fit() { requestAnimationFrame(() => setTimeout(fitNow, 60)); }
 function fitNow() {
   const r = route(); if (!r) return;
   const b = new maplibregl.LngLatBounds();
   S.routes.forEach((x) => x.coords.forEach((p, k) => { if (k % 5 === 0 || x === r) b.extend(p); }));
+  // easeTo 帶 padding 會留在地圖上，fitBounds 的 padding 又疊上去：先歸零再框
+  map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
   map.fitBounds(b, { padding: pad(), duration: 700, maxZoom: 16 });
 }
 LANDQ.addEventListener('change', () => fit()); // 手機轉向：重新框住整條路線
