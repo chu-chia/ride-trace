@@ -138,6 +138,8 @@ body.nav .toast{top:var(--nv-top,140px)!important}
 @media (orientation:landscape) and (max-height:520px){
   body.nav{--pw:min(380px,42vw)}
   .nv-turn,.nv-banner,.nv-free{left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:var(--pw);max-width:none}
+  /* 跟隨某人的膠囊：跟橫幅一樣在左欄轉彎卡下面，不要用直向的置中（會浮在地圖正中間） */
+  body.nav .nv-focus{left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));transform:none;max-width:var(--pw)}
   .turn-main{padding:10px 12px 10px 8px;gap:10px}
   .turn-ico{min-width:56px}.turn-ico svg{width:40px;height:40px}
   .turn-dist{font-size:18px}.turn-road{font-size:22px;-webkit-line-clamp:1}.turn-verb{font-size:15px}
@@ -161,6 +163,7 @@ body.nav .toast{top:var(--nv-top,140px)!important}
 @media (orientation:landscape) and (min-width:900px) and (min-height:521px){
   body.nav{--pw:420px}
   .nv-turn,.nv-banner,.nv-free{left:max(16px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:var(--pw);max-width:none}
+  body.nav .nv-focus{left:max(16px,var(--sai-l,env(safe-area-inset-left,0px)));transform:none;max-width:var(--pw)}
   .nv-sheet{left:max(16px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:var(--pw);max-width:none;margin:0;height:auto;max-height:calc(100% - 16px);padding-left:14px;padding-right:14px;bottom:0;border-radius:20px 20px 0 0}  /* 貼齊底部（跟手機橫向一樣），收起時下面的內容才不會從縫裡露出來 */
   .nv-speed{flex-direction:row;align-items:flex-end}
   body.nav.nv-open .nv-fabs,body.nav.nv-open .nv-speed,body.nav.nv-open .nv-recenter{opacity:1;pointer-events:auto}
@@ -181,7 +184,7 @@ body.nav .rider .dot[data-more]:not([data-more=""])::after{content:attr(data-mor
 .nv-edge .nv-av{position:relative}
 .nv-edge .nv-av[data-more]:not([data-more=""])::after{content:attr(data-more);position:absolute;top:-8px;right:-12px;min-width:20px;height:18px;padding:0 4px;border-radius:9px;background:#1a73e8;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center;border:1.5px solid #fff}
 .nv-focus{position:fixed;left:50%;transform:translateX(-50%);z-index:12;background:var(--nv-sheet);color:var(--nv-ink);box-shadow:var(--nv-shadow);border-radius:999px;padding:5px 5px 5px 5px;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;white-space:nowrap}
-.nv-focus .nv-av{width:28px;height:28px;font-size:12px}
+.nv-focus .nv-av{width:28px;height:28px;font-size:12px}.nv-focus>span{overflow:hidden;text-overflow:ellipsis}
 .nv-focus button{width:30px;height:30px;border-radius:50%;background:var(--nv-sheet-2)!important}
 body.nav .rider.nv-target .dot{box-shadow:0 0 0 4px #4c8dff,0 2px 8px rgba(0,0,0,.35)}
 body.nav .nv-focus{display:flex}
