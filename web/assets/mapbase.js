@@ -180,7 +180,7 @@ export function terrainPref() {
   return v ? v === '1' : !LOW_DPR();
 }
 
-export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, interactive = true, syncTheme = true, styles = DEFAULT_ORDER } = {}) {
+export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, rotate = interactive3d, interactive = true, syncTheme = true, styles = DEFAULT_ORDER } = {}) {
   const ORDER = styles;
   let cur = style;
   let is3d = terrain;
@@ -204,7 +204,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       // 反鋸齒（MSAA）：斜的路線、山的稜線、立體建築邊緣才不會一格一格的。手機預設是省電模式，也一律開（不然 iPhone 上最明顯）
       canvasContextAttributes: { antialias: true },  // MapLibre 5：反鋸齒要寫在這裡
       maxPitch: 80, attributionControl: false,  // 來源標示統一放在「關於網頁」（設定頁最下面），地圖右下角不放 ⓘ
-      dragRotate: interactive3d, pitchWithRotate: interactive3d, touchPitch: interactive3d,
+      dragRotate: rotate, pitchWithRotate: interactive3d, touchPitch: interactive3d,
     });
   } catch (e) {
     // 例如 WebGL 開不起來：一樣換成替身，不讓整頁壞掉
@@ -214,7 +214,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     const base = { map, style: cur, styleName: STYLES[cur].name, is3d: false, down: true, nextStyle: () => STYLES[cur].name };
     return new Proxy(base, { get: (t, k) => (k in t ? t[k] : () => {}) });  // 其他方法（follow、set3d…）都是空的
   }
-  if (!interactive3d && interactive) map.touchZoomRotate.disableRotation();
+  // rotate：只有平面、但可以旋轉（規劃頁，像 Google／Apple 地圖雙指轉，指北針回正）；足跡頁的迷霧照北方朝上畫，不轉
+  if (!rotate && interactive) map.touchZoomRotate.disableRotation();
   // ?perf=1 時交給量測浮層算地圖每秒重畫幾次（perf.js 是非同步載入，可能比地圖晚到，所以兩邊都接）
   if (window.__qijiMaps) { window.__qijiMaps.push(map); window.__qijiPerfWatch?.(map); }
   // 省電：地圖自己的重畫最多 30 fps（圖磚載入、資料更新時 MapLibre 會連續重畫）；手指在地圖上時不限制，拖曳縮放才跟手

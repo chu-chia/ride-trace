@@ -9,7 +9,7 @@ if (!tid) location.replace('/');
 await tripGate(tid);  // 錯誤 id／非成員／被移出：和行程頁同一個錯誤畫面（以前非成員會看到空白規劃頁）
 $('#back').href = `/trip?id=${tid}`;
 
-const M = createMap($('#map'), { style: 'dark', center: [121.0, 23.8], zoom: 7, terrain: false, interactive3d: false });
+const M = createMap($('#map'), { style: 'dark', center: [121.0, 23.8], zoom: 7, terrain: false, interactive3d: false, rotate: true });
 addCompass(M, document.querySelector('.tools'));  // 指北針：點一下北方朝上
 const map = M.map;
 window.qijiMap = map;
