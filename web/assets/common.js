@@ -601,6 +601,73 @@ export const sheetRestH = (el, fallback = 120) => Number(el?.dataset.minH) || fa
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 addEventListener('pageshow', (e) => { if (e.persisted) document.activeElement?.blur?.(); });
 
+// 側欄收合／展開動畫（Apple 的作法：外框用彈簧縮放，裡面的內容先淡掉再換、或換好再淡入）
+// 用 clip-path 從現在的大小裁到目標大小，不去動 width／height（不會每格重新排版，手機上也順）。
+// 收合時先加 .small＋.closing：.closing 讓面板維持展開的版面直到動畫結束，但 body:has(.panel.small) 的元件（回放播放列、
+// 全隊進度條、跟隨膠囊）已經開始往左滑，兩邊同時動。
+let panelAnim = null;
+function animatePanel(panel, toSmall) {
+  panelAnim?.finish?.();
+  const R = 20, ease = cssVar('--ease-spring'), dur = 520;
+  const kids = () => [...panel.children].filter((el) => !el.matches('.panel-head,.panel-mini,.handle,.keep'));
+  if (toSmall) {
+    const full = panel.getBoundingClientRect();
+    panel.classList.add('small');                      // 量目標大小
+    const sm = panel.getBoundingClientRect();
+    panel.classList.add('closing');                    // 版面先維持展開
+    const cut = `inset(0px ${Math.max(0, full.width - sm.width)}px ${Math.max(0, full.height - sm.height)}px 0px round ${R}px)`;
+    kids().forEach((el) => el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-out', fill: 'forwards' }));
+    const a = panel.animate([{ clipPath: `inset(0px 0px 0px 0px round ${R}px)` }, { clipPath: cut }], { duration: dur, easing: ease });
+    panelAnim = a;
+    const done = () => { panel.classList.remove('closing'); kids().forEach((el) => el.getAnimations().forEach((x) => x.cancel())); if (panelAnim === a) panelAnim = null; };
+    a.onfinish = done; a.oncancel = done;
+  } else {
+    const sm = panel.getBoundingClientRect();
+    panel.classList.remove('small');
+    const full = panel.getBoundingClientRect();
+    const cut = `inset(0px ${Math.max(0, full.width - sm.width)}px ${Math.max(0, full.height - sm.height)}px 0px round ${R}px)`;
+    const a = panel.animate([{ clipPath: cut }, { clipPath: `inset(0px 0px 0px 0px round ${R}px)` }], { duration: dur, easing: ease });
+    panelAnim = a;
+    // 內容晚一點出來、從上面一點點滑下來（像 iOS 展開卡片）
+    kids().forEach((el, i) => el.animate([{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }], { duration: 360, delay: 90 + Math.min(i, 4) * 25, easing: ease, fill: 'backwards' }));
+    a.onfinish = a.oncancel = () => { if (panelAnim === a) panelAnim = null; };
+  }
+}
+const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'ease';
+
+// 分段按鈕（.seg）換選項：底色從舊的位置滑到新的位置（iOS UISegmentedControl）。
+// 各頁照舊只切 .on，這裡用 MutationObserver 看到「A 拿掉 on、B 加上 on」就放一塊同色的底（.seg-ghost）從 A 滑到 B，
+// 滑的時候 B 自己的底色先隱藏（.seg-moving），到了再拿掉那塊。
+const segRun = new WeakMap();
+function segSlide(seg, from, to) {
+  if (RM_Q.matches || !to.offsetWidth || !from.offsetWidth || !seg.animate) return;
+  segRun.get(seg)?.finish();
+  const cs = getComputedStyle(to);
+  const g = document.createElement('i');
+  g.className = 'seg-ghost';
+  Object.assign(g.style, { background: cs.backgroundColor, boxShadow: cs.boxShadow, borderRadius: cs.borderRadius, height: `${to.offsetHeight}px`, top: `${to.offsetTop}px` });
+  seg.append(g);
+  to.classList.add('seg-moving');
+  const a = g.animate([
+    { transform: `translateX(${from.offsetLeft}px)`, width: `${from.offsetWidth}px` },
+    { transform: `translateX(${to.offsetLeft}px)`, width: `${to.offsetWidth}px` },
+  ], { duration: 460, easing: cssVar('--ease-spring') });
+  segRun.set(seg, a);
+  a.onfinish = a.oncancel = () => { g.remove(); to.classList.remove('seg-moving'); if (segRun.get(seg) === a) segRun.delete(seg); };
+}
+const hasOn = (v) => /(^|\s)on(\s|$)/.test(v || '');
+new MutationObserver((recs) => {
+  const lost = new Map(), got = new Map();
+  for (const r of recs) {
+    const b = r.target, seg = b.parentElement;
+    if (b.tagName !== 'BUTTON' || !seg?.classList.contains('seg')) continue;
+    const was = hasOn(r.oldValue), now = b.classList.contains('on');
+    if (was && !now) lost.set(seg, b);
+    else if (!was && now) got.set(seg, b);
+  }
+  for (const [seg, to] of got) { const from = lost.get(seg); if (from) segSlide(seg, from, to); }
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['class'], attributeOldValue: true, subtree: true });
+
 // 左側欄：收合鈕（電腦）與拉把手（手機）行為一致，每頁各自記住開合狀態
 export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 760 } = {}) {
   const storeKey = `qiji:panel:${key}`;
@@ -608,8 +675,12 @@ export function initPanel(panel, key, { onChange, defaultSmall = innerWidth <= 7
   try { const v = localStorage.getItem(storeKey); if (v !== null) small = v === '1'; } catch { /* 私密模式 */ }
   const btn = panel.querySelector('.panel-collapse'), handle = panel.querySelector('.handle');
   const set = (v, save = true) => {
-    small = !!v;
-    panel.classList.toggle('small', small);
+    const next = !!v;
+    // 電腦／手機橫向的側欄：收合、展開用彈簧動畫（見 animatePanel）；手機直向是抽屜，另外有拖曳動畫
+    const anim = save && next !== small && innerWidth > 760 && !RM_Q.matches && !!panel.animate;
+    small = next;
+    if (anim) animatePanel(panel, small);
+    else panel.classList.toggle('small', small);
     for (const el of [btn, handle]) if (el) { el.setAttribute('aria-expanded', String(!small)); el.setAttribute('aria-label', small ? '展開面板' : '收合面板'); }
     if (save) try { localStorage.setItem(storeKey, small ? '1' : '0'); } catch { /* 私密模式 */ }
     onChange?.(small);

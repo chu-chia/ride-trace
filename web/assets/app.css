@@ -79,16 +79,21 @@ a.li{color:inherit}
 .seg{display:flex;background:var(--surface-2);padding:3px;border-radius:10px;gap:2px}
 .seg button{flex:1;border:0;background:none;padding:7px 10px;min-height:44px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap}
 .seg button.on{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.14);font-weight:600}
+/* 分段按鈕換選項時，底色從舊的位置滑到新的位置（common.js segSlide；iOS UISegmentedControl 的效果） */
+.seg{position:relative}
+.seg>button{position:relative;z-index:1}
+.seg>.seg-ghost{position:absolute;z-index:0;left:0;top:0;pointer-events:none;will-change:transform,width}
+.seg>button.seg-moving{background:transparent!important;box-shadow:none!important}
 .err{color:var(--crit-ink);font-size:13px;min-height:1em}
 
 /* 通知 */
 .toasts{position:fixed;top:max(12px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(380px,calc(100% - 24px));display:flex;flex-direction:column;gap:8px;z-index:50;pointer-events:none}
-.toast{pointer-events:auto;cursor:grab;user-select:none;-webkit-user-select:none;background:var(--glass);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border-radius:16px;padding:10px 12px;box-shadow:0 10px 28px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center;animation:tin .3s ease}
+.toast{pointer-events:auto;cursor:grab;user-select:none;-webkit-user-select:none;background:var(--glass);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border-radius:16px;padding:10px 12px;box-shadow:0 10px 28px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center;animation:tin var(--dur-3) var(--ease-bounce) both}
 .toast .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ink,#fff);font-weight:800;font-size:12px;flex:none;background:var(--c)}
 .toast .tx{font-size:13.5px;font-weight:600}
 .toast .tt{font-size:12px;color:var(--muted)}
 .toast .toast-act{flex:none;font:700 13px/1 inherit;color:#fff;background:var(--accent,#d9500f);border:0;border-radius:10px;padding:9px 12px;cursor:pointer}
-@keyframes tin{from{transform:translateY(-10px);opacity:.3}to{transform:none;opacity:1}}
+@keyframes tin{from{transform:translateY(-14px) scale(.96);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.toast{animation:none}}
 
 /* 一般頁面 */
@@ -175,6 +180,11 @@ a.li{color:inherit}
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
   --r-panel:24px; --r-card:16px; --r-ctl:12px;
   --ctl-h:44px; --tool:48px; --edge:12px; --panel-w:380px; --panel-mini-w:300px;
+  /* 動畫（照 Apple：非線性的彈簧，開始快、結尾輕輕超過一點再回來）。曲線由 iOS 的 spring(dampingFraction, response) 算出來：
+     --ease-spring 0.82／0.42 秒（一般元件：面板、抽屜、按鈕放開）；--ease-bounce 0.68／0.5 秒（選單、提示彈出，多一點彈性）；
+     --ease-out 沒有超過（顏色、透明度）。不支援 linear() 的瀏覽器用 iOS 抽屜那條 cubic-bezier 代替 */
+  --ease-spring:cubic-bezier(.32,.72,0,1); --ease-bounce:cubic-bezier(.34,1.3,.64,1); --ease-out:cubic-bezier(.32,.72,0,1);
+  --dur-1:.16s; --dur-2:.32s; --dur-3:.55s;
   --fs-xs:12px; --fs-s:12.5px; --fs-m:14px; --fs-l:17px;
   /* 液態玻璃：照 Apple HIG 的 regular 玻璃（地圖是雜的背景，不用 clear）——底色中等透明、模糊加大。
      模糊 20px 會把地圖上的地名糊掉，所以底色不必像舊版那樣 0.9（UX-18 的顧慮是 8px 模糊擋不住地名）。
@@ -192,6 +202,8 @@ a.li{color:inherit}
   /* 面板（改版原型）：不透明的三階灰 */
   --solid-2:#ececf0; --solid-3:#e1e1e6;
 }
+/* 支援 linear() 的瀏覽器（Safari 17.2+、Chrome 113+）改用真正的彈簧曲線；要寫在 :root 後面才蓋得過 */
+@supports (transition-timing-function:linear(0,1)){:root{--ease-spring:linear(0, 0.0207, 0.0735, 0.1467, 0.2315, 0.321, 0.4103, 0.4961, 0.576, 0.6486, 0.7134, 0.77, 0.8187, 0.86, 0.8945, 0.9228, 0.9457, 0.9638, 0.978, 0.9888, 0.9969, 1.0026, 1.0066, 1.0091, 1.0105, 1.011, 1.011, 1.0106, 1.0098, 1.009, 1.008, 1.007, 1.006, 1.0051, 1.0042, 1.0035, 1.0028, 1.0022, 1.0017, 1.0013, 1);--ease-bounce:linear(0, 0.0298, 0.1054, 0.2089, 0.3261, 0.4465, 0.5623, 0.6683, 0.7615, 0.8405, 0.9049, 0.9556, 0.9937, 1.0209, 1.0388, 1.0492, 1.0537, 1.0539, 1.051, 1.0461, 1.04, 1.0335, 1.027, 1.021, 1.0155, 1.0108, 1.0069, 1.0038, 1.0014, 0.9996, 0.9984, 0.9976, 0.9972, 0.9971, 0.9971, 0.9973, 0.9976, 0.998, 0.9983, 0.9987, 1)}}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --lg-rgb:22 22 28; --lg-rgb-float:30 30 36;
   --lg-edge:rgba(255,255,255,.2); --lg-inner:rgba(255,255,255,.22); --lg-sat:170%; --lg-shadow:0 10px 36px rgba(0,0,0,.4);
@@ -278,7 +290,7 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .icon-btn svg{width:20px;height:20px}
 
 /* ---------- 左側欄 ---------- */
-.panel{position:fixed;z-index:9;left:max(var(--edge),env(safe-area-inset-left,0px));top:max(var(--edge),env(safe-area-inset-top,0px));bottom:max(var(--edge),env(safe-area-inset-bottom,0px));width:var(--panel-w);border-radius:var(--r-panel);display:flex;flex-direction:column;overflow:hidden;transition:width .25s ease}
+.panel{position:fixed;z-index:9;left:max(var(--edge),env(safe-area-inset-left,0px));top:max(var(--edge),env(safe-area-inset-top,0px));bottom:max(var(--edge),env(safe-area-inset-bottom,0px));width:var(--panel-w);border-radius:var(--r-panel);display:flex;flex-direction:column;overflow:hidden;}
 .panel>*{flex:none}
 .panel .handle{display:none}
 /* 外觀照改版原型：面板不用玻璃，改成不透明的深灰（淺色是白）底、圓角 20；裡面的卡片用第二階灰 */
@@ -296,10 +308,13 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .panel-foot{padding:var(--sp-2) var(--sp-4) max(var(--sp-3),env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2)}
 .panel-mini{display:none;padding:0 var(--sp-4) var(--sp-3);gap:var(--sp-3);flex-wrap:wrap;font-size:var(--fs-s);color:var(--muted)}
 .panel-mini b{color:var(--fg)}
-/* 收合：只留頂列＋一行摘要（.panel-mini），寬度一致 */
-.panel.small{width:var(--panel-mini-w);bottom:auto}
-@media (min-width:761px){.panel.small>:not(.panel-head):not(.panel-mini):not(.handle):not(.keep){display:none!important}}
-.panel.small .panel-mini{display:flex}
+/* 收合：只留頂列＋一行摘要（.panel-mini），寬度一致。動畫由 common.js animatePanel 用 clip-path 做（以前是 width .25s，內容會瞬間消失） */
+.panel.small:not(.closing){width:var(--panel-mini-w);bottom:auto}
+@media (min-width:761px){.panel.small:not(.closing)>:not(.panel-head):not(.panel-mini):not(.handle):not(.keep){display:none!important}}
+.panel.small:not(.closing) .panel-mini{display:flex}
+/* 跟著側欄寬度移動的元件：收合／展開時用同一條彈簧曲線一起滑 */
+@media (min-width:761px){.pbar,.qx-prog,.qx-turn,.followPill,body:has(.panel) .maplibregl-ctrl-bottom-left{transition:left var(--dur-3) var(--ease-spring),right var(--dur-3) var(--ease-spring),width var(--dur-3) var(--ease-spring),opacity var(--dur-2) var(--ease-out)}}  /* 手機直向不加：那邊跟著抽屜拖曳即時算位置 */
+@media (prefers-reduced-motion:reduce){.pbar,.qx-prog,.qx-turn,.followPill,body:has(.panel) .maplibregl-ctrl-bottom-left{transition:none}}
 .panel.small .panel-collapse{background:var(--surface-2)}
 .panel-sec{font-size:var(--fs-s);font-weight:600;color:var(--muted);margin:var(--sp-2) 0 calc(var(--sp-1) * -1)}
 /* 分頁列：所有側欄同一種（用 .seg） */
@@ -315,9 +330,12 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .tool.on,.tool.glass.on{background:var(--accent-fill);color:#fff;border-color:transparent;box-shadow:0 6px 20px color-mix(in srgb,var(--accent) 35%,transparent)}
 .tool.away,.tool.glass.away{color:var(--accent);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .tool.compass svg{width:24px;height:24px}
-.tool{transition:transform .12s ease,opacity .2s ease,background-color .2s ease}
-.tool:active:not(:disabled){transform:scale(.92)}  /* 按下去縮一點：跟 iOS 一樣，手指知道有按到 */
-@media (prefers-reduced-motion:reduce){.tool{transition:none}.tool:active:not(:disabled){transform:none}}
+.tool{transition:transform var(--dur-3) var(--ease-bounce),opacity var(--dur-2) var(--ease-out),background-color var(--dur-2) var(--ease-out),color var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out)}
+/* 按下去：所有可以按的元件都縮一點（按下很快、放開用彈簧彈回來，跟 iOS 一樣，手指知道有按到） */
+:is(.icon-btn,.btn,.panel-act,.seg>button,.style-menu button,.nv-fab,.nv-round,.nv-tile,.nv-end,.nv-recenter,.sosFab,.play,.toast-act){transition:transform var(--dur-3) var(--ease-bounce),background-color var(--dur-2) var(--ease-out),color var(--dur-2) var(--ease-out),opacity var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out)}
+:is(.tool,.icon-btn,.btn,.panel-act,.nv-fab,.nv-round,.nv-tile,.nv-end,.nv-recenter,.sosFab,.play,.toast-act):active:not(:disabled){transform:scale(.92);transition-duration:var(--dur-1)}
+:is(.seg>button,.style-menu button):active{transform:scale(.96);transition-duration:var(--dur-1)}
+@media (prefers-reduced-motion:reduce){:is(.tool,.icon-btn,.btn,.panel-act,.seg>button,.style-menu button,.nv-fab,.nv-round,.nv-tile,.nv-end,.nv-recenter,.sosFab,.play,.toast-act){transition:none!important}:is(.tool,.icon-btn,.btn,.panel-act,.seg>button,.style-menu button,.nv-fab,.nv-round,.nv-tile,.nv-end,.nv-recenter,.sosFab,.play,.toast-act):active{transform:none!important}}
 .tool.open{background:var(--surface-2)}
 /* 指北針：朝北又是平的就收起來（Google／Apple 地圖都這樣）；導航模式一直顯示並帶文字 */
 .tool.compass .clabel{display:none}
@@ -325,8 +343,8 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .tool.compass.nav .clabel{display:block}
 .tool.compass.nav svg{width:20px;height:20px}
 /* 地圖樣式選單（照 Apple 地圖的「地圖模式」） */
-.style-menu{position:fixed;z-index:60;min-width:168px;padding:6px;border-radius:16px;background:var(--lg-float);color:var(--fg);box-shadow:0 12px 36px rgba(0,0,0,.35);animation:sm-in .16s ease-out}
-@keyframes sm-in{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+.style-menu{position:fixed;z-index:60;min-width:168px;padding:6px;border-radius:16px;background:var(--lg-float);color:var(--fg);box-shadow:0 12px 36px rgba(0,0,0,.35);animation:sm-in var(--dur-3) var(--ease-bounce) both}
+@keyframes sm-in{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.style-menu{animation:none}}
 .style-menu .sm-t{font-size:12px;font-weight:600;color:var(--muted);padding:6px 10px 4px}
 .style-menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 10px;border-radius:10px;cursor:pointer;font-size:15px;font-weight:500;color:var(--fg)}
@@ -356,7 +374,7 @@ body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),en
   :root{--tool:44px;--panel-h:min(72dvh,620px)}
   /* 抽屜高度固定，開合用 transform 整塊推（common.js sheetDrag 寫 --sheet-off）；收合時內容照樣在，只是推到畫面外 */
   .panel,.panel.small{left:0;right:0;top:auto;bottom:0;width:auto;height:var(--panel-h);border-radius:20px 20px 0 0;border-bottom:0;box-shadow:0 -2px 16px rgba(0,0,0,.35);
-    transform:translateY(var(--sheet-off,0px));transition:transform .28s cubic-bezier(.2,.8,.2,1);will-change:transform}
+    transform:translateY(var(--sheet-off,0px));transition:transform var(--dur-3) var(--ease-spring);will-change:transform}
   .panel.dragging{transition:none}
   /* 打開時拉到滿版（停在上方標題列下面），整個抽屜一起上下捲；收起來時不能捲 */
   :root{--panel-h:calc(100dvh - env(safe-area-inset-top,0px) - 66px)}
@@ -371,7 +389,7 @@ body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),en
   /* 一直貼在畫面最下面的列（行程頁的 SOS）：抽屜往下推多少，它就往上推回多少 */
   .panel>.keep{position:relative;z-index:1;background:var(--solid);transform:translateY(calc(-1 * var(--sheet-off,0px)))}
   .panel.dragging>.keep{transition:none}
-  .panel>.keep{transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+  .panel>.keep{transition:transform var(--dur-3) var(--ease-spring)}
   /* 把手可點範圍 44px 高（UX-14），下面的頂列不再留上邊距，抽屜總高度只多約 19px */
   .panel .handle{display:grid;place-items:center;border:0;background:var(--solid);padding:0;min-height:44px;cursor:grab;touch-action:none;position:sticky;top:0;z-index:3}
   .panel .handle::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--muted);opacity:.65}

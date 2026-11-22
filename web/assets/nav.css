@@ -22,7 +22,7 @@ body.nav .nv svg{display:block}
 
 /* ── 轉彎卡 ── */
 .nv-turn{position:fixed;left:max(8px,env(safe-area-inset-left,0px));right:max(8px,env(safe-area-inset-right,0px));top:calc(env(safe-area-inset-top,0px) + 8px);max-width:440px;z-index:12;color:#fff;touch-action:pan-y;user-select:none;-webkit-user-select:none}
-.nv-track{display:flex;gap:10px;align-items:flex-start;transition:transform .3s cubic-bezier(.2,.8,.2,1);will-change:transform}
+.nv-track{display:flex;gap:10px;align-items:flex-start;transition:transform var(--dur-3) var(--ease-spring);will-change:transform}
 .nv-turn.dragging .nv-track{transition:none}
 .tcard{flex:0 0 100%;--c:#5f6368;--c2:#4a4d51}
 .tcard.live{--c:var(--nv-green);--c2:var(--nv-green-2)}
@@ -85,7 +85,7 @@ body[data-nvtheme="light"] .nv-recenter{color:#1a73e8!important}
 /* ── 底部抽屜（共用 sheetDrag） ── */
 .nv-sheet{position:fixed;left:0;right:0;bottom:0;z-index:13;background:var(--nv-sheet);color:var(--nv-ink);border-radius:20px 20px 0 0;box-shadow:0 -2px 14px rgba(0,0,0,.35);
   padding:6px 16px calc(env(safe-area-inset-bottom,0px) + 12px);max-width:560px;margin:0 auto;height:min(78vh,640px);display:flex!important;flex-direction:column;
-  transform:translateY(var(--sheet-off,0px));transition:transform .28s cubic-bezier(.2,.8,.2,1);will-change:transform}
+  transform:translateY(var(--sheet-off,0px));transition:transform var(--dur-3) var(--ease-spring);will-change:transform}
 body:not(.nav) .nv-sheet{display:none!important}
 .nv-sheet.dragging{transition:none}
 .nv-sheet .handle{width:100%;height:22px;display:grid;place-items:center;flex:none}
