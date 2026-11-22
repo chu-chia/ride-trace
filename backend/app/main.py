@@ -130,6 +130,29 @@ async def watch_page(tok: str):
     return RedirectResponse(f"/war?id={tid or 0}&watch={quote(tok)}", status_code=302)
 
 
+DEMO_TRIP = os.getenv("DEMO_TRIP", "57")
+
+
+@app.get("/api/demo", include_in_schema=False)
+async def demo_link():
+    """首頁、關於頁的「看示範車隊」：Demo 行程（compose 的 demo 服務一直在跑的那趟）的觀看連結，不用登入。
+    已經有有效的觀看連結就沿用（不會讓建立者發出去的連結失效）；沒有或 7 天到期了才產生一條新的。
+    Demo 沒在跑（沒有 demo 標記、不是進行中）就回 null，前端不顯示入口。"""
+    import secrets
+    from .db import K, r
+    t = await r.hgetall(K.trip(DEMO_TRIP))
+    if not t or t.get("status") != "live" or not t.get("demo"):
+        return {"url": None}
+    tok = t.get("watch")
+    if not tok or not await r.exists(K.watch(tok)):
+        tok = secrets.token_urlsafe(12)
+        async with r.pipeline(transaction=True) as p:
+            p.set(K.watch(tok), DEMO_TRIP, ex=trips.WATCH_TTL)
+            p.hset(K.trip(DEMO_TRIP), "watch", tok)
+            await p.execute()
+    return {"url": f"/w/{quote(tok)}", "name": t.get("name", "")}
+
+
 PAGES = {"/war": "war.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html", "/about": "about.html", "/settings": "settings.html", "/nav": "trip.html"}  # /nav＝行程頁的導航模式
 for path, file in PAGES.items():
     app.add_api_route(path, page(file), include_in_schema=False)
