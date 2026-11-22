@@ -167,10 +167,13 @@ syncMute();
 
 /* ───── 橫幅：SOS 會一直留著，直到按「查看」；其他提醒不會蓋掉 SOS ───── */
 let bannerT;
-function showBanner(kind, html, act, ms, onAct) {
+function showBanner(kind, html, act, ms, onAct, { sosUid } = {}) {
   const b = $('#nvBanner');
-  if (kind !== 'sos' && b.classList.contains('sos') && !b.classList.contains('nv-hidden')) return;
+  const sosUp = b.classList.contains('sos') && !b.classList.contains('nv-hidden');
+  // 同一個人解除 SOS（sosUid 對得上）可以蓋掉他自己的 SOS 橫幅；其他提醒不會蓋掉 SOS
+  if (kind !== 'sos' && sosUp && !(sosUid && b.dataset.sosUid === sosUid)) return;
   b.className = `nv nv-banner ${kind}`;
+  b.dataset.sosUid = kind === 'sos' ? (sosUid || '') : '';
   b.innerHTML = `<span>${html}</span>${act ? `<button class="act" type="button">${esc(act)}</button>` : ''}`;
   const hide = () => { b.classList.add('nv-hidden'); layout(); };
   if (act) b.querySelector('.act').onclick = () => { hide(); onAct?.(); };
@@ -556,8 +559,8 @@ addEventListener('qiji:msg', (e) => {
   const uid = String(msg.uid || ''), mine = uid === String(S.me), who = nameOf(uid);
   const g = () => { const m = S.members.get(uid), gp = m && gapOf(m); return gp != null ? ` · ${fmtGap(gp)}` : ''; };
   switch (msg.type) {
-    case 'sos': if (!mine) { showBanner('sos', `${esc(who)} 發出 SOS${g()}`, '查看', 0, () => focusMate(uid)); say(`${who}發出求救`); } break;
-    case 'sos_off': if (!mine) showBanner('info', `${esc(who)} 解除了 SOS`, null, 5000); break;
+    case 'sos': if (!mine) { showBanner('sos', `${esc(who)} 發出 SOS${g()}`, '查看', 0, () => focusMate(uid), { sosUid: String(uid) }); say(`${who}發出求救`); } break;
+    case 'sos_off': if (!mine) showBanner('info', `${esc(who)} 解除了 SOS`, null, 5000, null, { sosUid: String(uid) }); break;
     case 'lost': if (!mine) { showBanner('warn', `${esc(who)} 失聯${g()}`, '查看', 6000, () => focusMate(uid)); say(`${who}失聯`); } break;
     case 'stuck': if (!mine) { showBanner('info', `${esc(who)} 停車很久了${g()}`, '查看', 5000, () => focusMate(uid)); say(`${who}停車了`); } break;
     case 'behind': if (!mine) { showBanner('info', esc(msg.text || `${who} 落後了`), '設集合點', 8000, setMeet); say(`${who}落後了`); } break;
