@@ -450,6 +450,8 @@ export const PERF = (() => {
   } catch { return q === '1'; }
 })();
 if (PERF) { window.__qijiMaps ||= []; import('/assets/perf.js'); }
+// 每一頁都註冊 Service Worker（以前只有開通知時才註冊）：換頁、重新整理時沒有網路，顯示騎跡自己的離線頁
+if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
 // 動畫迴圈用：回傳 false 表示這一格跳過（省電時約 30 fps）
 export function frameGate() {
   let last = 0;
