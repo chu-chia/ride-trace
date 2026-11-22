@@ -157,11 +157,31 @@ export function swipeAway(el, onGone) {
   };
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
 }
+// 提示的圖示：以前是方塊裡一個中文字（鈴、亮、騎、雨），看起來像亂碼；呼叫端照舊傳字，這裡換成線條圖示，沒對應的才顯示字
+const P = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const I_CHECK = P('<path d="M5 12.5l4.5 4.5L19 7.5"/>'), I_ALERT = P('<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.5v.01"/>');
+const I_STOP = P('<rect x="6" y="6" width="12" height="12" rx="2"/>'), I_ROUTE = P('<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6"/>');
+const TOAST_ICO = {
+  '!': I_ALERT, 偏: I_ALERT, S: P('<path d="M8 3h8l5 5v8l-5 5H8l-5-5V8z"/><path d="M12 8v5M12 16.5v.01"/>'),
+  鈴: P('<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/>'),
+  騎: P('<circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5L9 9h5l4.5 7.5M12 9l-1.5-3H8M14 9l2-3h2"/>'),
+  '✓': I_CHECK, 回: I_CHECK, 合: I_CHECK, 安: I_CHECK, 到: I_CHECK, 齊: I_CHECK,
+  終: I_STOP, 停: I_STOP,
+  入: P('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/>'),
+  出: P('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 11h6"/>'),
+  建: P('<path d="M12 5v14M5 12h14"/>'), 前: P('<path d="M5 12h14M13 6l6 6-6 6"/>'), 動: P('<path d="M8 5l11 7-11 7z"/>'),
+  集: P('<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>'), 路: I_ROUTE, 算: P('<path d="M20 11a8 8 0 0 0-14.5-4.5M4 4v3h3M4 13a8 8 0 0 0 14.5 4.5M20 20v-3h-3"/>'),
+  雨: P('<path d="M7 15a4 4 0 0 1-.5-8A5.5 5.5 0 0 1 17 6.5a4 4 0 0 1 .5 8.5zM8 18l-1 2.5M12 18l-1 2.5M16 18l-1 2.5"/>'),
+  訊: P('<path d="M4 5h16v11H9l-5 4z"/>'), 註: P('<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>'),
+  亮: P('<path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/>'),
+  速: P('<path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/>'),
+  '3D': P('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>'),
+};
 // action：{ label, onClick } 在右邊放一顆按鈕（例如「改用傾斜」），按了就收掉；ms：幾毫秒後自動消失
 export function toast(text, { icon = '騎', color = '#d9500f', sub = '', action = null, ms = 5000 } = {}) {
   const el = document.createElement('div');
   el.className = 'toast';
-  el.innerHTML = `<div class="ic" style="--c:${color};--ink:${inkOn(color)}">${esc(icon)}</div><div style="min-width:0;flex:1"><div class="tx">${esc(text)}</div>${sub ? `<div class="tt">${esc(sub)}</div>` : ''}</div>`;
+  el.innerHTML = `<div class="ic" style="--c:${color};--ink:${inkOn(color)}">${TOAST_ICO[icon] || esc(icon)}</div><div style="min-width:0;flex:1"><div class="tx">${esc(text)}</div>${sub ? `<div class="tt">${esc(sub)}</div>` : ''}</div>`;
   if (action) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'toast-act'; b.textContent = action.label;
