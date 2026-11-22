@@ -415,3 +415,6 @@ body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),va
 .arming::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:currentColor;opacity:.75;transform-origin:left;animation:qxArm var(--arm,6s) linear forwards}
 @keyframes qxArm{to{transform:scaleX(0)}}
 @media (prefers-reduced-motion:reduce){.arming::after{animation-duration:0s;animation-delay:var(--arm,6s)}}
+
+/* 面板收合／展開動畫中（common.js morphPanel）：標題一行到底，放不下就省略號 */
+.morphing :is(.panel-top h2,.head-copy b,.head-copy .sub,.panel-head b,.panel-head .sub){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

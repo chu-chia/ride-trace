@@ -605,49 +605,48 @@ addEventListener('pageshow', (e) => { if (e.persisted) document.activeElement?.b
 
 // 側欄收合／展開動畫（Apple 的作法：外框用彈簧縮放，裡面的內容先淡掉再換、或換好再淡入）
 // 用 clip-path 從現在的大小裁到目標大小，不去動 width／height（不會每格重新排版，手機上也順）。
-// 收合時先加 .small＋.closing：.closing 讓面板維持展開的版面直到動畫結束，但 body:has(.panel.small) 的元件（回放播放列、
-// 全隊進度條、跟隨膠囊）已經開始往左滑，兩邊同時動。
-let panelAnim = null;
+// 面板收合／展開（重寫）：不再用 clip-path 先裁外框、動畫完才換版面，而是真的把面板的位置與寬高
+// 從舊的樣子動畫到新的樣子。每一格都重新排版，所以標題列（標題省略號、收合鈕）跟著外框一起變窄／變寬。
+//   apply()：把面板切成目標狀態（class、inline style、靠邊），量出目標大小
+//   hold(on)：動畫期間要暫時維持的狀態（例如收合時內容還要看得到、拿掉 !important 的寬高）
+//   kids：要淡出（收合）或淡入（展開）的內容；動畫期間寬度鎖住，不會跟著擠
+export function morphPanel(el, { apply, hold, kids = () => [], shrink, after, dur = 520 }) {
+  el.__morph?.finish?.();
+  const ease = cssVar('--ease-spring');
+  const box = (r, o) => ({ left: `${r.left - o.left}px`, top: `${r.top - o.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  const parent = () => (getComputedStyle(el).position === 'fixed' ? { left: 0, top: 0 } : (el.offsetParent || document.body).getBoundingClientRect());
+  const r0 = el.getBoundingClientRect(), o0 = parent();
+  const before = shrink ? kids() : [];
+  const widths = before.map((k) => k.getBoundingClientRect().width);
+  apply();
+  const r1 = el.getBoundingClientRect(), o1 = parent();
+  if (Math.abs(r0.width - r1.width) < 1 && Math.abs(r0.height - r1.height) < 1 && Math.abs(r0.left - r1.left) < 1 && Math.abs(r0.top - r1.top) < 1) return;
+  el.classList.add('morphing');                       // 動畫中標題不換行（寬度一格一格變，換行會跳）
+  el.__morphTo = r1;                                  // 動畫目標（其他元件要依面板位置排版時用這個，不要量到動畫中間）
+  hold?.(true);
+  const list = shrink ? before : kids();
+  const lock = shrink ? widths : list.map((k) => k.getBoundingClientRect().width);
+  list.forEach((k, n) => { k.__w = k.style.width; k.__f = k.style.flexShrink; k.style.width = `${lock[n]}px`; k.style.flexShrink = '0'; });
+  if (shrink) list.forEach((k) => k.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-out', fill: 'forwards' }));
+  else list.forEach((k, n) => k.animate([{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }], { duration: 360, delay: 90 + Math.min(n, 4) * 25, easing: ease, fill: 'backwards' }));
+  const a = el.animate([box(r0, o0), box(r1, o1)], { duration: dur, easing: ease });
+  el.__morph = a;
+  const done = () => {
+    hold?.(false);
+    list.forEach((k) => { k.getAnimations().forEach((x) => x.cancel()); k.style.width = k.__w || ''; k.style.flexShrink = k.__f || ''; });
+    if (el.__morph === a) { el.__morph = null; el.__morphTo = null; el.classList.remove('morphing'); }
+    after?.();
+  };
+  a.onfinish = done; a.oncancel = done;
+}
 function animatePanel(panel, toSmall) {
-  panelAnim?.finish?.();
-  const R = 20, ease = cssVar('--ease-spring'), dur = 520;
-  const kids = () => [...panel.children].filter((el) => !el.matches('.panel-head,.panel-mini,.handle,.keep'));
-  // 標題列上的按鈕（收合鈕、分享…）跟著裁切的右邊一起移動，不要先被切掉、動畫完才跳到新位置
-  const ctrls = [...panel.querySelectorAll('.panel-head button,.panel-head a')];
-  const rects = () => ctrls.map((el) => el.getBoundingClientRect());
-  const slide = (from, to, back) => ctrls.forEach((el, i) => {
-    const f = from[i], t = to[i];
-    if (!f.width || !t.width) return;                  // 其中一個狀態看不到（隱藏）就不動
-    const dx = t.left - f.left, dy = t.top - f.top;
-    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-    const moved = `translate(${dx}px,${dy}px)`;
-    el.animate(back ? [{ transform: moved }, { transform: 'none' }] : [{ transform: 'none' }, { transform: moved }], { duration: dur, easing: ease, fill: back ? 'backwards' : 'forwards' });
+  morphPanel(panel, {
+    shrink: toSmall,
+    kids: () => [...panel.children].filter((el) => !el.matches('.panel-head,.panel-mini,.handle,.keep') && getComputedStyle(el).display !== 'none'),
+    apply: () => panel.classList.toggle('small', toSmall),
+    // 收合：.closing 讓內容維持顯示（body:has(.panel.small) 的元件照樣同時開始滑）
+    hold: toSmall ? (on) => panel.classList.toggle('closing', on) : null,
   });
-  if (toSmall) {
-    const full = panel.getBoundingClientRect(), r0 = rects();
-    panel.classList.add('small');                      // 量目標大小
-    const sm = panel.getBoundingClientRect(), r1 = rects();
-    panel.classList.add('closing');                    // 版面先維持展開
-    const cut = `inset(0px ${Math.max(0, full.width - sm.width)}px ${Math.max(0, full.height - sm.height)}px 0px round ${R}px)`;
-    kids().forEach((el) => el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-out', fill: 'forwards' }));
-    slide(r0, r1, false);
-    const a = panel.animate([{ clipPath: `inset(0px 0px 0px 0px round ${R}px)` }, { clipPath: cut }], { duration: dur, easing: ease });
-    panelAnim = a;
-    const done = () => { panel.classList.remove('closing'); [...kids(), ...ctrls].forEach((el) => el.getAnimations().forEach((x) => x.cancel())); if (panelAnim === a) panelAnim = null; };
-    a.onfinish = done; a.oncancel = done;
-  } else {
-    const sm = panel.getBoundingClientRect(), r0 = rects();
-    panel.classList.remove('small');
-    const full = panel.getBoundingClientRect(), r1 = rects();
-    const cut = `inset(0px ${Math.max(0, full.width - sm.width)}px ${Math.max(0, full.height - sm.height)}px 0px round ${R}px)`;
-    // 展開：按鈕從收合時的位置滑回來（版面已經是展開的，所以從 r0−r1 的位移開始）
-    ctrls.forEach((el, i) => { const f = r0[i], t = r1[i]; if (!f.width || !t.width) return; const dx = f.left - t.left, dy = f.top - t.top; if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return; el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { duration: dur, easing: ease, fill: 'backwards' }); });
-    const a = panel.animate([{ clipPath: cut }, { clipPath: `inset(0px 0px 0px 0px round ${R}px)` }], { duration: dur, easing: ease });
-    panelAnim = a;
-    // 內容晚一點出來、從上面一點點滑下來（像 iOS 展開卡片）
-    kids().forEach((el, i) => el.animate([{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }], { duration: 360, delay: 90 + Math.min(i, 4) * 25, easing: ease, fill: 'backwards' }));
-    a.onfinish = a.oncancel = () => { if (panelAnim === a) panelAnim = null; };
-  }
 }
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'ease';
 

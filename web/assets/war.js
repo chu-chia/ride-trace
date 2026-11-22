@@ -1,6 +1,6 @@
 // 戰情室（規格 4.7，電腦大螢幕）：3D 地圖自動運鏡（框住全隊＋慢慢旋轉）、隊員卡片牆、事件資訊流、
 // 行程進度條＋海拔剖面。資料和行程頁一樣走 WebSocket（Pub/Sub）。
-import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, parkedJitter, reduceMotion, markFocus, isWeak, eventFilter, WATCH } from '/assets/common.js';
+import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, dur, ago, teamTable, press, setLabel, liquidGlass, sheetDrag, smoothPad, frameGate, LOW_POWER, gapGlow, parkedJitter, reduceMotion, markFocus, isWeak, eventFilter, WATCH, morphPanel } from '/assets/common.js';
 import { createMap, addCompass, styleMenu } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
@@ -98,17 +98,30 @@ function edge(v, max) { return v < 18 ? 12 : max - v < 18 ? max : snap(v); }
 for (const el of panels) {
   el.addEventListener('pointerdown', () => { el.style.zIndex = ++topLayer; });
   el.querySelector('.panel-toggle').addEventListener('click', () => {
-    if (!el.classList.contains('small')) {
-      el.dataset.openHeight = String(el.getBoundingClientRect().height);
-      el.dataset.ostyle = el.getAttribute('style') || '';
-      el.classList.add('small');
-    } else {
-      el.classList.remove('small');
-      el.setAttribute('style', el.dataset.ostyle ?? '');
-      delete el.dataset.ostyle;
-    }
-    el.querySelector('.panel-toggle').setAttribute('aria-expanded', String(!el.classList.contains('small')));
-    dock();
+    const toSmall = !el.classList.contains('small');
+    const toggle = () => {
+      if (toSmall) {
+        el.dataset.openHeight = String(el.getBoundingClientRect().height);
+        el.dataset.ostyle = el.getAttribute('style') || '';
+        el.classList.add('small');
+      } else {
+        el.classList.remove('small');
+        el.setAttribute('style', el.dataset.ostyle ?? '');
+        delete el.dataset.ostyle;
+      }
+      el.querySelector('.panel-toggle').setAttribute('aria-expanded', String(!el.classList.contains('small')));
+      dock();
+    };
+    // 跟側欄一樣：位置與寬高真的動畫過去，標題列跟著外框一起縮放；收合時 .small 的寬高是 !important，動畫期間先拿掉
+    if (reduceMotion() || !el.animate || mobile.matches) toggle();
+    else morphPanel(el, {
+      shrink: toSmall,
+      apply: toggle,
+      kids: () => [...el.children].filter((k) => !k.matches('.panel-top,.panel-toggle,.panel-resize') && getComputedStyle(k).display !== 'none'),
+      hold: toSmall ? (on) => el.classList.toggle('small', !on) : null,
+      after: placeTools,
+    });
+    placeTools();
     saveLayout();
   });
   for (const handle of el.querySelectorAll('.panel-grip,.panel-resize')) {
@@ -160,7 +173,7 @@ panels.forEach((el) => liquidGlass(el));
 // 工具列放在右上、右側面板的左邊；面板被拖動或縮放後重新計算
 function placeTools() {
   if (mobile.matches) return document.documentElement.style.removeProperty('--tools-right');
-  const right = panels.map((el) => el.getBoundingClientRect()).filter((r) => r.top < 160 && r.left > innerWidth / 2);
+  const right = panels.map((el) => el.__morphTo || el.getBoundingClientRect()).filter((r) => r.top < 160 && r.left > innerWidth / 2);
   const x = right.length ? Math.min(...right.map((r) => r.left)) : innerWidth;
   document.documentElement.style.setProperty('--tools-right', `${Math.round(innerWidth - x + 12)}px`);
 }
