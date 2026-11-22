@@ -23,6 +23,11 @@
   .src li:first-child{border-top:0}
   .src li span{color:var(--muted);text-align:right;flex:none;max-width:55%}
   .src a{color:var(--accent);text-decoration:none}
+  /* 足跡怎麼算的：白話說明在前，Redis 技術說明是下面的小字（一般使用者看得懂，評審也看得到） */
+  .how .src li{display:block}
+  .how .src li p{margin:3px 0 0;font-size:14px}
+  .how .src li .tech{display:block;margin-top:4px;color:var(--muted);font-size:12px;line-height:1.5}
+  .demo{display:flex;align-items:center;justify-content:space-between;gap:12px}
   .how .src li{flex-direction:column;gap:2px}
   .how .src li span{text-align:left;max-width:none;flex:auto}
 </style>
@@ -37,13 +42,18 @@
     <p class="small muted">DBMS 課程 Redis 專題。位置資料只存在這台伺服器的 Redis，不會送到外部服務；地圖比對用本機的 Valhalla。</p>
   </section>
 
+  <section class="card demo" id="demoCard" hidden>
+    <div><h2 style="margin:0">看示範車隊</h2><p class="small muted" style="margin:4px 0 0" id="demoName">即時的戰情室畫面，不用登入</p></div>
+    <a class="btn primary" id="demoLink" href="#" style="flex:none;white-space:nowrap">打開</a>
+  </section>
+
   <section class="card how" id="how">
     <h2>足跡怎麼算的</h2>
     <ul class="src">
-      <li><b>點亮鄉鎮</b><span>每個位置點用 Redis 的 GEOSHAPE 空間索引查出所在鄉鎮（FT.SEARCH … CONTAINS），存進每人一個 Set；SADD 回傳 1 代表第一次點亮。</span></li>
-      <li><b>熱力圖</b><span>台灣切成約 160 m 的格子，每經過一次用 Sorted Set 的 ZINCRBY 加一，ZREVRANGE 取前幾名就是最常走的路；放大到街道時改用 GEO 的 GEOSEARCH BYBOX 只取畫面內的足跡點。</span></li>
-      <li><b>你在各種路的速度</b><span>每段路依道路類別存進 RedisTimeSeries，規劃路線時用 TS.MRANGE … GROUPBY cat REDUCE sum 算出你在省道、山路等的實際平均速度。</span></li>
-      <li><b>匯入舊紀錄</b><span>以前的 GPX 可以由管理者用 <code>tools/import_gpx</code> 匯入，匯入後一樣會點亮。</span></li>
+      <li><b>點亮鄉鎮</b><p>騎進一個以前沒去過的鄉鎮市區，它就會亮起來；全台 368 個，看看你去過幾個。</p><small class="tech">Redis：每個位置點用 GEOSHAPE 空間索引查出所在鄉鎮（FT.SEARCH … CONTAINS），存進每人一個 Set；SADD 回傳 1 代表第一次點亮。</small></li>
+      <li><b>熱力圖</b><p>走過越多次的路越亮，一眼看出你最常騎哪裡；放大到街道會顯示每一個足跡點。</p><small class="tech">Redis：台灣切成約 160 m 的格子，每經過一次用 Sorted Set 的 ZINCRBY 加一，ZREVRANGE 取前幾名就是最常走的路；放大到街道時改用 GEOSEARCH BYBOX 只取畫面內的足跡點。</small></li>
+      <li><b>你在各種路的速度</b><p>記下你在省道、市區、山路各自實際騎多快，規劃路線時「依你的速度」的時間就是用這些數字估的。</p><small class="tech">Redis：每段路依道路類別存進 RedisTimeSeries，用 TS.MRANGE … GROUPBY cat REDUCE sum 算出各類道路的平均速度。</small></li>
+      <li><b>匯入舊紀錄</b><p>以前用其他 App 記的 GPX 軌跡，可以請管理者匯入，匯入後一樣會點亮。</p><small class="tech">工具：<code>tools/import_gpx</code></small></li>
     </ul>
   </section>
 
@@ -72,5 +82,14 @@
   </section>
 </main>
 <script type="module" src="/assets/back.js"></script>
+<script type="module">
+// 示範車隊（Demo #57 一直在跑）：有在跑才顯示
+fetch('/api/demo').then((r) => r.json()).then((d) => {
+  if (!d?.url) return;
+  document.getElementById('demoLink').href = d.url;
+  if (d.name) document.getElementById('demoName').textContent = `${d.name}・即時戰情室，不用登入`;
+  document.getElementById('demoCard').hidden = false;
+}).catch(() => {});
+</script>
 </body>
 </html>
