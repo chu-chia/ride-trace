@@ -113,7 +113,8 @@ for (const el of panels) {
   });
   for (const handle of el.querySelectorAll('.panel-grip,.panel-resize')) {
     handle.addEventListener('pointerdown', (e) => {
-      if (!editing || mobile.matches || e.button !== 0 || e.target.closest('button,a') || el.classList.contains('small')) return;  // 收合中的膠囊不能拖，展開再排
+      const onList = handle.classList.contains('card-list');  // 騎士清單沒有標題列，編輯時整塊清單都能拖（列本身是按鈕）
+      if (!editing || mobile.matches || e.button !== 0 || (!onList && e.target.closest('button,a')) || el.classList.contains('small')) return;  // 收合中的膠囊不能拖，展開再排
       e.preventDefault(); e.stopPropagation();
       const r = el.getBoundingClientRect(), resize = handle.classList.contains('panel-resize');
       const x0 = e.clientX, y0 = e.clientY;
@@ -136,6 +137,8 @@ for (const el of panels) {
   }
 }
 $('#editLayout').onclick = () => setEditing(!editing);
+// 編輯版面時點騎士清單只是在拖，不要切換跟隨
+$('.war-panel.cards .card-list')?.addEventListener('click', (e) => { if (editing) { e.stopPropagation(); e.preventDefault(); } }, true);
 $('#resetLayout').onclick = () => {
   for (const el of panels) { el.removeAttribute('style'); delete el.dataset.openHeight; delete el.dataset.ostyle; el.classList.remove('small'); el.querySelector('.panel-toggle').setAttribute('aria-expanded', 'true'); }
   try { localStorage.removeItem(LAYOUT_KEY); } catch { /* 儲存空間不可用 */ }

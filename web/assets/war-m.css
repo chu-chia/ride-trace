@@ -10,7 +10,7 @@ body{background:var(--solid);color:var(--fg);--surface:var(--solid);--surface-2:
 
 /* 上方標題列：浮在地圖上（上緣漸層），返回、行程名稱＋騎乘中計時、觀看人數 */
 .whd{position:fixed;left:0;right:0;top:0;z-index:9;display:flex;align-items:center;gap:8px;min-width:0;
-  padding:calc(env(safe-area-inset-top) + 6px) max(12px,env(safe-area-inset-right)) 10px max(12px,env(safe-area-inset-left));
+  padding:calc(env(safe-area-inset-top) + 6px) max(12px,var(--sai-r,env(safe-area-inset-right,0px))) 10px max(12px,var(--sai-l,env(safe-area-inset-left,0px)));
   background:linear-gradient(rgba(0,0,0,.72),rgba(0,0,0,.35) 70%,rgba(0,0,0,0));pointer-events:none}
 .whd>*{pointer-events:auto}
 .whd .icon-btn{background:var(--glass);flex:none}
@@ -28,7 +28,7 @@ body{background:var(--solid);color:var(--fg);--surface:var(--solid);--surface-2:
 .tool.away{background:var(--glass);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent),0 4px 14px rgba(0,0,0,.45)}
 
 /* 通知橫幅：一次一則，4 秒自己收；手指往上滑掉 */
-.wnote{position:fixed;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));top:calc(env(safe-area-inset-top) + 56px);z-index:12;
+.wnote{position:fixed;left:max(10px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(10px,var(--sai-r,env(safe-area-inset-right,0px)));top:calc(env(safe-area-inset-top) + 56px);z-index:12;
   display:flex;gap:10px;align-items:center;padding:11px 13px 14px;border-radius:16px;background:var(--solid-2);box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:14px;
   transform:translateY(-160%);opacity:0;transition:transform var(--dur-3) var(--ease-bounce),opacity var(--dur-2) var(--ease-out);touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
 .wnote.on{transform:translateY(var(--ny,0px));opacity:1}
@@ -39,7 +39,7 @@ body{background:var(--solid);color:var(--fg);--surface:var(--solid);--surface-2:
 .wnote small{display:block;color:var(--muted);font-size:12px}
 
 /* SOS 橫幅：一人一條，蓋在最上面；定位＝鏡頭跟著他，已處理＝這台收起（新的 SOS 會再出現） */
-.sosbars{position:fixed;left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));top:calc(env(safe-area-inset-top) + 56px);z-index:13;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.sosbars{position:fixed;left:max(10px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(10px,var(--sai-r,env(safe-area-inset-right,0px)));top:calc(env(safe-area-inset-top) + 56px);z-index:13;display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .sosbar{pointer-events:auto;background:var(--sos);color:#fff;border-radius:14px;padding:11px 13px;font-weight:700;display:flex;gap:8px;align-items:center;box-shadow:var(--shadow);font-size:14px}
 .sosbar .t{min-width:0;flex:1}
 .sosbar button{background:rgba(255,255,255,.22);padding:8px 12px;border-radius:999px;font-weight:700;color:#fff;border:0;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
@@ -47,7 +47,7 @@ body{background:var(--solid);color:var(--fg);--surface:var(--solid);--surface-2:
 /* 底部抽屜：高度固定，開合用 transform 整塊推（sheetDrag 寫 --sheet-off） */
 .wsheet{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--solid);border-radius:20px 20px 0 0;box-shadow:0 -2px 16px rgba(0,0,0,.4);
   height:calc(100dvh - env(safe-area-inset-top) - 60px);display:flex;flex-direction:column;overflow:hidden;
-  padding:0 max(14px,env(safe-area-inset-right)) 0 max(14px,env(safe-area-inset-left));
+  padding:0 max(14px,var(--sai-r,env(safe-area-inset-right,0px))) 0 max(14px,var(--sai-l,env(safe-area-inset-left,0px)));
   transform:translateY(var(--sheet-off,0px));transition:transform var(--dur-3) var(--ease-spring);will-change:transform}
 .wsheet.dragging{transition:none}
 .wsheet .handle{height:22px;display:grid;place-items:center;flex:none;width:100%;background:none;border:0;padding:0;cursor:grab}

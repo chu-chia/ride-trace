@@ -84,8 +84,8 @@
   /* 右下播放長條（橫向、電腦）：播放鍵｜時間｜時間軸｜倍速 */
   .pbar{display:none}
   @media (min-width:761px){
-    .pbar{display:flex;position:fixed;z-index:9;left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-w) + var(--edge));right:max(var(--edge),env(safe-area-inset-right,0px));bottom:max(var(--edge),env(safe-area-inset-bottom,0px));align-items:center;gap:12px;border-radius:var(--r-panel);padding:8px 14px}
-    body:has(.panel.small) .pbar{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge))}
+    .pbar{display:flex;position:fixed;z-index:9;left:calc(max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-w) + var(--edge));right:max(var(--edge),var(--sai-r,env(safe-area-inset-right,0px)));bottom:max(var(--edge),env(safe-area-inset-bottom,0px));align-items:center;gap:12px;border-radius:var(--r-panel);padding:8px 14px}
+    body:has(.panel.small) .pbar{left:calc(max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-mini-w) + var(--edge))}
     .pbar .play{width:48px;height:48px}.pbar .play svg{width:20px;height:20px}
     .pbar .clk{flex:none;min-width:70px}.pbar .clk b{font-size:21px}.pbar .clk span{font-size:12px}
     .pbar .tl{flex:1;min-width:0;padding:0}
@@ -129,7 +129,7 @@
   }
   /* 手機直向：上方浮動標題列（返回＋行程名），抽屜收著時露出播放列＋時間軸＋鏡頭＋分頁 */
   /* 照原型的標題列：左邊一顆圓形返回鍵，右邊一條膠囊放行程名 */
-  .rtop{position:fixed;z-index:9;top:calc(env(safe-area-inset-top,0px) + 8px);left:max(8px,env(safe-area-inset-left,0px));right:calc(var(--tool) + var(--edge) + 16px)}
+  .rtop{position:fixed;z-index:9;top:calc(env(safe-area-inset-top,0px) + 8px);left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:calc(var(--tool) + var(--edge) + 16px)}
   .rtop .panel-head{padding:0;gap:8px}
   .rtop #back{width:48px;height:48px;border-radius:50%;background:var(--surface);box-shadow:var(--shadow)}
   .rtop #back svg{width:22px;height:22px}

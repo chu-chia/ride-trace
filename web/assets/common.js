@@ -1,5 +1,6 @@
 // 共用：API、通知、小工具
-export { canGoBack, goBackOr, wireBack } from '/assets/back.js';  // 返回鈕回到來的地方、擋掉 iOS 回到頁面時自動 focus 輸入框
+export { canGoBack, goBackOr, wireBack } from '/assets/back.js';
+import '/assets/island.js';  // 手機橫向：只在動態島那側閃避（--sai-l／--sai-r）  // 返回鈕回到來的地方、擋掉 iOS 回到頁面時自動 focus 輸入框
 // 觀看連結（/w/{tok} 轉到 /war?id=…&watch=tok）：免登入看戰情室，每個 API 都帶著它
 export const WATCH = new URLSearchParams(location.search).get('watch') || '';
 const watchHdr = () => (WATCH ? { 'x-qiji-watch': WATCH } : {});

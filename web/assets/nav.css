@@ -21,7 +21,7 @@ body.nav .nv svg{display:block}
 .nv-sheet button,.nv-fabs button,.nv-recenter,.nv-edge{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
 
 /* ── 轉彎卡 ── */
-.nv-turn{position:fixed;left:max(8px,env(safe-area-inset-left,0px));right:max(8px,env(safe-area-inset-right,0px));top:calc(env(safe-area-inset-top,0px) + 8px);max-width:440px;z-index:12;color:#fff;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.nv-turn{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));top:calc(env(safe-area-inset-top,0px) + 8px);max-width:440px;z-index:12;color:#fff;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .nv-track{display:flex;gap:10px;align-items:flex-start;transition:transform var(--dur-3) var(--ease-spring);will-change:transform}
 .nv-turn.dragging .nv-track{transition:none}
 .tcard{flex:0 0 100%;--c:#5f6368;--c2:#4a4d51}
@@ -42,14 +42,14 @@ body.nav .nv svg{display:block}
 .turn-then svg{width:24px;height:24px}
 .tcard.near .turn-dist{font-size:28px}
 /* 沒有路線：自由騎乘 */
-.nv-free{position:fixed;left:max(8px,env(safe-area-inset-left,0px));right:max(8px,env(safe-area-inset-right,0px));max-width:440px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:12;background:var(--nv-sheet);color:var(--nv-ink);border-radius:16px;box-shadow:var(--nv-shadow);padding:12px 14px;display:flex;align-items:center;gap:10px;font-weight:600}
+.nv-free{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));max-width:440px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:12;background:var(--nv-sheet);color:var(--nv-ink);border-radius:16px;box-shadow:var(--nv-shadow);padding:12px 14px;display:flex;align-items:center;gap:10px;font-weight:600}
 .nv-free small{font-weight:500;color:var(--nv-ink-2)}
 .nv-free>span{flex:1;min-width:0;line-height:1.35}  /* 說明文字自己換行，不要貼到右邊的按鈕 */
 .nv-free a{flex:none}
 .nv-free a{margin-left:auto;padding:8px 14px;border-radius:999px;background:var(--nv-green);color:#fff;font-size:14px;text-decoration:none;white-space:nowrap}
 
 /* ── 橫幅（偏離、測速、隊友 SOS）── */
-.nv-banner{position:fixed;left:max(8px,env(safe-area-inset-left,0px));right:max(8px,env(safe-area-inset-right,0px));max-width:440px;z-index:12;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;box-shadow:var(--nv-shadow);animation:nvdrop .25s ease-out}
+.nv-banner{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));max-width:440px;z-index:12;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;box-shadow:var(--nv-shadow);animation:nvdrop .25s ease-out}
 .nv-banner.warn{background:var(--nv-warn);color:#202124}
 .nv-banner.sos{background:var(--sos);color:#fff}
 .nv-banner.info{background:var(--nv-sheet);color:var(--nv-ink)}
@@ -59,7 +59,7 @@ body.nav .nv svg{display:block}
 @keyframes nvdrop{from{transform:translateY(-12px);opacity:0}}
 
 /* ── 右側浮鈕 ── */
-.nv-fabs{position:fixed;right:max(10px,env(safe-area-inset-right,0px));z-index:11;display:flex!important;flex-direction:column;gap:12px;align-items:center;transition:opacity .2s}
+.nv-fabs{position:fixed;right:max(10px,var(--sai-r,env(safe-area-inset-right,0px)));z-index:11;display:flex!important;flex-direction:column;gap:12px;align-items:center;transition:opacity .2s}
 body:not(.nav) .nv-fabs{display:none!important}
 .nv-fab{width:52px;height:52px;border-radius:50%;background:var(--nv-fab)!important;color:var(--nv-fab-ink)!important;box-shadow:var(--nv-shadow);display:grid;place-items:center}
 .nv-fab svg{width:24px;height:24px}
@@ -69,7 +69,7 @@ body:not(.nav) .nv-fabs{display:none!important}
 .nv-fab.on{color:#4c8dff!important}
 
 /* ── 左下速度 ── */
-.nv-speed{position:fixed;left:max(10px,env(safe-area-inset-left,0px));z-index:11;display:flex!important;flex-direction:column;align-items:center;gap:8px;transition:opacity .2s}
+.nv-speed{position:fixed;left:max(10px,var(--sai-l,env(safe-area-inset-left,0px)));z-index:11;display:flex!important;flex-direction:column;align-items:center;gap:8px;transition:opacity .2s}
 body:not(.nav) .nv-speed{display:none!important}
 .nv-limit{width:46px;height:46px;border-radius:50%;background:#fff;border:5px solid #d93025;color:#202124;font-weight:800;font-size:17px;display:grid;place-items:center;box-shadow:var(--nv-shadow)}
 .nv-cur{width:62px;height:62px;border-radius:50%;background:var(--nv-fab);color:var(--nv-fab-ink);box-shadow:var(--nv-shadow);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
@@ -77,7 +77,7 @@ body:not(.nav) .nv-speed{display:none!important}
 .nv-cur.over b{color:#ff5b4f}
 
 /* ── 返回目前位置 ── */
-.nv-recenter{position:fixed;left:max(10px,env(safe-area-inset-left,0px));z-index:11;align-items:center;gap:8px;padding:12px 20px!important;border-radius:999px;background:var(--nv-fab)!important;color:#4c8dff!important;font-weight:700;font-size:16px;box-shadow:var(--nv-shadow);display:flex!important}
+.nv-recenter{position:fixed;left:max(10px,var(--sai-l,env(safe-area-inset-left,0px)));z-index:11;align-items:center;gap:8px;padding:12px 20px!important;border-radius:999px;background:var(--nv-fab)!important;color:#4c8dff!important;font-weight:700;font-size:16px;box-shadow:var(--nv-shadow);display:flex!important}
 body:not(.nav) .nv-recenter{display:none!important}
 body[data-nvtheme="light"] .nv-recenter{color:#1a73e8!important}
 .nv-recenter svg{width:20px;height:20px}
@@ -130,18 +130,18 @@ body.nav.nv-open .nv-edges{display:none}
 body.nav .toast{top:var(--nv-top,140px)!important}
 
 @media (min-width:700px){
-  .nv-turn,.nv-banner,.nv-free{left:max(16px,env(safe-area-inset-left,0px));right:auto;width:420px}
+  .nv-turn,.nv-banner,.nv-free{left:max(16px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:420px}
   .nv-turn{max-width:420px;overflow:hidden;padding-bottom:12px}
 }
 /* ── 手機橫向：轉彎卡和抽屜都靠左成一欄，地圖和自己的位置在右邊，按鈕排在最右一欄 ── */
 @media (orientation:landscape) and (max-height:520px){
   body.nav{--pw:min(380px,42vw)}
-  .nv-turn,.nv-banner,.nv-free{left:max(8px,env(safe-area-inset-left,0px));right:auto;width:var(--pw);max-width:none}
+  .nv-turn,.nv-banner,.nv-free{left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:var(--pw);max-width:none}
   .turn-main{padding:10px 12px 10px 8px;gap:10px}
   .turn-ico{min-width:56px}.turn-ico svg{width:40px;height:40px}
   .turn-dist{font-size:18px}.turn-road{font-size:22px;-webkit-line-clamp:1}.turn-verb{font-size:15px}
   .turn-then{font-size:15px;padding:5px 12px 6px}
-  .nv-sheet{left:max(8px,env(safe-area-inset-left,0px));right:auto;width:var(--pw);max-width:none;margin:0;height:auto;max-height:calc(100% - 16px);padding-left:12px;padding-right:12px;bottom:8px;border-radius:20px}
+  .nv-sheet{left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:var(--pw);max-width:none;margin:0;height:auto;max-height:calc(100% - 16px);padding-left:12px;padding-right:12px;bottom:8px;border-radius:20px}
   .nv-eta-time{font-size:22px}.nv-eta-sub{font-size:13.5px}
   .nv-round{width:42px;height:42px}
   .nv-fabs{gap:8px}
@@ -159,8 +159,8 @@ body.nav .toast{top:var(--nv-top,140px)!important}
    只搬位置，字和按鈕大小照一般尺寸（手機橫向那段的縮小是為了矮螢幕） ── */
 @media (orientation:landscape) and (min-width:900px) and (min-height:521px){
   body.nav{--pw:420px}
-  .nv-turn,.nv-banner,.nv-free{left:max(16px,env(safe-area-inset-left,0px));right:auto;width:var(--pw);max-width:none}
-  .nv-sheet{left:max(16px,env(safe-area-inset-left,0px));right:auto;width:var(--pw);max-width:none;margin:0;height:auto;max-height:calc(100% - 16px);padding-left:14px;padding-right:14px;bottom:0;border-radius:20px 20px 0 0}  /* 貼齊底部（跟手機橫向一樣），收起時下面的內容才不會從縫裡露出來 */
+  .nv-turn,.nv-banner,.nv-free{left:max(16px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:var(--pw);max-width:none}
+  .nv-sheet{left:max(16px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:var(--pw);max-width:none;margin:0;height:auto;max-height:calc(100% - 16px);padding-left:14px;padding-right:14px;bottom:0;border-radius:20px 20px 0 0}  /* 貼齊底部（跟手機橫向一樣），收起時下面的內容才不會從縫裡露出來 */
   .nv-speed{flex-direction:row;align-items:flex-end}
   body.nav.nv-open .nv-fabs,body.nav.nv-open .nv-speed,body.nav.nv-open .nv-recenter{opacity:1;pointer-events:auto}
   body.nav.nv-open .nv-edges{display:block}

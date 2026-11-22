@@ -7,7 +7,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .war-panel h2{font-size:var(--fs-l);line-height:1.25;margin:0;font-weight:700}
 .war-panel .panel-body{min-height:0;overflow:auto}
 /* 預設版面（使用者 11-18 在戰情室自己排的，依視窗比例）：左上標題、左側騎士、右上天氣路況、右側事件、左下全隊進度 */
-.head{left:.8%;top:1.6%;width:23%;height:17.9%;min-height:120px}
+.head{left:max(.8%,var(--sai-l,env(safe-area-inset-left,0px)));top:1.6%;width:23%;height:17.9%;min-height:120px}
 .head .panel-top{padding-left:var(--sp-2);align-items:flex-start;flex:1}
 .head-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
 .head-copy b{font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -18,7 +18,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .war-btn{min-height:44px;padding:5px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--fg);font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 .war-btn:hover{background:color-mix(in srgb,var(--accent) 18%,var(--surface-2))}
 .war-btn[aria-pressed="true"]{background:var(--accent-fill);color:#fff}
-.cards{left:.8%;top:21.1%;width:23%;height:55.2%}
+.cards{left:max(.8%,var(--sai-l,env(safe-area-inset-left,0px)));top:21.1%;width:23%;height:55.2%}
 .card-list{padding:3px 11px 12px;display:flex;flex-direction:column;gap:7px;overflow-y:auto!important}
 .panel-note{font-size:12px;color:var(--muted);white-space:nowrap}
 .cd{border:1px solid var(--line);border-radius:13px;background:var(--surface);overflow:hidden;flex:none}
@@ -37,7 +37,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .cd .next-stop{grid-column:1/-1;padding:10px;background:var(--surface-2);border-radius:10px}
 .cd .next-stop b{display:block;font-size:12px;color:var(--fg)}
 .cd .next-stop small{display:block;font-size:12px;color:var(--muted)}
-.conditions{right:.8%;top:1.6%;width:21.5%;height:37.4%}  /* 右邊間距和左邊一樣 0.8% */
+.conditions{right:max(.8%,var(--sai-r,env(safe-area-inset-right,0px)));top:1.6%;width:21.5%;height:37.4%}  /* 右邊間距和左邊一樣 0.8% */
 .conditions-body{padding:0 14px 14px;overflow:auto!important}
 .condition-group{margin-top:9px;border-top:1px solid var(--line);padding-top:9px}
 .condition-group:first-child{margin-top:0;border:0;padding-top:0}
@@ -45,14 +45,14 @@ html,body{width:100%;height:100%;overflow:hidden}
 .condition-row{display:flex;align-items:flex-start;gap:9px;padding:5px 0;font-size:12px;line-height:1.35}
 .condition-row b{font-weight:650}.condition-row small{display:block;font-size:12px;color:var(--muted)}
 .condition-mark{font-weight:750;min-width:39px;color:var(--accent)}
-.feed{right:.8%;top:42.2%;width:21.5%;height:41.4%}
+.feed{right:max(.8%,var(--sai-r,env(safe-area-inset-right,0px)));top:42.2%;width:21.5%;height:41.4%}
 .feed-filters{display:flex;gap:3px;margin:0 14px 8px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);flex:none;overflow:visible!important}
 .feed-filters button{flex:1;min-width:0;min-height:44px;padding:6px 2px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:12px;font-weight:650;cursor:pointer}
 .feed-filters button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 4px #0002}
 .feed-list{padding:0 14px 14px;overflow:auto!important}
 .ev{display:grid;grid-template-columns:40px 7px 1fr;gap:8px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.4}
 .ev time{font-size:12px;color:var(--muted)}.ev i{width:7px;height:7px;border-radius:50%;background:var(--c)}.ev.sos span{color:var(--crit-ink);font-weight:700}
-.prog{left:.8%;top:77.9%;width:55.6%;height:16.2%;min-height:120px}
+.prog{left:max(.8%,var(--sai-l,env(safe-area-inset-left,0px)));top:77.9%;width:55.6%;height:16.2%;min-height:120px}
 /* 寬螢幕：剖面標題放左邊、圖表佔右側全高，面板矮也看得到起伏 */
 @media all{.prog:not(.small){flex-direction:row}.prog:not(.small) .panel-top{width:270px;align-items:flex-start}.prog:not(.small) .progress-body{padding:10px 52px 10px 0}.prog:not(.small) .profile-wrap{margin:14px 0 0}}
 .progress-body{position:relative;flex:1;display:flex;flex-direction:column;padding:2px 16px 12px;overflow:hidden!important}
@@ -72,9 +72,12 @@ html,body{width:100%;height:100%;overflow:hidden}
 /* 騎士清單不要外框和底色，直接浮在地圖上（文字加陰影才讀得清楚） */
 .war-panel.cards{background:none;border-color:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;text-shadow:0 1px 3px rgba(0,0,0,.9)}
 :root[data-theme="light"] .war-panel.cards{text-shadow:0 0 4px rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.95)}
-/* 騎士清單（電腦版）：不要標題列（編輯版面時才出現，拖曳用）、整體縮小；跟隨中的人不用底色，右邊一個小箭頭（暫離時變淡） */
+/* 騎士清單（電腦版）：不要標題列（編輯版面也一樣，直接拖清單本身）、整體縮小；跟隨中的人不用底色，右邊一個小箭頭（暫離時變淡） */
 @media all{
-  .war-stage:not(.editing) .war-panel.cards>.panel-top,.war-panel.cards>.panel-toggle{display:none}
+  .war-panel.cards>.panel-top,.war-panel.cards>.panel-toggle{display:none}
+  /* 編輯版面：外框透明的面板不畫虛線，改畫在清單那塊玻璃上，看起來跟平常一樣 */
+  .war-stage.editing .war-panel.cards{outline:none}
+  .war-stage.editing .war-panel.cards .card-list.team-rows{outline:1px dashed var(--accent);outline-offset:3px}
   /* 清單本身有一塊玻璃底（高度跟著人數），列才不會看起來像散落在地圖上、跑到面板外（UX-29）；面板外框照舊透明 */
   .war-panel.cards .card-list.team-rows{flex:0 1 auto;padding:4px 8px;border-radius:16px;background:var(--lg-tint);border:1px solid var(--lg-edge);box-shadow:inset 0 1px 0 var(--lg-inner),var(--lg-shadow);-webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat));backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat))}
   .war-panel.cards .card-list .team-row:first-child{border-top:0}

@@ -85,7 +85,7 @@
 .qx-dot.off{border-color:#ff9f0a}
 .qx-dot.static{position:static;display:inline-block;margin:0;flex:none}
 /* 我的下一個轉彎（左上，回上一頁按鈕下面） */
-.qx-turn{position:fixed;z-index:8;left:max(12px,env(safe-area-inset-left,0px));top:calc(max(12px,env(safe-area-inset-top,0px)) + 64px);display:flex;align-items:center;gap:12px;padding:10px 16px 10px 10px;border-radius:16px;max-width:min(360px,calc(100vw - 90px))}
+.qx-turn{position:fixed;z-index:8;left:max(12px,var(--sai-l,env(safe-area-inset-left,0px)));top:calc(max(12px,env(safe-area-inset-top,0px)) + 64px);display:flex;align-items:center;gap:12px;padding:10px 16px 10px 10px;border-radius:16px;max-width:min(360px,calc(100vw - 90px))}
 .qx-turn>b{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:26px;background:var(--accent-fill);color:#fff;flex:none}
 .qx-turn.off>b{background:#ff9f0a;color:#1d1d1f}
 .qx-turn .d{font-size:17px;font-weight:700}
@@ -96,7 +96,7 @@
   .qx-prog{width:auto;border-radius:12px;padding:7px 12px 10px}
   .qx-prog-h{margin-bottom:7px;font-size:12px}
   .qx-prog-h b{font-size:12px}
-  .qx-turn{left:max(10px,env(safe-area-inset-left,0px));top:calc(max(10px,env(safe-area-inset-top,0px)) + 62px);max-width:calc(100vw - 90px);padding:8px 14px 8px 8px}
+  .qx-turn{left:max(10px,var(--sai-l,env(safe-area-inset-left,0px)));top:calc(max(10px,env(safe-area-inset-top,0px)) + 62px);max-width:calc(100vw - 90px);padding:8px 14px 8px 8px}
   .qx-turn>b{width:38px;height:38px;font-size:22px}
 }
 
@@ -116,10 +116,10 @@
 .panel-body .qx-pop{width:100%;max-height:none;overflow:visible;border-radius:0;padding:0;box-shadow:none;background:none;border:0;backdrop-filter:none;-webkit-backdrop-filter:none;display:flex;flex-direction:column;gap:var(--sp-3)}
 /* 全隊進度、轉彎提示：放在側欄右邊的地圖區（跟著側欄寬度走） */
 .qx-prog{position:fixed;z-index:8;left:calc(50% + (var(--panel-w) + var(--edge)) / 2);bottom:max(var(--edge),env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(420px,calc(100vw - var(--panel-w) - 160px))}
-.qx-turn{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-w) + var(--edge));top:max(var(--edge),env(safe-area-inset-top,0px));max-width:min(360px,calc(100vw - var(--panel-w) - 120px))}
-body:has(#panel.small) .qx-prog{left:calc(50% + (max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w)) / 2);width:min(420px,calc(100vw - var(--panel-mini-w) - 160px))}
+.qx-turn{left:calc(max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-w) + var(--edge));top:max(var(--edge),env(safe-area-inset-top,0px));max-width:min(360px,calc(100vw - var(--panel-w) - 120px))}
+body:has(#panel.small) .qx-prog{left:calc(50% + (max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-mini-w)) / 2);width:min(420px,calc(100vw - var(--panel-mini-w) - 160px))}
 /* 收合膠囊的左邊是 max(邊距, 瀏海安全區)：手機橫向時要一起算進去，轉彎卡才不會被膠囊蓋住 */
-body:has(#panel.small) .qx-turn{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge))}
+body:has(#panel.small) .qx-turn{left:calc(max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-mini-w) + var(--edge))}
 @media(max-width:760px){
   /* 全隊進度貼在抽屜上方、跟著抽屜高度走；抽屜往上拉時逐漸淡出，展開後完全藏起 */
   .qx-prog,body:has(#panel.small) .qx-prog{left:10px;right:10px;bottom:calc(var(--sheet-h,176px) + 8px);transform:none;width:auto;opacity:calc(1 - var(--sheet-t,0) * 4)}

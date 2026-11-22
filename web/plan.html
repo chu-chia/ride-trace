@@ -30,7 +30,7 @@
   .ib svg{width:22px;height:22px}
 
   /* ── 上方：起終點卡 ── */
-  .top{position:fixed;left:max(8px,env(safe-area-inset-left,0px));right:max(8px,env(safe-area-inset-right,0px));top:calc(env(safe-area-inset-top,0px) + 8px);z-index:6;max-width:440px;transition:opacity .2s,transform .2s}
+  .top{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));top:calc(env(safe-area-inset-top,0px) + 8px);z-index:6;max-width:440px;transition:opacity .2s,transform .2s}
   body.sheet-open .top{opacity:0;transform:translateY(-16px);pointer-events:none}
   .dir{background:var(--sheet);border-radius:18px;box-shadow:var(--pshadow);padding:6px 6px 2px 40px;position:relative}
   .dir .back{position:absolute;left:0;top:4px;color:var(--ink)}
@@ -74,7 +74,7 @@
   .pli .bx .ci2{width:18px;height:18px}
 
   /* ── 長按選點卡 ── */
-  .pick{position:fixed;left:max(8px,env(safe-area-inset-left,0px));right:max(8px,env(safe-area-inset-right,0px));z-index:7;max-width:440px;background:var(--sheet);border-radius:16px;box-shadow:var(--pshadow);padding:12px}
+  .pick{position:fixed;left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:max(8px,var(--sai-r,env(safe-area-inset-right,0px)));z-index:7;max-width:440px;background:var(--sheet);border-radius:16px;box-shadow:var(--pshadow);padding:12px}
   .pick .ttl{font-weight:700;font-size:16px}
   .pick .sub{font-size:13px;color:var(--ink-2);margin:2px 0 10px}
   .pick .acts{display:flex;gap:8px}
@@ -149,16 +149,16 @@
   /* 右上工具列：排在起終點卡下面（高度會變，plan.js 寫 --top-h） */
   .tools{top:calc(var(--top-h,120px) + 8px)}
   body.sheet-open .tools{opacity:0;pointer-events:none}
-  @media (min-width:700px){ .top,.pick{left:max(16px,env(safe-area-inset-left,0px));right:auto;width:420px} .tools{top:max(var(--edge),env(safe-area-inset-top,0px))} }
+  @media (min-width:700px){ .top,.pick{left:max(16px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:420px} .tools{top:max(var(--edge),env(safe-area-inset-top,0px))} }
 
   /* ── 手機橫向（照 Google 地圖橫向）：起終點卡和抽屜疊在左邊一欄，地圖在右邊 ── */
   @media (orientation:landscape) and (max-height:520px){
     :root{--pw:min(400px,44vw)}
     .top{right:auto;width:var(--pw);max-width:none;max-height:calc(52% - 12px);overflow-y:auto;scrollbar-width:none;border-radius:18px}
     .top::-webkit-scrollbar{display:none}
-    .psheet{left:max(8px,env(safe-area-inset-left,0px));right:auto;width:var(--pw);max-width:none;margin:0;height:calc(100% - 16px);bottom:8px;border-radius:20px}
+    .psheet{left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));right:auto;width:var(--pw);max-width:none;margin:0;height:calc(100% - 16px);bottom:8px;border-radius:20px}
     .sum .tm{font-size:24px}
-    .pick{left:calc(max(8px,env(safe-area-inset-left,0px)) + var(--pw) + 8px);right:auto;width:min(360px,calc(100% - var(--pw) - 90px));max-width:none}
+    .pick{left:calc(max(8px,var(--sai-l,env(safe-area-inset-left,0px))) + var(--pw) + 8px);right:auto;width:min(360px,calc(100% - var(--pw) - 90px));max-width:none}
     .tools{top:max(var(--edge),env(safe-area-inset-top,0px))}
     body.sheet-open .top{opacity:1;transform:none;pointer-events:auto}
   }

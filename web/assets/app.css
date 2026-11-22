@@ -97,7 +97,7 @@ a.li{color:inherit}
 @media (prefers-reduced-motion:reduce){.toast{animation:none}}
 
 /* 一般頁面 */
-.page{max-width:560px;margin:0 auto;padding:max(var(--sp-5),env(safe-area-inset-top,0px)) max(var(--sp-4),env(safe-area-inset-left,0px)) 48px max(var(--sp-4),env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:var(--sp-3)}
+.page{max-width:560px;margin:0 auto;padding:max(var(--sp-5),env(safe-area-inset-top,0px)) max(var(--sp-4),var(--sai-l,env(safe-area-inset-left,0px))) 48px max(var(--sp-4),var(--sai-r,env(safe-area-inset-right,0px)));display:flex;flex-direction:column;gap:var(--sp-3)}
 /* 一般頁的頁首：返回鈕和地圖頁側欄同一顆（.icon-btn） */
 .page-top{display:flex;align-items:center;gap:var(--sp-2);margin-left:calc(var(--sp-2) * -1)}
 .page-top h1{margin:0;font-size:22px;line-height:1.2}
@@ -290,7 +290,7 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .icon-btn svg{width:20px;height:20px}
 
 /* ---------- 左側欄 ---------- */
-.panel{position:fixed;z-index:9;left:max(var(--edge),env(safe-area-inset-left,0px));top:max(var(--edge),env(safe-area-inset-top,0px));bottom:max(var(--edge),env(safe-area-inset-bottom,0px));width:var(--panel-w);border-radius:var(--r-panel);display:flex;flex-direction:column;overflow:hidden;}
+.panel{position:fixed;z-index:9;left:max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px)));top:max(var(--edge),env(safe-area-inset-top,0px));bottom:max(var(--edge),env(safe-area-inset-bottom,0px));width:var(--panel-w);border-radius:var(--r-panel);display:flex;flex-direction:column;overflow:hidden;}
 .panel>*{flex:none}
 .panel .handle{display:none}
 /* 外觀照改版原型：面板不用玻璃，改成不透明的深灰（淺色是白）底、圓角 20；裡面的卡片用第二階灰 */
@@ -321,7 +321,7 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .panel .seg{margin:0 var(--sp-4) var(--sp-3)}
 
 /* ---------- 右上工具列 ---------- */
-.tools{position:fixed;z-index:8;top:max(var(--edge),env(safe-area-inset-top,0px));right:max(var(--edge),env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:var(--sp-2)}
+.tools{position:fixed;z-index:8;top:max(var(--edge),env(safe-area-inset-top,0px));right:max(var(--edge),var(--sai-r,env(safe-area-inset-right,0px)));display:flex;flex-direction:column;gap:var(--sp-2)}
 .tool{width:var(--tool);height:var(--tool);padding:0;border-radius:var(--r-card);cursor:pointer;color:var(--fg);font-size:12px;font-weight:600;line-height:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-decoration:none}
 .tool.glass{background:var(--lg-float)}
 .tool svg{width:20px;height:20px;flex:none}
@@ -361,8 +361,8 @@ html.glass-panel:not(.no-glass) .panel .handle{background:linear-gradient(to bot
 .tools .gap{height:var(--sp-1)}
 
 /* 地圖右下角的比例尺與來源，避開側欄 */
-body:has(.panel) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-w) + var(--edge))}
-body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),env(safe-area-inset-left,0px)) + var(--panel-mini-w) + var(--edge))}
+body:has(.panel) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-w) + var(--edge))}
+body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-mini-w) + var(--edge))}
 
 /* 底部抽屜（common.js sheetDrag）：不是 peek 的內容跟著開合程度淡入，收合時看不到露出的半截 */
 .sheetx.sx-on>.sx-rest{opacity:clamp(0,calc(var(--sx-t,1) * 4 - .4),1)}
