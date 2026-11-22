@@ -16,7 +16,7 @@ DBMS 課程的 Redis 個人專題。**重點是展示 Redis 的進階功能**，
 - **個人位置資料絕不進版控、絕不送到外部服務**：`data/` 整個在 `.gitignore`。GPX、軌跡 JSON、Valhalla 路網都在那裡。地圖比對只能用本機 Valhalla，不能用公開的 OSRM／Google。
 - 測試帳號密碼放在 `data/本機帳號.md`（不進版控），不要寫進任何會 commit 的檔案。
 - commit：標題用 `type: 繁中說明`（feat／fix／docs／refactor…），`git add` 明確列檔案，不要用 `git add -A`。
-- **不要自己建立 GitHub／GitLab 遠端 repo**，由使用者建立後再推。
+- 遠端：`https://gitlab.com/jerry.20070419/ride-trace`（私人，2026-11-22 建立，用 HTTPS 推）。不要再另外建立其他遠端 repo。推之前確認沒有密碼、金鑰、`data/` 的內容。
 - 技術選擇可以自己決定；產品規則（功能要不要做、畫面怎麼呈現）有疑慮再問使用者。
 - 改完要自己驗證：後端用 curl 打 API，前端用無頭 Chrome 截圖或 CDP 取值（作法見 handoff）。不要只說「應該可以了」。
 
