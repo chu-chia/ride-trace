@@ -1,10 +1,10 @@
 ﻿# 騎跡：把 Windows 設成正式機（只要做一次，說明見 README.md）
 #   powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Pack C:\ride-trace-pack
-# 做的事：從 GitLab clone 程式碼 → 放 .env、路網、Redis 資料 → 啟動 → Tailscale serve → 註冊每分鐘的自動部署排程
+# 做的事：從 GitHub clone 程式碼 → 放 .env、路網、Redis 資料 → 啟動 → Tailscale serve → 註冊每分鐘的自動部署排程
 param(
   [Parameter(Mandatory = $true)][string]$Pack,
   [string]$Dest = 'C:\ride-trace',
-  [string]$Repo = 'gitlab.com/jerry.20070419/ride-trace.git'
+  [string]$Repo = 'github.com/chu-chia/ride-trace.git'
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -26,7 +26,7 @@ foreach ($line in Get-Content (Join-Path $Pack 'SHA256SUMS')) {
   Write-Host "  OK $file"
 }
 
-Step '3/9 從 GitLab clone 程式碼（唯讀 deploy token）'
+Step '3/9 從 GitHub clone 程式碼（唯讀 token）'
 $user, $tok = ((Get-Content (Join-Path $Pack 'deploy-token.txt') -Raw).Trim() -split '\s+', 2)
 if ((Test-Path $Dest) -and -not (Test-Path (Join-Path $Dest '.git'))) {
   # 以前「暫時接手」解壓出來的資料夾：整個改名保留，路網等一下直接搬過來用
@@ -106,4 +106,4 @@ Start-Sleep 8
 Get-Content 'C:\ride-trace-deploy\deploy.log' -Tail 5 -ErrorAction SilentlyContinue
 
 Write-Host ''
-Write-Host '完成。之後 Mac 推到 GitLab 的 main，這台一分鐘內自動更新。記錄在 C:\ride-trace-deploy\deploy.log' -ForegroundColor Green
+Write-Host '完成。之後 Mac 推到 GitHub 的 main、CI 通過後，這台一分鐘內自動更新。記錄在 C:\ride-trace-deploy\deploy.log' -ForegroundColor Green

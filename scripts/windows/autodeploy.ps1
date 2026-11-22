@@ -1,8 +1,10 @@
 ﻿# 騎跡：Windows 自動部署（工作排程器每分鐘跑一次，說明見 README.md）
-# GitLab 的 main 有新 commit 就更新 C:\ride-trace：
+# 遠端（origin，GitHub）的 main 有新 commit、而且 GitHub Actions 的 CI 通過，就更新 C:\ride-trace：
 #   - 只改到 web/（掛載進容器）→ 不用重建，重新整理就是新版
 #   - 改到 backend/、docker-compose.yml → docker compose up -d --build
 # 寫 web\deployed.json（commit、時間、成功與否），手機在「設定」最下面看得到版本。
+# CI 還在跑：下一分鐘再看；CI 沒過：不部署、舊版繼續跑，deployed.json 記 blocked（設定頁會顯示）。
+# origin 不是 GitHub（例如以前的 GitLab）就不檢查 CI，直接部署。
 # 沒有新 commit 時只做健康檢查：服務沒在跑就 docker compose up -d（開機後 Docker 慢起來的情況）。
 param([string]$Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path)
 $ErrorActionPreference = 'Continue'
@@ -42,6 +44,30 @@ try {
       docker compose up -d 2>&1 | Out-Null
     }
     exit 0
+  }
+
+  # CI 閘門：查 GitHub 上這個 commit 的 check-runs（名稱 ci）。token 用 origin 網址裡的那組（唯讀）
+  $url = (git remote get-url origin).Trim()
+  if ($url -match '^https://(?:[^:@/]+:(?<tok>[^@/]+)@)?github\.com/(?<slug>[^/]+/[^/]+?)(?:\.git)?$') {
+    $hdr = @{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'ride-trace-autodeploy' }
+    if ($Matches.tok) { $hdr.Authorization = "Bearer $($Matches.tok)" }
+    try {
+      $runs = (Invoke-RestMethod "https://api.github.com/repos/$($Matches.slug)/commits/$remote/check-runs?check_name=ci" -Headers $hdr -TimeoutSec 15).check_runs
+    } catch { Log "查 CI 狀態失敗：$($_.Exception.Message)"; exit 0 }
+    $run = $runs | Sort-Object { $_.started_at } -Descending | Select-Object -First 1
+    if (-not $run -or $run.status -ne 'completed') { exit 0 }  # 還沒開始或還在跑，下一分鐘再看
+    if ($run.conclusion -ne 'success') {
+      $vf = Join-Path $Root 'web\deployed.json'
+      $cur = $null; try { $cur = Get-Content $vf -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
+      if ($cur -and $cur.blocked -and $cur.blocked.commit -eq $remote) { exit 0 }  # 已經記過了
+      $subject = (git -c i18n.logOutputEncoding=UTF-8 log -1 --format=%s $remote).Trim()
+      Log "CI 沒過（$($run.conclusion)），不部署 $($remote.Substring(0,7)) $subject：$($run.html_url)"
+      if ($cur) {
+        $cur | Add-Member -Force -NotePropertyName blocked -NotePropertyValue @{ commit = $remote; subject = $subject; conclusion = $run.conclusion; url = $run.html_url }
+        [IO.File]::WriteAllText($vf, ($cur | ConvertTo-Json -Compress -Depth 4), (New-Object Text.UTF8Encoding $false))
+      }
+      exit 0
+    }
   }
 
   $files = @(git diff --name-only $head $remote)

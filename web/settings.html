@@ -192,6 +192,11 @@ api('/api/health').then((h) => {
   const t = new Date(d.at);
   if (d.ok === false) $('#deployVer').style.color = 'var(--crit-ink)';
   $('#deployVer').textContent = `${d.ok === false ? `部署失敗（${d.error}）・` : ''}版本 ${d.commit.slice(0, 7)}・${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')} 部署・${d.subject || ''}`;
+  // 最新的 commit CI 沒過：Windows 沒部署它，還在跑上面這個版本
+  if (d.blocked?.commit) {
+    $('#deployVer').append(document.createElement('br'), `最新版 ${d.blocked.commit.slice(0, 7)} 沒通過檢查，沒有部署（${d.blocked.subject || ''}）`);
+    $('#deployVer').style.color = 'var(--crit-ink)';
+  }
   $('#deployVer').hidden = false;
 }).catch(() => {});
 $('#lowPower').checked = LOW_POWER;

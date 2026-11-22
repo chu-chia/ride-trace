@@ -2,11 +2,12 @@
 
 > 給 Windows 這台（Tailscale 名稱 `node`，「中心電腦」）上的 agent 看。
 > 2026-11-22 起，**Windows 是正式機**：使用者手機連這台，資料（Redis）的正本在這台。
-> Mac 只用來開發：Mac 上的 agent 把改好的程式推到 GitLab 的 `main`，這台每分鐘自動抓下來部署，使用者在現場用手機測。
+> Mac 只用來開發：Mac 上的 agent 把改好的程式推到 GitHub 的 `main`，GitHub Actions 跑 CI，通過後這台每分鐘自動抓下來部署，使用者在現場用手機測。
+> 2026-11-22 晚從 GitLab 改到 GitHub（課程規定）。GitLab 那份保留不動，不再更新。
 
 ```
-Mac（開發）── git push main ──> GitLab（私人 jerry.20070419/ride-trace）
-                                    │  每分鐘 git fetch（唯讀 deploy token）
+Mac（開發）── git push main ──> GitHub（私人 chu-chia/ride-trace）── Actions CI（語法＋冒煙測試，約 1 分鐘）
+                                    │  每分鐘 git fetch，CI 通過才部署（唯讀 token）
                                     ▼
                     Windows node：C:\ride-trace（docker compose）
                                     │  tailscale serve 8443 → 8750
@@ -42,7 +43,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Pack C:\ride-trace-pack
 
 1. 檢查 git、docker。
 2. 用 `SHA256SUMS` 檢查檔案沒壞。
-3. 用 `deploy-token.txt`（格式「帳號 token」，唯讀）從 GitLab clone 到 `C:\ride-trace`，並設 `core.autocrlf=false`（保持 LF）。如果 `C:\ride-trace` 已經存在但不是 git 資料夾（以前「暫時接手」解壓的），會先 `docker compose down` 再改名成 `C:\ride-trace-old-日期` 保留。
+3. 用 `deploy-token.txt`（格式「帳號 token」，唯讀）從 GitHub clone 到 `C:\ride-trace`，並設 `core.autocrlf=false`（保持 LF）。如果 `C:\ride-trace` 已經存在但不是 git 資料夾（以前「暫時接手」解壓的），會先 `docker compose down` 再改名成 `C:\ride-trace-old-日期` 保留。
 4. `env.txt` → `C:\ride-trace\.env`（UTF-8 無 BOM、LF；`FAKE_EXTERNAL` 清空＝真實天氣、路況）。
 5. 解 `valhalla.tar`、`tracks.tar.gz` 到 `C:\ride-trace\data\`（路網已建好，不會重新下載）。
 6. Redis volume `qiji_redis-data`（compose 專案名固定是 `qiji`）：解 `redis-data.tar.gz` 進去並 `chown 999:999`。**volume 已經有資料時會停下來問**，要先問使用者，不要自己回答 yes。
@@ -60,15 +61,34 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Pack C:\ride-trace-pack
   docker compose exec -T -e REDISCLI_AUTH=$pw redis redis-cli DBSIZE
   ```
   跟 Mac 打包時印的 keys 數差不多（差幾個是 key 過期）。
-- `Invoke-RestMethod http://127.0.0.1:8750/api/health`：`deploy.commit` 是 GitLab main 最新的 commit。
+- `Invoke-RestMethod http://127.0.0.1:8750/api/health`：`deploy.commit` 是 GitHub main 最新、CI 通過的 commit。
 - `Get-ScheduledTask 'RideTrace 自動部署'`：State 是 Ready／Running；`C:\ride-trace-deploy\deploy.log` 有「寫入目前版本」。
 - 用另一台 Tailscale 裝置開 `https://node.tail866fc3.ts.net:8443`，看得到登入頁。
 - 都好了就刪掉 `C:\ride-trace-pack`（裡面有機密），也清掉「下載」資料夾裡傳過來的檔案。
 
+## 2.5 從 GitLab 換到 GitHub（2026-11-22 晚，已經設定好的這台只要做一次）
+
+使用者會在這台的瀏覽器產生 GitHub 唯讀 token（fine-grained，只限 `chu-chia/ride-trace`，權限 Contents、Checks 唯讀），自己貼進下面的指令。**不要把 token 印出來、存到別的地方或傳給 Mac。**
+
+```powershell
+Disable-ScheduledTask 'RideTrace 自動部署'
+cd C:\ride-trace
+$tok = Read-Host '貼上 GitHub token'   # 使用者自己貼
+git remote set-url origin "https://chu-chia:$tok@github.com/chu-chia/ride-trace.git"
+Remove-Variable tok
+git fetch origin main                 # 要成功；失敗＝token 權限或 repo 沒選到
+Enable-ScheduledTask 'RideTrace 自動部署'
+```
+
+之後一兩分鐘內 log 會出現「更新 45a26dd → …」與「完成 …」，手機設定頁版本號會變。舊的 GitLab deploy token 留在 `C:\ride-trace-pack\deploy-token.txt` 的話一起刪掉。
+
 ## 3. 自動部署怎麼運作（autodeploy.ps1）
 
 - 每分鐘 `git fetch origin main`。沒有新 commit：只檢查 api 有沒有回應，沒有就 `docker compose up -d`（例如重開機後 Docker 比較慢起來）。
-- 有新 commit：`git reset --hard origin/main`，然後看改了哪些檔案：
+- 有新 commit：先查 GitHub 上這個 commit 的 CI（check run 名稱 `ci`，用 origin 網址裡的唯讀 token 查）：
+  - 還在跑：什麼都不做，下一分鐘再看（CI 約 1 分鐘，所以推完約 2～3 分鐘上線）。
+  - 沒過：不部署，舊版繼續跑。log 記一行「CI 沒過」，`deployed.json` 加 `blocked`，手機設定頁會用紅字顯示「最新版 xxxxxxx 沒通過檢查，沒有部署」。
+  - 通過：`git reset --hard origin/main`，然後看改了哪些檔案：
   - 只有 `web/`：容器是掛載 `web/` 的，不用重建，手機重新整理就是新版。
   - 有 `backend/` 或 `docker-compose.yml`：`docker compose up -d --build`（約 1～3 分鐘）。
 - 寫 `web\deployed.json`（commit、說明、時間、成功與否），再確認 `/api/health` 回的 commit 是新的。
@@ -87,7 +107,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Pack C:\ride-trace-pack
 
 ## 5. 常見問題
 
-- **部署沒發生**：看 `C:\ride-trace-deploy\deploy.log`。「git fetch 失敗」＝網路或 deploy token 失效（`cd C:\ride-trace; git fetch origin main` 看錯誤）。排程沒在跑：`Get-ScheduledTaskInfo 'RideTrace 自動部署'` 看 LastRunTime／LastTaskResult；使用者登出了就不會跑。
+- **部署沒發生**：先看 GitHub Actions 有沒有過（沒過就是 Mac 那邊要修）。再看 `C:\ride-trace-deploy\deploy.log`。「查 CI 狀態失敗」＝token 沒有 Checks 讀取權限或過期。「git fetch 失敗」＝網路或 token 失效（`cd C:\ride-trace; git fetch origin main` 看錯誤）。排程沒在跑：`Get-ScheduledTaskInfo 'RideTrace 自動部署'` 看 LastRunTime／LastTaskResult；使用者登出了就不會跑。
 - **建置失敗**：log 裡有 `docker compose` 最後 30 行。通常是 Mac 那邊的程式問題：把錯誤告訴使用者，不要在這台改程式。
 - **api 起不來，log 說 REDIS_PASSWORD**：`.env` 要在 `C:\ride-trace\.env`（跟 `docker-compose.yml` 同一層）。
 - **redis-cli 回 NOAUTH**：照第 2 節驗證那段，用 `-e REDISCLI_AUTH=$pw` 把密碼傳進去。
