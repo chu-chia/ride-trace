@@ -423,6 +423,11 @@ body:has(.panel.small) .maplibregl-ctrl-bottom-left{left:calc(max(var(--edge),va
    手機行程頁排在標題列下面、讓出右邊的工具列 */
 body.nav .toasts{top:var(--nv-top,120px);left:max(8px,var(--sai-l,env(safe-area-inset-left,0px)));transform:none;width:min(440px,calc(100% - var(--tool) - var(--edge) - 24px))}
 body.nav .toasts>.toast:nth-child(n+2){display:none}
+/* 電腦、手機橫向有側欄的地圖頁：提示在地圖區置中，不壓在側欄上 */
+@media (min-width:761px){
+  body:not(.nav):has(>.panel:not(.small)) .toasts{left:calc((max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-w) + 100vw) / 2);width:min(380px,calc(100vw - var(--panel-w) - var(--tool) - 72px))}
+  body:not(.nav):has(>.panel.small) .toasts{left:calc((max(var(--edge),var(--sai-l,env(safe-area-inset-left,0px))) + var(--panel-mini-w) + 100vw) / 2);width:min(380px,calc(100vw - var(--panel-mini-w) - var(--tool) - 72px))}
+}
 @media (max-width:760px){
   body:not(.nav):has(.rtop) .toasts{top:calc(env(safe-area-inset-top,0px) + 64px);left:8px;transform:none;width:calc(100% - var(--tool) - var(--edge) - 24px)}
 }
