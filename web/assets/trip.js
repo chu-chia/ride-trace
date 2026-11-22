@@ -172,7 +172,9 @@ function panelPad() {
   // 抽屜拉高時留白最多用到畫面高度的 60%，不然可視區只剩一條、cameraForBounds 也會算不出來（UX-11）
   // 放大 200%（195 px 寬）時固定 px 的留白會吃掉大半畫面，左右上方都跟著畫面縮（UX-15）
   const top = Math.min(80, innerHeight * 0.16), left = Math.min(30, innerWidth * 0.08), right = Math.min(64, innerWidth * 0.2);
-  return { top, bottom: Math.min(innerHeight * 0.6, Math.max(Math.min(60, innerHeight * 0.12), innerHeight - $('#panel').getBoundingClientRect().top + 16)), left, right };
+  // 抽屜露出的高度用「目標」算（收合＝收合高度，打開＝整個抽屜）：開合一開始就呼叫，這時抽屜還沒動，量位置會量到舊的，鏡頭最後才跳
+  const pn = $('#panel'), vis = pn.classList.contains('small') ? (+pn.dataset.minH || innerHeight - pn.getBoundingClientRect().top) : pn.offsetHeight;
+  return { top, bottom: Math.min(innerHeight * 0.6, Math.max(Math.min(60, innerHeight * 0.12), vis + 16)), left, right };
 }
 let PAD = null;
 const refreshPad = () => setTimeout(() => PAD?.refresh(), innerWidth <= 760 ? 0 : 300); // 電腦側欄寬度有 0.25 秒轉場，等它停

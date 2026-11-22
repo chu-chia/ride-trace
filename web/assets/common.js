@@ -507,6 +507,8 @@ addEventListener('orientationchange', unscroll);
 // 正式版另外補的：收合時露出 peek 元素（把手、頂列、摘要），keep 元素（行程頁的 SOS 那一排）一直貼在畫面最下面；
 // 頁面自己切 .small（點把手、點分頁）時用 MutationObserver 跟著滑；抽屜露出的高度寫進 --sheet-h／--sheet-t（每一格最多一次）。
 const SHEET_MQ = matchMedia('(max-width: 760px)');
+// 抽屜轉場 --dur-3（0.55 秒）再多一點：整段轉場每一格都更新 --sheet-h（以前只更新 0.36 秒，SOS、工具列最後會跳一下）
+const SHEET_ANIM_MS = 620;
 const NO_DRAG = 'input, select, textarea, [contenteditable], .no-drag';
 let safeProbe = null;
 const safeBottom = () => {
@@ -552,7 +554,7 @@ export function sheetDrag(sheet, { isOpen, setOpen, scroll, peek = '.handle, .pa
     setOff(o ? 0 : max);
     if (!animate) { void sheet.offsetHeight; sheet.classList.remove('dragging'); }
     if (!o) { const b = scrollEl(); if (b) b.scrollTop = 0; }
-    publishFor(animate ? 360 : 0);
+    publishFor(animate ? SHEET_ANIM_MS : 0);
   };
   const toggle = (o = !open) => set(o);
   // 捲動的地方：可以是抽屜裡的清單，也可以是整個抽屜（行程頁打開後整個抽屜一起捲）
@@ -608,7 +610,7 @@ export function sheetDrag(sheet, { isOpen, setOpen, scroll, peek = '.handle, .pa
     .observe(sheet, { attributes: true, attributeFilter: ['class'] });
   // 收合時露出的內容變高變矮（摘要換行、轉向）：跟著調整
   if ('ResizeObserver' in window) {
-    const ro = new ResizeObserver(() => { if (y0 == null && mq.matches) { const was = max; measure(); if (!open && Math.abs(max - was) > 1) { setOff(max); publishFor(360); } else publishFor(0); } });
+    const ro = new ResizeObserver(() => { if (y0 == null && mq.matches) { const was = max; measure(); if (!open && Math.abs(max - was) > 1) { setOff(max); publishFor(SHEET_ANIM_MS); } else publishFor(0); } });
     for (const el of sheet.children) ro.observe(el);  // 任何一塊出現、消失、變高（例如提示晚一點才出現）都要重量
     ro.observe(sheet);
   }
