@@ -59,6 +59,7 @@
     // 置中用負邊距（不用 translate），這樣旋轉動畫的 rotate 才會繞著中心轉
     const centered = getComputedStyle(dev).position === 'absolute';
     dev.style.margin = centered ? `${-h / 2}px 0 0 ${-w / 2}px` : '';
+    dev.style.top = centered ? (desk ? '50%' : `${(h * sc) / 2}px`) : '';   // 手機貼齊上緣；橫的戰情室垂直置中
     dev.style.transform = `scale(${sc})`;
   }
   let lastCap = '';
@@ -67,7 +68,7 @@
     if (document.body.classList.contains('demo-off') && !document.body.classList.contains('slides')) return;
     const has = !!DEMO[key];
     device.hidden = !has; $('#demoEmpty').hidden = has;
-    $('#demoCap').innerHTML = has ? (cap || '') + (src === 'live' ? '<span class="ln">正式機：Demo 車隊即時跑（其他頁要登入）；連不到請切回展示資料。</span>' : '') : '';
+    $('#demoCap').innerHTML = has ? (cap || '') + (src === 'live' ? ' <span class="ln">｜正式機：Demo 車隊即時跑（其他頁要登入），連不到請切回展示資料。</span>' : '') : '';
     if (!has) return;
     const u = urlFor(key);
     $('#demoOpen').href = u;
@@ -81,6 +82,8 @@
     const was = device.classList.contains('desk');
     clearTimeout(turning);
     if (was === desk || REDUCE.matches || device.hidden) {
+      // 包含「轉到一半又捲回來」：把動畫的角度、縮放、透明度都還原
+      Object.assign(device.style, { transition: 'none', rotate: '0deg', scale: '1', opacity: '1' });
       device.classList.toggle('desk', desk); fit(); swap(); return;
     }
     // 直的手機轉成橫的之後，寬度變成原本的高度：另外用 scale 縮到放得進右欄
