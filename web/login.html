@@ -105,16 +105,19 @@
 
   @media (max-width:900px){
     .wrap{grid-template-columns:1fr}
-    .stage{min-height:0;height:clamp(300px,42dvh,380px)}
+    /* 地圖往下延伸到表單上方的空白底下（--under），再淡進底色；表單位置不變 */
+    .wrap{--under:48px}
+    .stage{min-height:0;height:calc(clamp(300px,42dvh,380px) + var(--under))}
     .hero-brand{top:max(20px,var(--sat))}
     .hero-brand svg{width:40px;height:40px}
     /* 手機上面那塊只有約 380px 高：標語縮小、英文那行拿掉，地圖才露得出來 */
     .hero-brand .slogan{margin-top:16px;font-size:18px;line-height:1.25}
     .hero-brand .slogan-zh{margin-top:6px;font-size:12.5px;line-height:1.45;text-wrap:pretty}
     .hero-brand .slogan-en{display:none}
-    .routecard{bottom:18px}
-    .stage::after{height:170px}
-    .side{align-items:flex-start;padding:24px 20px 48px}
+    .routecard{bottom:calc(18px + var(--under))}
+    /* 底部直接淡進頁面底色（不是地圖那塊的底色），和表單之間才不會有一條邊 */
+    .stage::after{height:calc(150px + var(--under));background:linear-gradient(color-mix(in srgb,var(--bg) 0%,transparent),var(--bg) 88%)}
+    .side{align-items:flex-start;padding:24px 20px 48px;margin-top:calc(-1 * var(--under));position:relative;z-index:4;background:none}
   }
 </style>
 </head>

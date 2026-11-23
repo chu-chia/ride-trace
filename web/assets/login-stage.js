@@ -96,7 +96,7 @@ export async function start() {
   // 電腦版開場：台灣往左移半個表單寬，不要躲在表單後面（地圖還在載入時就先移，不等 load）
   if (innerWidth > 900) map.panBy([formW() / 2, 0], { duration: 0 });
   const pad = () => (innerWidth <= 900
-    ? { top: 110, bottom: 120, left: 30, right: 30 }
+    ? { top: 110, bottom: 168, left: 30, right: 30 }  // 手機：下面多 48px 是延伸到表單上方空白的那段（login.html --under）
     : { top: 200, bottom: 200, left: 80, right: formW() + 80 });
 
   function show(i) {
