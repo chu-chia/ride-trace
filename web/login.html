@@ -108,8 +108,10 @@
     .stage{min-height:0;height:clamp(300px,42dvh,380px)}
     .hero-brand{top:max(20px,var(--sat))}
     .hero-brand svg{width:40px;height:40px}
-    .hero-brand .slogan{margin-top:24px;font-size:23px}
-    .hero-brand .slogan-zh{font-size:13px}
+    /* 手機上面那塊只有約 380px 高：標語縮小、英文那行拿掉，地圖才露得出來 */
+    .hero-brand .slogan{margin-top:16px;font-size:18px;line-height:1.25}
+    .hero-brand .slogan-zh{margin-top:6px;font-size:12.5px;line-height:1.45;text-wrap:pretty}
+    .hero-brand .slogan-en{display:none}
     .routecard{bottom:18px}
     .stage::after{height:170px}
     .side{align-items:flex-start;padding:24px 20px 48px}
