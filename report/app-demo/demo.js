@@ -24,7 +24,19 @@
     document.documentElement.dataset.theme = 'dark';
     try { localStorage.setItem('qiji.loginTheme', 'dark'); } catch { /* */ }
   }
-  addEventListener('message', (e) => { if (e.data && e.data.rtTheme) location.reload(); });
+  addEventListener('message', (e) => {
+    if (e.data && e.data.rtTheme) location.reload();
+    if (e.data && e.data.rtPulse) {   // 報告第 06 章：PUBLISH 的那一刻，隊友標記閃一下
+      if (!document.getElementById('rt-pulse')) {
+        const st = document.createElement('style'); st.id = 'rt-pulse';
+        st.textContent = '@keyframes rtPulse{0%{filter:none}30%{filter:drop-shadow(0 0 10px #ff8a3d) drop-shadow(0 0 18px #ff8a3d) brightness(1.4)}100%{filter:none}}.rt-pulse .rider{animation:rtPulse 1.2s ease-out 2}';
+        document.head.append(st);
+      }
+      document.documentElement.classList.remove('rt-pulse'); void document.documentElement.offsetWidth;
+      document.documentElement.classList.add('rt-pulse');
+      setTimeout(() => document.documentElement.classList.remove('rt-pulse'), 2500);
+    }
+  });
 
   // 報告封面：只要登入頁的地圖，把標誌、路線卡、表單都藏起來
   if (page === 'login' && q.has('cover')) {

@@ -270,3 +270,10 @@ body.slides .demo-show{display:none}
 body.slides .ch.cur.has-slot .slot{display:grid}
 body.slides .ch.cur:not(.has-slot) .slot{display:none}
 body.slides .chips{margin-bottom:10px}
+.flow-step{font-size:14px;color:var(--muted);line-height:1.5}
+.flow-step b{color:var(--accent-ink)}
+.flow-msg{display:block;font-size:12.5px;color:var(--muted);background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:7px 12px;overflow-x:auto;white-space:nowrap}
+.flow-msg.lit{color:var(--fg);border-color:var(--accent)}
+.slot{position:relative}
+body.slides .slot>.device{position:absolute;left:50%;top:50%}
+body.slides .slot.desk{height:540px}

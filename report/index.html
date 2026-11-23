@@ -191,7 +191,8 @@ COMMIT;</pre>
   <h2>一筆 GPS 回報，一次網路來回寫完十幾個地方</h2>
   <p class="lead">回報一進來，API 用 <span class="t" data-t="pipeline">Pipeline</span> 把所有指令一次送出，再用 Pub/Sub 推給全隊、用 Stream 交給 Worker。按「播放」一步一步看。</p>
   <div class="flow" id="flow">
-    <div class="flow-head"><button class="tbtn primary" id="flowPlay" type="button">▶ 播放</button><span class="muted" id="flowMsg">{ lat: 24.1838, lon: 121.2826, speed: 11.2, ts: … }</span></div>
+    <div class="flow-head"><button class="tbtn primary" id="flowPlay" type="button">▶ 播放一筆回報</button><span class="flow-step" id="flowStep">按下播放：模擬「嘉瑋」的手機送出一筆位置，看它在 Redis 裡走過哪些地方</span></div>
+    <code class="flow-msg" id="flowMsg">POST /api/track  { lat: 24.1838, lon: 121.2826, speed: 11.2, ts: … }</code>
     <div class="flow-cols">
       <div class="node" data-n="phone"><b>手機</b>POST /api/track</div>
       <div class="pipe" id="pipe"></div>

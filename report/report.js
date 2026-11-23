@@ -59,7 +59,8 @@
     // 置中用負邊距（不用 translate），這樣旋轉動畫的 rotate 才會繞著中心轉
     const centered = getComputedStyle(dev).position === 'absolute';
     dev.style.margin = centered ? `${-h / 2}px 0 0 ${-w / 2}px` : '';
-    dev.style.top = centered ? (desk ? '50%' : `${(h * sc) / 2}px`) : '';   // 手機貼齊上緣；橫的戰情室垂直置中
+    // 右欄的手機貼齊上緣；戰情室（橫的）和簡報裡的外框垂直置中
+    dev.style.top = centered ? (desk || box !== stage ? '50%' : `${(h * sc) / 2}px`) : '';
     dev.style.transform = `scale(${sc})`;
   }
   let lastCap = '';
@@ -249,22 +250,32 @@
     ['TS.INCRBY', 'ts:sys:writes 1', '後台指標'],
   ];
   const pipe = $('#pipe');
-  pipe.innerHTML = CMDS.map(([c, a, w]) => `<div><b>${c}</b> ${a}<span>${w}</span></div>`).join('');
+  pipe.innerHTML = CMDS.map(([c, a, w]) => `<div${c === 'PUBLISH' ? ' data-pub="1"' : ''}><b>${c}</b> ${a}<span>${w}</span></div>`).join('');
   let playing = false;
+  // 右邊手機裡的隊友標記閃一下：表示「PUBLISH 的這一刻，全隊畫面收到新位置」
+  const pulsePhone = () => { try { frame.contentWindow?.postMessage({ rtPulse: true }, location.origin); } catch { /* */ } };
   $('#flowPlay').onclick = async () => {
     if (playing) return; playing = true;
-    const nodes = (n) => $(`.node[data-n="${n}"]`);
-    $$('.node, .pipe div').forEach((x) => x.classList.remove('lit', 'done'));
+    const btn = $('#flowPlay'), step = $('#flowStep'), msg = $('#flowMsg');
+    const node = (n) => $(`.node[data-n="${n}"]`);
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    $('#flowMsg').textContent = `{ lat: 24.1838, lon: 121.2826, speed: 11.2, ts: ${Date.now()} }`;
-    nodes('phone').classList.add('lit'); await wait(600);
+    const say = (h) => { step.innerHTML = h; };
+    btn.disabled = true;
+    $$('.node, .pipe div').forEach((x) => x.classList.remove('lit', 'done')); msg.classList.remove('lit');
+    say('<b>① 手機</b>每 2～3 秒送出一筆位置'); msg.textContent = `POST /api/track  { lat: 24.1838, lon: 121.2826, speed: 11.2, ts: ${Date.now()} }`;
+    msg.classList.add('lit'); node('phone').classList.add('lit'); await wait(1400);
+    say('<b>② API 用 Pipeline</b>把 15 個指令一次送給 Redis（只有一次網路來回）');
     const rows = $$('.pipe div');
-    for (const r of rows) { r.classList.add('lit'); await wait(140); r.classList.replace('lit', 'done'); }
-    rows.forEach((r) => r.classList.add('lit'));
-    await wait(300);
-    nodes('pub').classList.add('lit'); await wait(500);
-    nodes('stats').classList.add('lit'); nodes('alerts').classList.add('lit');
-    $('#flowMsg').textContent = '一次網路來回、15 個指令；全隊在幾毫秒內收到新位置';
+    for (const r of rows) {
+      r.classList.add('lit');
+      if (r.dataset.pub) { say('<b>③ PUBLISH</b>：訂閱這個行程的瀏覽器立刻收到 → 看右邊手機，隊友的點更新了'); node('pub').classList.add('lit'); pulsePhone(); await wait(1600); }
+      else await wait(260);
+      r.classList.replace('lit', 'done');
+    }
+    say('<b>④ XADD stream:ingest</b>：交給 Worker，兩個 Consumer Group 各自處理（統計、警示）');
+    node('stats').classList.add('lit'); node('alerts').classList.add('lit'); await wait(1800);
+    say('完成：<b>一次網路來回、15 個指令</b>。真實系統裡每位騎士每 2～3 秒就跑一次這整條路徑');
+    btn.disabled = false; btn.textContent = '↻ 再播一次';
     playing = false;
   };
 
