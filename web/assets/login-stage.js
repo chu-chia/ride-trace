@@ -69,9 +69,13 @@ export async function start() {
   steps.innerHTML = routes.map(() => '<i></i>').join('');
   steps.style.setProperty('--dur', SCENE_MS + 'ms');
 
+  // 電腦版地圖鋪到表單底下，右邊留出表單寬度，路線才會落在左邊看得到的地方
+  const formW = () => document.querySelector('.side')?.offsetWidth || 0;
+  // 電腦版開場：台灣往左移半個表單寬，不要躲在表單後面（地圖還在載入時就先移，不等 load）
+  if (innerWidth > 900) map.panBy([formW() / 2, 0], { duration: 0 });
   const pad = () => (innerWidth <= 900
     ? { top: 110, bottom: 120, left: 30, right: 30 }
-    : { top: 200, bottom: 200, left: 80, right: 80 });
+    : { top: 200, bottom: 200, left: 80, right: formW() + 80 });
 
   function show(i) {
     cur = i;
@@ -99,7 +103,7 @@ export async function start() {
   map.once('load', () => {
     if (reduce) {
       // 減少動態效果：不飛、不動，顯示全部路線，每 9 秒換一條的文字
-      map.fitBounds(bbox(routes.flatMap((r) => r.coords)), { padding: 40, duration: 0 });
+      map.fitBounds(bbox(routes.flatMap((r) => r.coords)), { padding: innerWidth <= 900 ? 40 : { top: 40, bottom: 40, left: 40, right: formW() + 40 }, duration: 0 });
       let i = 0; show(0);
       setInterval(() => show(i = (i + 1) % routes.length), SCENE_MS);
       return;

@@ -80,6 +80,18 @@
   .colors button.on{box-shadow:0 0 0 2px var(--fg)}
   .colors button.auto{box-shadow:0 0 0 2px var(--muted);border-style:dashed}
 
+  /* 電腦版：地圖鋪滿整個畫面，表單那側用漸層蓋過去，不要中間一條硬邊 */
+  @media (min-width:901px){
+    .stage{grid-column:1/-1;grid-row:1}
+    .side{grid-column:2;grid-row:1;position:relative;z-index:4;background:none}
+    .side::before{content:"";position:absolute;inset:0 0 0 -28%;z-index:-1;pointer-events:none;
+      background:linear-gradient(90deg,rgba(0,0,0,0),rgba(0,0,0,.55) 32%,rgba(0,0,0,.92) 56%,#000 72%)}
+    /* 地圖一律夜色，所以一律淡進黑色；淺色模式表單改成浮在上面的淺色卡片 */
+    .form{max-width:436px;padding:32px 28px;border-radius:24px;background:var(--bg);box-shadow:0 24px 70px rgba(0,0,0,.5)}
+    @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .form{max-width:380px;padding:0;background:none;box-shadow:none}}
+    :root[data-theme="dark"] .form{max-width:380px;padding:0;background:none;box-shadow:none}
+  }
+
   @media (max-width:900px){
     .wrap{grid-template-columns:1fr}
     .stage{min-height:0;height:clamp(300px,42dvh,380px)}
