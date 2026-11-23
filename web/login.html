@@ -41,9 +41,8 @@
   .hero-brand svg{width:48px;height:48px;flex:none}
   .hero-brand h1{margin:0;font-size:clamp(34px,4vw,48px);line-height:1;letter-spacing:.06em}
   .hero-brand h1 small{display:block;margin-top:5px;font-size:clamp(14px,1.5vw,18px);font-weight:500;letter-spacing:.12em;color:var(--st-accent)}
-  .hero-brand .slogan{margin:36px 0 0;font-size:clamp(22px,2.6vw,32px);font-weight:650;line-height:1.15;letter-spacing:-.02em}
-  .hero-brand .slogan-zh{margin:8px 0 0;font-size:15px;font-weight:400;color:var(--st-sub);max-width:30em}
-  .hero-brand .slogan-en{display:block;margin-top:4px;font-size:12px;letter-spacing:.04em;color:var(--st-muted)}
+  .hero-brand .slogan{margin:32px 0 0;font-size:clamp(20px,2vw,26px);font-weight:650;line-height:1.15;letter-spacing:-.02em}
+  .hero-brand .slogan-en{display:block;margin:6px 0 0;font-size:12px;letter-spacing:.04em;color:var(--st-muted)}
   /* 密碼：右邊「顯示」切換（UX-42） */
   .pw-wrap{position:relative}
   .pw-wrap .input{padding-right:64px}
@@ -111,8 +110,7 @@
     .hero-brand{top:max(20px,var(--sat))}
     .hero-brand svg{width:40px;height:40px}
     /* 手機上面那塊只有約 380px 高：標語縮小、英文那行拿掉，地圖才露得出來 */
-    .hero-brand .slogan{margin-top:16px;font-size:18px;line-height:1.25}
-    .hero-brand .slogan-zh{margin-top:6px;font-size:12.5px;line-height:1.45;text-wrap:pretty}
+    .hero-brand .slogan{margin-top:14px;font-size:16px;line-height:1.25}
     .hero-brand .slogan-en{display:none}
     .routecard{bottom:calc(18px + var(--under))}
     /* 底部直接淡進頁面底色（不是地圖那塊的底色），和表單之間才不會有一條邊 */
@@ -135,7 +133,7 @@
         <h1>騎跡<small>RideTrace</small></h1>
       </div>
       <p class="slogan">每一趟騎乘，都會留下足跡。</p>
-      <p class="slogan-zh">車隊即時互看位置，落隊、失聯、SOS 馬上提醒，騎完整隊回放。<span lang="en" class="slogan-en">Every ride leaves a trace.</span></p>
+      <p class="slogan-en" lang="en">Every ride leaves a trace.</p>
     </div>
     <div class="routecard" aria-live="polite">
       <div class="fade" id="rcText">
