@@ -233,7 +233,7 @@ SELECT * FROM rider_state WHERE trip_id = 57 AND updated_at &gt; :last;
 </section>
 
 <!-- 08 警示 -->
-<section class="ch" id="c08" data-title="警示" data-demo="trip" data-cap="<b>行程頁</b>：落隊、抵達集合點、全員到齊會出現在事件列與通知；切到「訊息」分頁看事件時間軸。">
+<section class="ch" id="c08" data-title="警示" data-demo="replayEv" data-cap="<b>回放（南橫）→ 事件</b>：Worker 判斷出來的落隊、跑太前面、異常久停、前方路況，點一筆就跳到那個時間。">
 <div class="wrap">
   <p class="kicker">08 · 警示</p>
   <h2>Streams＋Consumer Group：可靠的背景工作</h2>
@@ -266,7 +266,7 @@ COMMIT;</pre>
 </section>
 
 <!-- 09 失聯 -->
-<section class="ch" id="c09" data-title="失聯" data-demo="trip" data-cap="<b>行程頁</b>：隊員列表的狀態燈。心跳過期的人會變成「失聯」並推播給全隊。">
+<section class="ch" id="c09" data-title="失聯" data-demo="war" data-cap="<b>戰情室</b>：左上隊員表的狀態欄——心跳過期的人會變成「失聯」，事件流同時出現一筆。">
 <div class="wrap">
   <p class="kicker">09 · 失聯</p>
   <h2>「沒有發生的事」怎麼偵測？讓 key 自己過期</h2>
@@ -314,7 +314,7 @@ SELECT JSON_EXTRACT(route, '$.summary') FROM routes WHERE id = 33;</pre>
 </section>
 
 <!-- 11 回放 -->
-<section class="ch" id="c11" data-title="回放" data-demo="replay" data-cap="<b>回放頁</b>：南橫全隊同步播放，按 ▶、拖時間軸、點事件跳過去；「圖表」分頁看速度海拔。">
+<section class="ch" id="c11" data-title="回放" data-demo="replayChart" data-cap="<b>回放（南橫）→ 圖表</b>：全隊速度、海拔曲線，一個 <code>TS.MRANGE</code> 取回；切「全隊」按 ▶ 看同步播放。">
 <div class="wrap">
   <p class="kicker">11 · 回放</p>
   <h2>Stream 的 ID 就是時間索引</h2>

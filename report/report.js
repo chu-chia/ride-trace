@@ -32,7 +32,7 @@
   const DEMO = {
     login: { path: () => 'app/login.html', live: '/login' },
     home: { path: () => 'app/index.html', live: '/login' },
-    trip: { path: () => `app/trip.html?id=${TID}`, live: '/demo' },
+    trip: { path: () => `app/trip.html?id=${TID}&demoTab=team`, live: '/demo' },
     plan: { path: () => `app/plan.html?trip=${TID}`, live: '/login' },
     replay: { path: () => 'app/replay.html?id=48', live: '/login' },
     footprint: { path: () => 'app/footprint.html', live: '/login' },
@@ -40,6 +40,17 @@
     heat: { path: () => 'app/footprint.html?tab=heat', live: '/login' },
     import: { path: () => 'app/footprint.html?tab=stats', live: '/login' },
     war: { path: () => `app/war.html?id=${TID}`, live: '/demo', desk: true },
+    warPhone: { path: () => `app/war.html?id=${TID}`, live: '/demo' },
+    tripRoute: { path: () => `app/trip.html?id=${TID}&demoTab=route`, live: '/demo' },
+    tripMore: { path: () => `app/trip.html?id=${TID}&demoTab=more`, live: '/demo' },
+    replayChart: { path: () => 'app/replay.html?id=48&demoTab=chart', live: '/login' },
+    replayEv: { path: () => 'app/replay.html?id=48&demoTab=ev', live: '/login' },
+    replaySum: { path: () => 'app/replay.html?id=48&demoTab=sum', live: '/login' },
+    replay55: { path: () => 'app/replay.html?id=55', live: '/login' },
+    replay55Ev: { path: () => 'app/replay.html?id=55&demoTab=ev', live: '/login' },
+    replay55Chart: { path: () => 'app/replay.html?id=55&demoTab=chart', live: '/login' },
+    about: { path: () => 'app/about.html', live: '/about' },
+    settings: { path: () => 'app/settings.html', live: '/login' },
   };
   let src = 'demo', curKey = null, curUrl = '';
   const frame = $('#demoFrame'), device = $('#device'), stage = $('#stage');
@@ -78,6 +89,16 @@
 
   // 手機 ⇄ 桌機（戰情室）：手機轉成橫的再變成螢幕；回來時先橫著再轉正。用獨立的 rotate 屬性，跟 fit() 的 transform 疊加
   const REDUCE = matchMedia('(prefers-reduced-motion: reduce)');
+  // 先換頁，新頁面載入完（或最多 2.5 秒）才做下一步
+  let navSeq = 0;
+  function afterNavigate(swap, then) {
+    const my = ++navSeq;
+    let done = false;
+    const go = () => { if (done || my !== navSeq) return; done = true; then(); };
+    frame.addEventListener('load', go, { once: true });
+    turning = setTimeout(go, 2500);
+    swap();
+  }
   let turning = null;
   function setDesk(desk, swap) {
     const was = device.classList.contains('desk');
@@ -85,6 +106,7 @@
     if (was === desk || REDUCE.matches || device.hidden) {
       // 包含「轉到一半又捲回來」：把動畫的角度、縮放、透明度都還原
       Object.assign(device.style, { transition: 'none', rotate: '0deg', scale: '1', opacity: '1' });
+      if (was && !desk) { afterNavigate(swap, () => { device.classList.remove('desk'); fit(); }); return; }
       device.classList.toggle('desk', desk); fit(); swap(); return;
     }
     // 直的手機轉成橫的之後，寬度變成原本的高度：另外用 scale 縮到放得進右欄
@@ -103,14 +125,15 @@
         device.style.transition = 'opacity .35s'; device.style.opacity = '1';
       }, 430);
     } else {
+      // 戰情室寬度一變就會 location.reload()：要先換成新頁面、等它載入完才把外框變窄，不然新頁面會被戰情室的重新整理蓋掉
       device.style.transition = 'opacity .2s'; device.style.opacity = '.55';
-      turning = setTimeout(() => {
+      afterNavigate(swap, () => {
         device.style.transition = 'none';
-        device.classList.remove('desk'); fit(); device.style.rotate = '-90deg'; device.style.scale = sideFit(); swap();  // 先橫著
+        device.classList.remove('desk'); fit(); device.style.rotate = '-90deg'; device.style.scale = sideFit();  // 先橫著
         device.getBoundingClientRect();
         device.style.transition = 'rotate .5s cubic-bezier(.3,.7,.2,1), scale .5s cubic-bezier(.3,.7,.2,1), opacity .5s';
         device.style.rotate = '0deg'; device.style.scale = '1'; device.style.opacity = '1';     // 轉正
-      }, 200);
+      });
     }
   }
   $$('.demo-bar .seg button').forEach((b) => b.onclick = () => {
@@ -131,19 +154,19 @@
 
   // 沒有專屬操作的章節（長捲動時）也放一個相關的頁面，右邊不會空著；簡報模式這些頁維持全寬
   const FALLBACK = {
-    c01: ['trip', '<b>行程頁</b>：這就是騎跡要解決的事——全隊在同一張地圖上，誰落後、誰到了一眼看到。'],
-    c02: ['war', '<b>戰情室</b>：每 2～3 秒一筆位置、即時推給所有人，就是 Redis 擅長的工作負載。'],
-    c03: ['trip', '<b>行程頁</b>：畫面上每一次更新，都是「手機 → API → Redis → Pub/Sub → 瀏覽器」走一趟。'],
-    c04: ['trip', '<b>行程頁</b>：隊員列表＝<code>trip:{tid}:members</code>＋<code>trip:{tid}:state:{uid}</code>；地圖上的點＝<code>trip:{tid}:geo</code>。'],
-    c04b: ['home', '<b>首頁</b>：「我的行程」就是多對多的另一個方向 <code>user:{uid}:trips</code>。'],
-    c06: ['trip', '<b>行程頁</b>：每個點每移動一次，背後就是左邊那 15 個指令。'],
-    c14: ['trip', '<b>行程頁</b>：抵達集合點、全員到齊只通知一次，靠的是 Lua 的原子性。'],
+    c01: ['warPhone', '<b>戰情室（手機版）</b>：全隊每個人的速度、海拔、離終點多遠，一眼看到誰落後、誰到了。'],
+    c02: ['heat', '<b>熱力圖</b>：一年 16.5 萬個 GPS 點——寫入多、要地理查詢，正是這種資料。'],
+    c03: ['about', '<b>關於頁</b>：App 裡也寫了每個功能用到哪個 Redis 特性。'],
+    c04: ['replay55', '<b>回放（北宜）</b>：成員、即時狀態、軌跡點三個實體一起動起來的樣子。'],
+    c04b: ['tripMore', '<b>行程頁 → 更多</b>：邀請碼就是 <code>SET invite:{code} {tid} NX EX</code>，24 小時後自己消失。'],
+    c06: ['tripRoute', '<b>行程頁 → 路線</b>：按左邊「播放」，走到 PUBLISH 那一步，地圖上的隊友點會閃一下。'],
+    c14: ['replay55Ev', '<b>回放（北宜）→ 事件</b>：抵達、落隊、全員到齊各只通知一次，靠 Lua 的原子性。'],
     c15: ['footprint', '<b>足跡頁</b>：一年的紀錄都在記憶體裡，靠 AOF＋RDB 保證關機不會掉。'],
-    c16: ['import', '<b>足跡頁 → 統計</b>：每月里程這種報表，在 Redis 要事先設計好 key，SQL 一個 GROUP BY 就好。'],
-    c18: ['home', '<b>首頁</b>：8 天、將近 300 個 commit 的成果。'],
-    c18b: ['trip', '<b>行程頁</b>：每次改動都用無頭瀏覽器截這幾頁的桌機與手機畫面驗證。'],
-    c19: ['towns', '<b>足跡頁</b>：一年 358 天、點亮 298 個鄉鎮。'],
-    c20: ['home', '<b>首頁</b>：掃左邊的 QR code，可以在自己的手機上打開。'],
+    c16: ['replaySum', '<b>回放 → 摘要</b>：這種彙總在 Redis 要寫入時就算好（反正規化）；SQL 一個 GROUP BY 就好。'],
+    c18: ['settings', '<b>設定頁</b>：導航視角、語音提示、省電模式……8 天裡一項一項加上去的細節。'],
+    c18b: ['replay55Chart', '<b>回放 → 圖表</b>：每次改動都用無頭瀏覽器截這些畫面，確認圖表、地圖都正常。'],
+    c19: ['home', '<b>首頁</b>：一年 358 天、32,764 km、點亮 298 個鄉鎮。'],
+    c20: ['login', '<b>登入頁</b>：掃左邊的 QR code 打開正式機，可以自己註冊一個帳號試試。'],
   };
   const demoOf = (s) => s.dataset.demo ? [s.dataset.demo, s.dataset.cap] : FALLBACK[s.id] || null;
   // 捲到哪一章就切到哪一頁
@@ -365,10 +388,13 @@
       if (device.parentElement !== sl) sl.append(device);
       Object.assign(device.style, { transition: 'none', rotate: '0deg', scale: '1', opacity: '1' });
       device.hidden = false;
-      device.classList.toggle('desk', !!d.desk);
       const u = urlFor(dm[0]);
-      if (u !== curUrl) { curUrl = u; frame.src = u; }
-      fit(device, sl);
+      const nav = () => { if (u !== curUrl) { curUrl = u; frame.src = u; } };
+      if (device.classList.contains('desk') && !d.desk) {
+        afterNavigate(nav, () => { device.classList.remove('desk'); fit(device, sl); });   // 從戰情室切走：先換頁再變窄
+      } else {
+        device.classList.toggle('desk', !!d.desk); nav(); fit(device, sl);
+      }
     }
     history.replaceState(null, '', '#' + s.id);
     coverForSlide();

@@ -55,6 +55,19 @@
     }, true);
   }
 
+  // ?demoTab=xxx：頁面載好後自動點那個分頁（行程頁的隊伍／路線／訊息／更多、回放頁的全隊／圖表／事件／摘要）
+  const wantTab = q.get('demoTab');
+  if (wantTab) {
+    // 頁面資料載完時可能把分頁重設回第一個：一直點到切過去、而且連續 2 秒都還在那一頁才停
+    let tries = 0, stable = 0;
+    const tick = setInterval(() => {
+      const b = document.querySelector(`#tabs [data-t="${wantTab}"]`);
+      if (b && b.classList.contains('on')) { if (++stable >= 8) clearInterval(tick); }
+      else { stable = 0; b?.click(); }
+      if (++tries > 80) clearInterval(tick);
+    }, 250);
+  }
+
   // ---------- 不要真的去定位、註冊推播 ----------
   try { if (navigator.serviceWorker) navigator.serviceWorker.register = () => Promise.reject(new Error('展示模式')); } catch { /* */ }
   try {
@@ -70,7 +83,7 @@
   const live = page === 'trip' || page === 'war';
   // 足跡資料（格子、鄉鎮、熱力圖）約 3 MB，只有首頁和足跡頁要
   const wantFp = page === 'index' || page === 'footprint';
-  const ready = Promise.all([wantFp ? load('footprint') : null, page === 'footprint' || page === 'login' ? null : load(id ? `${page}-${id}` : page), live && id ? load(`trip-${id}`) : null])
+  const ready = Promise.all([wantFp ? load('footprint') : null, ['footprint', 'login', 'settings', 'about'].includes(page) ? null : load(id ? `${page}-${id}` : page), live && id ? load(`trip-${id}`) : null])
     .then(([fp, own, liveData]) => {
       if (page === 'index' && fp) delete fp.http['GET /api/me'];  // 首頁：身分用展示帳號（進行中的行程），足跡卡片用 wei 的
       const sets = [own, page === 'war' ? liveData : null, fp].filter(Boolean);
@@ -102,6 +115,14 @@
     return null;
   }
 
+  // 有些頁面（設定頁）一開始就要的資料，錄影時沒經過：給固定的預設值（都不含個人資料）
+  const BUILTIN = {
+    '/api/health': { ok: true, redis: '8.2', deploy: null },
+    '/api/me': { uid: '139', username: 'demo_wei', nickname: '嘉瑋', color: '#5ac8fa', active_trip: null },
+    '/api/me/palette': {"colors":["#0a84ff","#ff9f0a","#30d158","#bf5af2","#ff375f","#5ac8fa","#ffd60a","#ac8e68","#5e5ce6","#00c7be"],"named":[{"color":"#0a84ff","name":"藍"},{"color":"#ff9f0a","name":"橘"},{"color":"#30d158","name":"綠"},{"color":"#bf5af2","name":"紫"},{"color":"#ff375f","name":"桃紅"},{"color":"#5ac8fa","name":"天藍"},{"color":"#ffd60a","name":"黃"},{"color":"#ac8e68","name":"棕"},{"color":"#5e5ce6","name":"靛藍"},{"color":"#00c7be","name":"薄荷"}],"next":"#0a84ff"},
+    '/api/me/device': { device_id: 'demo-device' },
+    '/api/admin/whoami': { admin: false },
+  };
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
   // ---------- 匯入足跡：假裝跑一遍進度 ----------
@@ -141,7 +162,7 @@
     }
     if (method !== 'GET') { demoToast(); return json({ ok: true, demo: true }); }
     const hit = lookup(fx.sets, method, u);
-    if (!hit) return json({ detail: '展示模式沒有這筆資料' }, 404);
+    if (!hit) return BUILTIN[u.pathname] ? json(BUILTIN[u.pathname]) : json({ detail: '展示模式沒有這筆資料' }, 404);
     const [rec, t0] = hit;
     return json(shifter(t0)(rec.body), rec.status || 200);
   };
