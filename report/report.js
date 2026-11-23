@@ -56,8 +56,10 @@
     const bw = box.clientWidth, bh = box.clientHeight;
     if (!bw || !bh) return;
     const sc = Math.min(bw / w, bh / h, 1);
+    // 置中用負邊距（不用 translate），這樣旋轉動畫的 rotate 才會繞著中心轉
     const centered = getComputedStyle(dev).position === 'absolute';
-    dev.style.transform = centered ? `translate(-50%,-50%) scale(${sc})` : `scale(${sc})`;
+    dev.style.margin = centered ? `${-h / 2}px 0 0 ${-w / 2}px` : '';
+    dev.style.transform = `scale(${sc})`;
   }
   let lastCap = '';
   function show(key, cap) {
@@ -67,11 +69,45 @@
     device.hidden = !has; $('#demoEmpty').hidden = has;
     $('#demoCap').innerHTML = has ? (cap || '') + (src === 'live' ? '<span class="ln">正式機：Demo 車隊即時跑（其他頁要登入）；連不到請切回展示資料。</span>' : '') : '';
     if (!has) return;
-    device.classList.toggle('desk', !!DEMO[key].desk);
     const u = urlFor(key);
     $('#demoOpen').href = u;
-    if (u !== curUrl) { curUrl = u; frame.src = u; }
-    fit();
+    setDesk(!!DEMO[key].desk, () => { if (u !== curUrl) { curUrl = u; frame.src = u; } });
+  }
+
+  // 手機 ⇄ 桌機（戰情室）：手機轉成橫的再變成螢幕；回來時先橫著再轉正。用獨立的 rotate 屬性，跟 fit() 的 transform 疊加
+  const REDUCE = matchMedia('(prefers-reduced-motion: reduce)');
+  let turning = null;
+  function setDesk(desk, swap) {
+    const was = device.classList.contains('desk');
+    clearTimeout(turning);
+    if (was === desk || REDUCE.matches || device.hidden) {
+      device.classList.toggle('desk', desk); fit(); swap(); return;
+    }
+    // 直的手機轉成橫的之後，寬度變成原本的高度：另外用 scale 縮到放得進右欄
+    const sideFit = () => {
+      const bw = stage.clientWidth, bh = stage.clientHeight;
+      const upright = Math.min(bw / 414, bh / 868, 1), sideways = Math.min(bw / 868, bh / 414, 1);
+      return String(sideways / upright);
+    };
+    device.style.transition = 'rotate .42s cubic-bezier(.3,.7,.2,1), scale .42s cubic-bezier(.3,.7,.2,1), opacity .42s';
+    if (desk) {
+      device.style.rotate = '-90deg'; device.style.scale = sideFit(); device.style.opacity = '.55';     // 手機轉成橫的
+      turning = setTimeout(() => {
+        device.style.transition = 'none';
+        device.classList.add('desk'); device.style.rotate = '0deg'; device.style.scale = '1'; fit(); swap();
+        device.getBoundingClientRect();
+        device.style.transition = 'opacity .35s'; device.style.opacity = '1';
+      }, 430);
+    } else {
+      device.style.transition = 'opacity .2s'; device.style.opacity = '.55';
+      turning = setTimeout(() => {
+        device.style.transition = 'none';
+        device.classList.remove('desk'); fit(); device.style.rotate = '-90deg'; device.style.scale = sideFit(); swap();  // 先橫著
+        device.getBoundingClientRect();
+        device.style.transition = 'rotate .5s cubic-bezier(.3,.7,.2,1), scale .5s cubic-bezier(.3,.7,.2,1), opacity .5s';
+        device.style.rotate = '0deg'; device.style.scale = '1'; device.style.opacity = '1';     // 轉正
+      }, 200);
+    }
   }
   $$('.demo-bar .seg button').forEach((b) => b.onclick = () => {
     src = b.dataset.src;
