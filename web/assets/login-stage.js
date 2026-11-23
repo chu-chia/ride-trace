@@ -43,6 +43,8 @@ export async function start() {
   const isLight = () => document.documentElement.dataset.theme === 'light';
   const M = createMap($('#map'), { style: isLight() ? 'light' : 'dark', center: [121.0, 23.75], zoom: 6.6, terrain: !reduce, interactive: false, syncTheme: true });
   const map = M.map;
+  // 只是背景裝飾，又鋪滿整個畫面：解析度最多 1.5 倍（Retina 原本 2 倍，像素少一半左右）
+  if (devicePixelRatio > 1.5) map.setPixelRatio?.(1.5);
   let cur = -1, t0 = 0;
 
   const lines = { type: 'FeatureCollection', features: routes.map((r, i) => ({ type: 'Feature', properties: { i }, geometry: { type: 'LineString', coordinates: r.coords } })) };
@@ -133,8 +135,11 @@ export async function start() {
       show(0);
       setInterval(() => show(i = (i + 1) % routes.length), SCENE_MS);
     }, 1200);
-    const tick = () => {
-      if (map.getSource('lt') && cur >= 0 && performance.now() > t0) map.getSource('lt').setData(team());
+    // 隊伍點每秒只更新 20 次：每次 setData 都會讓整張 3D 地圖重畫，跟著螢幕 60 次會讓 GPU 一直滿載。
+    // 點走得很慢（9 秒走完一條路），20 次看起來一樣順
+    let lastTick = 0;
+    const tick = (now) => {
+      if (now - lastTick >= 50 && map.getSource('lt') && cur >= 0 && performance.now() > t0) { lastTick = now; map.getSource('lt').setData(team()); }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
