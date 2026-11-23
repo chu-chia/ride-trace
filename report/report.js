@@ -377,7 +377,7 @@
   const go = (d) => { si = Math.max(0, Math.min(sections.length - 1, si + d)); placeSlide(); };
   $('#bSlides').onclick = () => enterSlides();
   $$('[data-act="slides"]').forEach((b) => b.onclick = () => enterSlides(0));
-  $('#sPrev').onclick = () => go(-1); $('#sNext').onclick = () => go(1); $('#sExit').onclick = exitSlides; $('#sClose').onclick = exitSlides;
+  $('#sPrev').onclick = () => go(-1); $('#sNext').onclick = () => go(1); $('#sExit').onclick = exitSlides;
   document.addEventListener('keydown', (e) => {
     if (e.target.closest?.('input,textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
     const on = document.body.classList.contains('slides');

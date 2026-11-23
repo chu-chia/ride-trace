@@ -267,10 +267,6 @@ body:not(.demo-off) .demo-show{display:none}
 body.slides .demo-show{display:none}
 .sheet>.device{position:absolute;left:50%;top:50%}
 
-.slide-close{display:none}
-body.slides .slide-close{display:flex;align-items:center;gap:8px;position:fixed;top:12px;left:12px;z-index:71;border:0;border-radius:999px;background:rgba(28,28,30,.85);color:#fff;padding:7px 14px;font-size:13px;font-weight:600;opacity:.55;transition:opacity .2s}
-body.slides .slide-close:hover{opacity:1}
-body.slides .slide-close kbd{font-size:11px;border:1px solid currentColor;border-radius:4px;padding:0 4px;opacity:.75}
 body.slides .ch.cur.has-slot .slot{display:grid}
 body.slides .ch.cur:not(.has-slot) .slot{display:none}
 body.slides .chips{margin-bottom:10px}
