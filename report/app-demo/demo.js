@@ -58,7 +58,7 @@
   const live = page === 'trip' || page === 'war';
   // 足跡資料（格子、鄉鎮、熱力圖）約 3 MB，只有首頁和足跡頁要
   const wantFp = page === 'index' || page === 'footprint';
-  const ready = Promise.all([wantFp ? load('footprint') : null, page === 'footprint' ? null : load(id ? `${page}-${id}` : page), live && id ? load(`trip-${id}`) : null])
+  const ready = Promise.all([wantFp ? load('footprint') : null, page === 'footprint' || page === 'login' ? null : load(id ? `${page}-${id}` : page), live && id ? load(`trip-${id}`) : null])
     .then(([fp, own, liveData]) => {
       if (page === 'index' && fp) delete fp.http['GET /api/me'];  // 首頁：身分用展示帳號（進行中的行程），足跡卡片用 wei 的
       const sets = [own, page === 'war' ? liveData : null, fp].filter(Boolean);
