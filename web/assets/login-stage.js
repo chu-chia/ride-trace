@@ -39,7 +39,9 @@ export async function start() {
   const routes = await (await fetch('/assets/login-routes.json')).json();
   routes.forEach((r) => { r.cum = measure(r.coords); });
 
-  const M = createMap($('#map'), { style: 'dark', center: [121.0, 23.75], zoom: 6.6, terrain: !reduce, interactive: false, syncTheme: false });
+  // 深淺色由 <head> 先決定（記住的或跟系統），地圖跟著用深色／淺色底圖；syncTheme 讓換底圖時整頁一起換
+  const isLight = () => document.documentElement.dataset.theme === 'light';
+  const M = createMap($('#map'), { style: isLight() ? 'light' : 'dark', center: [121.0, 23.75], zoom: 6.6, terrain: !reduce, interactive: false, syncTheme: true });
   const map = M.map;
   let cur = -1, t0 = 0;
 
@@ -54,16 +56,34 @@ export async function start() {
   });
 
   M.onStyle(() => {
+    // 淺色底圖（Liberty）的地名、圖示很搶眼，壓在標語底下不好讀：地名調淡、圖示拿掉，只當背景
+    if (isLight()) for (const l of map.getStyle().layers) {
+      if (l.type !== 'symbol') continue;
+      map.setPaintProperty(l.id, 'text-opacity', 0.5);
+      map.setPaintProperty(l.id, 'icon-opacity', 0);
+    }
     if (!map.getSource('lr')) map.addSource('lr', { type: 'geojson', data: lines });
     if (!map.getSource('lt')) map.addSource('lt', { type: 'geojson', data: team() });
     if (!map.getLayer('lr-dim')) {
       map.addLayer({ id: 'lr-dim', type: 'line', source: 'lr', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ff9a52', 'line-opacity': 0.35, 'line-width': 2 } });
       map.addLayer({ id: 'lr-glow', type: 'line', source: 'lr', filter: ['==', ['get', 'i'], cur], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ff7a1a', 'line-opacity': 0.55, 'line-width': 12, 'line-blur': 8 } });
-      map.addLayer({ id: 'lr-hi', type: 'line', source: 'lr', filter: ['==', ['get', 'i'], cur], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffc08f', 'line-width': 3.5 } });
+      map.addLayer({ id: 'lr-hi', type: 'line', source: 'lr', filter: ['==', ['get', 'i'], cur], layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': isLight() ? '#d9500f' : '#ffc08f', 'line-width': 3.5 } });
       map.addLayer({ id: 'lt-halo', type: 'circle', source: 'lt', paint: { 'circle-color': ['get', 'c'], 'circle-radius': ['case', ['get', 'lead'], 16, 11], 'circle-opacity': 0.35, 'circle-blur': 1 } });
       map.addLayer({ id: 'lt-dot', type: 'circle', source: 'lt', paint: { 'circle-color': ['get', 'c'], 'circle-radius': ['case', ['get', 'lead'], 6, 4.5], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
     }
   });
+
+  // 右上角深淺切換：換底圖（自己的路線圖層會在 onStyle 加回來），並記住
+  const btn = $('#themeBtn');
+  const label = () => btn.setAttribute('aria-label', isLight() ? '切換成深色' : '切換成淺色');
+  label();
+  btn.onclick = () => {
+    const next = isLight() ? 'dark' : 'light';
+    document.documentElement.dataset.theme = next;  // 地圖壞掉時 setStyle 是空的，頁面還是要換
+    try { localStorage.setItem('qiji.loginTheme', next); } catch (e) {}
+    M.setStyle(next);
+    label();
+  };
 
   const steps = $('#steps');
   steps.innerHTML = routes.map(() => '<i></i>').join('');
