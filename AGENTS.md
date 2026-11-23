@@ -2,13 +2,13 @@
 
 接手前先讀：
 
-1. `README.md`：啟動方式、工具、Redis 用法、階段清單
+1. `README.md`（專案介紹）與 `docs/開發者指南.md`（啟動方式、工具、階段清單）
 2. `docs/records/` 裡日期最新的 `*-handoff.md`：上一位 agent 做到哪、踩過的坑、下一步
 3. 原始規格：使用者的 `~/Downloads/騎跡_Redis專題規格.md`（v0.1；後來的決定以 handoff 為準）
 
 ## 專案定位
 
-DBMS 課程的 Redis 個人專題。**重點是展示 Redis 的進階功能**，每加一個功能都要想「這裡用了哪個 Redis 特性、SQL 為什麼不方便」，並寫進 README 的 Redis 表格。
+DBMS 課程的 Redis 個人專題。**重點是展示 Redis 的進階功能**，每加一個功能都要想「這裡用了哪個 Redis 特性、SQL 為什麼不方便」，並寫進 `docs/Redis功能對照.md`（README 只放摘要表，重要的才加進去）。
 
 ## 規則
 
