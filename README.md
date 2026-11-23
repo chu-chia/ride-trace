@@ -8,6 +8,9 @@
 
 ![登入頁](docs/images/login.jpg)
 
+**報告網頁**：<https://chu-chia.github.io/ride-trace/>（左邊講資料庫設計、右邊直接操作真的頁面，按 S 切成簡報；[手機版講稿](https://chu-chia.github.io/ride-trace/notes.html)）
+**正式機**：<https://node.tail866fc3.ts.net:8443/>（可以自己註冊；[免登入看示範車隊](https://node.tail866fc3.ts.net:8443/demo)）
+
 ## 為什麼做這個
 
 跟朋友騎山路最常發生的事：有人落隊沒人發現、在岔路走散、到了集合點不知道誰還沒到、回家後想看整趟只有各自零散的紀錄。騎跡想解決的就是這四件事：
@@ -171,6 +174,7 @@ open http://localhost:8750    # 註冊一個帳號就能開團
 | [部署](docs/部署.md) | Tailscale HTTPS、Windows 正式機、CI/CD |
 | [Web Push 實作說明](docs/WebPush實作說明.md) | 推播流程與去重 |
 | [開發紀錄](docs/records/) | 每天的交接與開發日誌 |
+| [報告網頁規格](docs/報告網頁規格.md) | 報告網頁的定位、大綱、展示模式怎麼做（`report/`、`scripts/pages/`） |
 
 ## 作者
 
