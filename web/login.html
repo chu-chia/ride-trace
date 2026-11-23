@@ -40,8 +40,6 @@
   .pw-wrap{position:relative}
   .pw-wrap .input{padding-right:64px}
   .pw-eye{position:absolute;right:2px;top:50%;transform:translateY(-50%);min-height:44px;min-width:44px;padding:0 10px;border:0;border-radius:8px;background:none;color:var(--accent-ink);font-size:13px;font-weight:600;cursor:pointer}
-  .forgot{align-self:flex-start;border:0;background:none;padding:0 2px;min-height:44px;color:var(--accent-ink);font-size:13px;cursor:pointer}
-  .forgot-note{font-size:13px;color:var(--muted);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin:0}
 
   .routecard{position:absolute;z-index:3;left:clamp(24px,4vw,56px);bottom:max(32px,env(safe-area-inset-bottom,0px));right:24px;max-width:420px;opacity:.7}
   .routecard .eyebrow{color:#ffb27a}
@@ -155,8 +153,6 @@
             <input class="input" id="password" type="password" autocomplete="current-password" required>
             <button type="button" class="pw-eye" id="pwEye" aria-pressed="false" aria-controls="password">顯示</button>
           </div>
-          <button type="button" class="forgot" id="forgot" aria-expanded="false" aria-controls="forgotNote">忘記密碼？</button>
-          <p class="forgot-note" id="forgotNote" hidden>這個網站不會寄 email。請聯絡管理者在後台幫你重設一組臨時密碼，登入後到「設定 → 變更密碼」改成自己的。</p>
         </div>
         <div class="err" id="err" role="alert"></div>
         <button class="btn primary block" id="submit">登入</button>
@@ -224,8 +220,6 @@ function setMode(m) {
   $('#submit').textContent = mode === 'login' ? '登入' : '建立帳號';
   $('#password').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
   $('#err').textContent = '';
-  $('#forgot').hidden = mode !== 'login';
-  if (mode !== 'login') { $('#forgotNote').hidden = true; $('#forgot').setAttribute('aria-expanded', 'false'); }
 }
 $('#mode').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
@@ -240,11 +234,6 @@ $('#pwEye').onclick = () => {
   $('#pwEye').textContent = show ? '隱藏' : '顯示';
   $('#pwEye').setAttribute('aria-pressed', show);
   $('#pwEye').setAttribute('aria-label', show ? '隱藏密碼' : '顯示密碼');
-};
-$('#forgot').onclick = () => {
-  const open = $('#forgotNote').hidden;
-  $('#forgotNote').hidden = !open;
-  $('#forgot').setAttribute('aria-expanded', open);
 };
 $('#f').onsubmit = async (e) => {
   e.preventDefault();
