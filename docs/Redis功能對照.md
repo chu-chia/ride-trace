@@ -43,5 +43,6 @@
 | Set 運算 | 迷霧格子 `fog:{uid}:{日}:{時段}`，選日期範圍時 `SUNION`；`user:{uid}:towns` 點亮的鄉鎮（`SADD` 回傳 1 = 第一次點亮）；`SDIFF` 算誰還沒到集合點 |
 | Hash 快取 | `celltown` 格子 → 鄉鎮（同一格不必每次都查空間索引）；`cache:` 查詢結果 TTL 快取 |
 | `INCR` 版本快取＋`SET NX EX` 防抖 | 新足跡用 `fp:ver:{uid}` 原子遞增，足跡查詢快取 key 帶版本、舊版 7 天後自動清理；worker 用 `fp:warm:{uid}` 60 秒鎖合併大量更新並預算全期間資料。SQL 需自行維護版本、快取失效與跨 worker 防抖機制 |
+| 匯入足跡（Streams＋RENAME＋WATCH） | 網頁上傳 GPX／KML／Google 時間軸：`SET import:lock:{uid} NX EX` 一人同時一個匯入；原始檔暫存 `import:{job}:file`（String，1 小時 TTL）、進度 `import:{job}`（Hash）、`LPUSH`＋`LTRIM user:{uid}:imports` 留最近 20 筆；`XADD stream:import` 交給 worker group `import`。Stream ID 必須遞增，比現有最後一筆舊的點加不進去，所以 worker 把舊足跡＋新點依時間合併去重（同一秒已有點就算重複），在 `imp:{job}:…` 暫存 key 重建足跡、GEO、迷霧、每日里程、熱力圖、點亮鄉鎮，最後 `WATCH footprint:{uid}`＋`MULTI` 一次 `RENAME` 換上；期間有即時回報寫入就交易失敗、重新合併（最多 3 次）。`INCR fp:ver:{uid}` 讓查詢快取失效；`import:run:{job}` NX 防止多個 worker 同時跑同一個工作；解鎖用 Lua compare-and-delete |
 | SCAN＋TYPE／TTL | 管理後台「維運工具」逐批列出行程相關 key、唯讀檢視 Redis 型別與剩餘效期；SQL 需跨多張表及系統目錄才能取得同樣的資料概況 |
 | cache-aside＋TTL（外部 API） | 交通部 TDX 每月只有 3 點（4,500 次）：`cache:tdx:roadev` 120 秒過期才再抓全台省道事件，`SET lock:tdx:roadev NX EX 30` 只讓一個 worker 去抓（防 cache stampede），重建時寫暫存 key 再 `MULTI`＋`RENAME` 一次換上；`cache:tdx:token` 存 OAuth token；`tdx:usage` 記本月呼叫次數。沒有進行中的行程、沒人開規劃頁時完全不呼叫；氣象署鄉鎮預報同樣 cache-aside（`cache:cwa:{縣市}` 30 分鐘，一次抓回整個縣市） |

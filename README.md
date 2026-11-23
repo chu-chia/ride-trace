@@ -47,6 +47,7 @@
 - **警示與互動**：落隊（沿路線里程判斷，髮夾彎也不誤判）、失聯、抵達與全員到齊、前方測速、前方路況與降雨、SOS（長按）、快速訊息、聊天室、地圖標註坑洞；全部可以 Web Push 推到鎖定畫面
 - **回放**：全隊同步、1～300 倍速、跟拍鏡頭、依隊員／速度／海拔上色、整趟摘要
 - **長期紀錄**：全年足跡（迷霧模式、依日期和時段篩選、逐月播放）、點亮鄉鎮、熱力圖、累計統計
+- **匯入舊紀錄**：上傳靈感足跡等 App 的 GPX、Google 地圖時間軸（Timeline.json／Records.json）、KML 或整包 ZIP，自動去重並重算鄉鎮與熱力圖
 - **戰情室與管理後台**：大螢幕看全隊；後台看 Redis 狀態、每秒寫入、Pub/Sub 量、Worker 進度
 - **背景回報**：網頁定位之外也支援 [Traccar Client](https://www.traccar.org/client/)（手機原生 App，鎖螢幕也能回報）
 
@@ -66,6 +67,7 @@
 | **RediSearch** | 15.6 萬筆地名中文搜尋＋自動完成；測速點條件查詢；GEOSHAPE 判斷一個點在哪個鄉鎮 | 全文搜尋和多邊形查詢都要外掛 |
 | **RedisJSON** | 幾千個座標的路線，`JSON.GET … $.summary` 只取需要的部分 | 整包讀出來再解析 |
 | **Sorted Set／Set** | 熱力圖計數（`ZINCRBY`）、迷霧格子（`SUNION`）、誰還沒到集合點（`SDIFF`） | 要 GROUP BY 和子查詢 |
+| **RENAME＋WATCH** | 匯入舊紀錄時整份足跡在暫存 key 重建，再用一個交易 `RENAME` 換上；期間有新的 GPS 點寫入（`WATCH` 偵測到）就重來 | 要建暫存表、鎖表再換名 |
 | **cache-aside＋`SET NX`** | 外部 API（TDX 每月 4,500 次）結果快取，鎖住只讓一個 Worker 去抓 | 要另外架快取 |
 
 每個 key 的設計與理由：[docs/Redis功能對照.md](docs/Redis功能對照.md)。
