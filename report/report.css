@@ -277,3 +277,6 @@ body.slides .chips{margin-bottom:10px}
 .slot{position:relative}
 body.slides .slot>.device{position:absolute;left:50%;top:50%}
 body.slides .slot.desk{height:540px}
+.tbtn,.cmp-tabs button,.demo-bar button{white-space:nowrap}
+.flow-head{flex-wrap:wrap}
+body.slides .pipe div{padding:2px 8px}body.slides .pipe{gap:1px}

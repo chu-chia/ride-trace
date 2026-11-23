@@ -196,6 +196,9 @@
   new IntersectionObserver(([e]) => { coverOn = e.isIntersecting && (!document.body.classList.contains('slides') || sections[si] === sections[0]); syncCover(); }).observe($('#c00'));
   const coverForSlide = () => { coverOn = sections[si] === sections[0]; syncCover(); };
 
+  // 表格裡的短欄位（標籤、指令）不換行，長的說明欄才換行；手機上表格變寬就左右滑
+  $$('main td, main th').forEach((c) => { if (c.textContent.trim().length <= 12) c.style.whiteSpace = 'nowrap'; });
+
   // ---------- Redis／SQL 切換 ----------
   $$('[data-cmp]').forEach((c) => {
     c.querySelectorAll('.cmp-tabs button').forEach((b) => b.onclick = () => {
