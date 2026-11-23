@@ -153,6 +153,13 @@ async def demo_link():
     return {"url": f"/w/{quote(tok)}", "name": t.get("name", "")}
 
 
+@app.get("/demo", include_in_schema=False)
+async def demo_page():
+    """報告網頁（GitHub Pages）的「即時版」用：直接轉到示範車隊的戰情室；跨網域讀不到 /api/demo，所以用轉址。"""
+    link = (await demo_link())["url"]
+    return RedirectResponse(link or "/login", status_code=302)
+
+
 PAGES = {"/war": "war.html", "/plan": "plan.html", "/": "index.html", "/login": "login.html", "/trip": "trip.html", "/replay": "replay.html", "/footprint": "footprint.html", "/about": "about.html", "/settings": "settings.html", "/nav": "trip.html"}  # /nav＝行程頁的導航模式
 for path, file in PAGES.items():
     app.add_api_route(path, page(file), include_in_schema=False)
