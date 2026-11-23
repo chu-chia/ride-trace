@@ -35,9 +35,9 @@
 
 **全年足跡與點亮鄉鎮**：用一整年的真實騎乘紀錄（16.5 萬個 GPS 點、358 天）。
 
-| 全年足跡 | 點亮鄉鎮 |
-|---|---|
-| ![全年足跡](docs/images/footprint.jpg) | ![點亮鄉鎮](docs/images/towns.jpg) |
+| 全年足跡 | 點亮鄉鎮 | 熱力圖 |
+|---|---|---|
+| ![全年足跡](docs/images/footprint.jpg) | ![點亮鄉鎮](docs/images/towns.jpg) | ![熱力圖](docs/images/heat.jpg) |
 
 ## 功能
 
@@ -69,6 +69,37 @@
 | **cache-aside＋`SET NX`** | 外部 API（TDX 每月 4,500 次）結果快取，鎖住只讓一個 Worker 去抓 | 要另外架快取 |
 
 每個 key 的設計與理由：[docs/Redis功能對照.md](docs/Redis功能對照.md)。
+
+## 資料庫設計
+
+完整說明在 [docs/資料庫設計.md](docs/資料庫設計.md)（ER 圖、資料型別選擇、索引、ACID、持久化、資料量、Redis 不擅長的地方）。重點：
+
+**先畫 ER 圖，再依「怎麼查」決定怎麼存。** Redis 沒有資料表、JOIN、外鍵，所以把關聯式的概念一一對應過來：
+
+| 關聯式 | 騎跡的做法 |
+|---|---|
+| 一列資料 | Hash：`user:{uid}`、`trip:{tid}` |
+| 主鍵 AUTO_INCREMENT | `INCR seq:user` |
+| UNIQUE 約束 | `SET username:{name} {uid} NX`，搶不到就是帳號已存在 |
+| 外鍵 | id 放進 key 名稱：`trip:{tid}:state:{uid}` |
+| 多對多關聯表 | 兩個方向各一個 Set：`trip:{tid}:members`、`user:{uid}:trips` |
+| 彙總表 | 寫入時就算好（反正規化）：`trip:{tid}:stats:{uid}` |
+| 二級索引 | RediSearch `FT.CREATE`：中文全文＋TAG＋NUMERIC＋GEO＋GEOSHAPE |
+| 時間索引 | Stream ID 就是毫秒時間戳，`XRANGE` 依時間查 |
+
+**交易與一致性（ACID 對照）**
+
+- **原子性**：`MULTI/EXEC` 與 Lua script。例如「全員到齊」：`SADD` 抵達名單 → `SDIFF` 算誰沒到 → `SET NX`，整段在一個 script 裡，兩個 Worker 同時判斷也只通知一次（SQL 要 `SELECT … FOR UPDATE`）。
+- **隔離性**：Redis 單執行緒，指令依序執行；開始行程用 `WATCH` 樂觀鎖，被搶先改就重試。
+- **持久性**：AOF（`appendfsync everysec`，類似交易日誌，最多掉 1 秒）＋RDB 快照（`save 300 10`）；`maxmemory-policy noeviction`，記憶體滿了寧可報錯也不刪資料。
+- **At-least-once 與冪等**：Worker 處理完才 `XACK`，當掉時由別的 Worker `XAUTOCLAIM` 接手；統計依時間戳去重，重送不會重算里程。
+- **Pipeline 不等於交易**：每筆 GPS 回報用 Pipeline 一次送出十幾個指令只是為了減少網路來回，刻意不包交易，避免拖慢高頻寫入。
+
+**資料生命週期**：心跳、登入、邀請碼、快取都用 TTL 自己過期（SQL 要寫排程 `DELETE`）；工作佇列 `XADD … MAXLEN` 自動修剪；系統指標 TimeSeries 保留 7 天；軌跡與足跡永久保存。
+
+**資料量**（開發機）：約 17 萬個 key、384 MB；地名與 POI 15.6 萬筆、測速照相 1,901 筆、鄉鎮多邊形 368 個；一位使用者的全年足跡 16.5 萬點。
+
+**Redis 不擅長的**：臨時的報表查詢（沒有 JOIN／GROUP BY）、資料大了記憶體成本高、約束要自己寫。實務上會讓 Redis 處理即時資料，結束的行程再歸檔到 SQL 做分析。
 
 ## 系統架構
 
@@ -132,6 +163,7 @@ open http://localhost:8750    # 註冊一個帳號就能開團
 | 文件 | 內容 |
 |---|---|
 | [開發者指南](docs/開發者指南.md) | 啟動、資料匯入、模擬器、各頁面網址、外部 API 設定 |
+| [資料庫設計](docs/資料庫設計.md) | ER 圖、關聯式對應、型別選擇、索引、ACID、持久化、資料量 |
 | [Redis 功能對照](docs/Redis功能對照.md) | 每個 Redis 功能用在哪個 key、為什麼 |
 | [架構與 UML](docs/架構與UML.md) | 架構圖、用例圖、循序圖、活動圖、狀態圖、部署圖 |
 | [部署](docs/部署.md) | Tailscale HTTPS、Windows 正式機、CI/CD |
