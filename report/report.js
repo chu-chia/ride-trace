@@ -114,8 +114,17 @@
   }
 
   // 封面：登入頁的地圖當背景（等頁面其他東西先載完）
+  // 捲離封面（或簡報翻到別頁）就把封面地圖卸掉，畫面上同時只跑一張會動的 3D 地圖，GPU 不會一直被佔著
   const cover = $('#coverFrame');
-  addEventListener('load', () => { cover.src = cover.dataset.src; });
+  let pageLoaded = false, coverOn = true;
+  const syncCover = () => {
+    const want = pageLoaded && coverOn;
+    if (want && !cover.src.includes('login')) cover.src = cover.dataset.src;
+    else if (!want && cover.src.includes('login')) cover.src = 'about:blank';
+  };
+  addEventListener('load', () => { pageLoaded = true; syncCover(); });
+  new IntersectionObserver(([e]) => { coverOn = e.isIntersecting && (!document.body.classList.contains('slides') || sections[si] === sections[0]); syncCover(); }).observe($('#c00'));
+  const coverForSlide = () => { coverOn = sections[si] === sections[0]; syncCover(); };
 
   // ---------- Redis／SQL 切換 ----------
   $$('[data-cmp]').forEach((c) => {
@@ -272,6 +281,7 @@
       fit(device, sl);
     }
     history.replaceState(null, '', '#' + s.id);
+    coverForSlide();
   }
   function enterSlides(at) {
     document.body.classList.add('slides');

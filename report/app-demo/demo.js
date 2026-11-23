@@ -28,6 +28,9 @@
 
   // 報告封面：只要登入頁的地圖，把標誌、路線卡、表單都藏起來
   if (page === 'login' && q.has('cover')) {
+    // 封面只是背景：強制省電模式（解析度最多 1.25～1.5 倍、30 fps、不做模糊）。只改這個 iframe 自己的 Storage 原型，不影響其他頁
+    const get = Storage.prototype.getItem;
+    Storage.prototype.getItem = function (k) { return k === 'qiji:lowpower' ? '1' : get.call(this, k); };
     const st = document.createElement('style');
     st.textContent = '.hero-brand,.routecard,.theme-btn,.side{display:none!important}.stage{position:fixed!important;inset:0!important;width:auto!important}';
     document.documentElement.append(st);

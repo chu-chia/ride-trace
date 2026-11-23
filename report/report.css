@@ -81,7 +81,7 @@ ul.plain li{margin:4px 0}
 /* ---------- 封面 ---------- */
 .cover{position:relative;min-height:100vh;padding:0;overflow:hidden;display:flex;align-items:flex-end;border-top:0;margin-right:calc(-1 * var(--demo-w));z-index:16;background:var(--bg)}
 .cover-map{position:absolute;inset:0;overflow:hidden;pointer-events:none}
-.cover-map iframe{position:absolute;top:0;left:12%;height:100%;width:100%;border:0}
+.cover-map iframe{position:absolute;inset:0;height:100%;width:100%;border:0}
 .cover-map::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,var(--bg) 96%),linear-gradient(90deg,color-mix(in srgb,var(--bg) 55%,transparent),transparent 60%)}
 .cover-in{position:relative;padding:0 clamp(24px,5vw,72px) 72px;max-width:820px}
 .cover h1{font-size:clamp(44px,6vw,76px);line-height:1.08;margin:0 0 6px;letter-spacing:-.02em}
