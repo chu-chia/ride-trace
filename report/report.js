@@ -329,23 +329,30 @@
   let si = 0;
   const slot = (s) => {
     let el = $('.slot', s);
-    if (!el && s.dataset.demo) { el = document.createElement('div'); el.className = 'slot'; s.append(el); }
+    if (!el) { el = document.createElement('div'); el.className = 'slot'; s.append(el); }
     return el;
   };
   function placeSlide() {
     const s = sections[si];
     sections.forEach((x) => x.classList.toggle('cur', x === s));
+    // 填滿視窗：以 1600×900 為基準縮放，視窗比 16:9 寬就把頁面加寬、比較窄就加高
     const sc = Math.min(innerWidth / 1600, innerHeight / 900);
+    s.style.width = `${innerWidth / sc}px`; s.style.height = `${innerHeight / sc}px`;
     s.style.transform = `scale(${sc})`;
     $('#sNum').textContent = `${si + 1} / ${sections.length}`;
-    const sl = slot(s);
+    const dm = s.id === 'c00' ? null : demoOf(s);   // 每一頁都配一個頁面（封面除外）
+    s.classList.toggle('has-slot', !!dm);
+    const sl = dm ? slot(s) : null;
     if (sl) {
-      const d = DEMO[s.dataset.demo];
+      const d = DEMO[dm[0]];
       sl.classList.toggle('desk', !!d.desk);
+      if (!d.desk) sl.style.height = `${innerHeight / sc - 104}px`;   // 頁面高度扣掉上下邊距
+      else sl.style.height = '';
       if (device.parentElement !== sl) sl.append(device);
+      Object.assign(device.style, { transition: 'none', rotate: '0deg', scale: '1', opacity: '1' });
       device.hidden = false;
       device.classList.toggle('desk', !!d.desk);
-      const u = urlFor(s.dataset.demo);
+      const u = urlFor(dm[0]);
       if (u !== curUrl) { curUrl = u; frame.src = u; }
       fit(device, sl);
     }
@@ -359,7 +366,7 @@
   }
   function exitSlides() {
     document.body.classList.remove('slides');
-    sections.forEach((x) => { x.classList.remove('cur'); x.style.transform = ''; });
+    sections.forEach((x) => { x.classList.remove('cur', 'has-slot'); x.style.transform = x.style.width = x.style.height = ''; });
     stage.prepend(device);
     if (document.body.classList.contains('demo-off')) { frame.src = 'about:blank'; curUrl = ''; }
     const s = sections[si];
@@ -370,7 +377,7 @@
   const go = (d) => { si = Math.max(0, Math.min(sections.length - 1, si + d)); placeSlide(); };
   $('#bSlides').onclick = () => enterSlides();
   $$('[data-act="slides"]').forEach((b) => b.onclick = () => enterSlides(0));
-  $('#sPrev').onclick = () => go(-1); $('#sNext').onclick = () => go(1); $('#sExit').onclick = exitSlides;
+  $('#sPrev').onclick = () => go(-1); $('#sNext').onclick = () => go(1); $('#sExit').onclick = exitSlides; $('#sClose').onclick = exitSlides;
   document.addEventListener('keydown', (e) => {
     if (e.target.closest?.('input,textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
     const on = document.body.classList.contains('slides');
