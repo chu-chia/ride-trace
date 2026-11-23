@@ -41,8 +41,8 @@ function applyFlags() {
   for (const m of maps) {
     try {
       if (m.getLayer('hillshade')) m.setLayoutProperty('hillshade', 'visibility', flags.has('nohs') ? 'none' : 'visible');
-      // dpr125：地圖解析度 1.25 倍；關掉時回到 mapbase 的預設（省電 3D 1.5、省電 2D 2、一般模式原生）
-      const dpr = flags.has('dpr125') ? 1.25 : !LOW ? devicePixelRatio : Math.min(devicePixelRatio, m.getTerrain() || m._qijiTilt ? 1.5 : 2);
+      // dpr125：地圖解析度 1.25 倍；關掉時回到 mapbase 的預設（省電地形 1.25、省電其他 1.5、一般模式原生）
+      const dpr = flags.has('dpr125') ? 1.25 : !LOW ? devicePixelRatio : Math.min(devicePixelRatio, m.getTerrain() || m._qijiTilt ? 1.25 : 1.5);
       if (m.getPixelRatio() !== dpr) m.setPixelRatio(dpr);
       if (flags.has('lod') !== !!m._qijiLod) { m._qijiLod = flags.has('lod'); m.setSourceTileLodParams(m._qijiLod ? 3.5 : 9.314, m._qijiLod ? 2 : 3); }
       if (m.getMaxPitch() > 0) {

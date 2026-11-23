@@ -162,11 +162,11 @@ export function flatZoom(b, padding = {}, maxZoom = 15, map) {
   return Math.min(maxZoom, Math.log2(Math.max(1, Math.min(W / (dx * 512), H / (dy * 512)))));
 }
 
-// 地圖解析度：省電模式（手機預設）最多 2 倍；省電又畫立體地形時再降到 1.5 倍（立體地形每格都很吃 GPU）
+// 地圖解析度：手機省電模式最多 1.5 倍；若開立體地形則最多 1.25 倍。
 const LOW_DPR = () => document.documentElement.classList.contains('low-power');
 function mapDpr(withTerrain) {
   if (!LOW_DPR()) return devicePixelRatio;
-  return Math.min(devicePixelRatio, withTerrain ? 1.5 : 2);
+  return Math.min(devicePixelRatio, withTerrain ? 1.25 : 1.5);
 }
 
 // 立體地形（按 3D 時真的把山立起來）。iPhone 實測（11-22，戰情室）：
@@ -199,7 +199,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     if (window.qijiMapDown) throw new Error(window.qijiMapDown);
     map = new maplibregl.Map({
       container, style: STYLES[cur].url, center, zoom, interactive,
-      // 省電模式（common.js 在 <html> 加 .low-power）：手機 3 倍螢幕只畫 2 倍，像素少一半以上
+      // 省電模式（common.js 在 <html> 加 .low-power）：降低繪圖像素，手指操作時仍維持即時更新
       pixelRatio: mapDpr(terrain && useTerrain),
       fadeDuration: document.documentElement.classList.contains('low-power') ? 0 : 300, // 省電：文字不做淡入（淡入期間會一直重畫）
       // 反鋸齒（MSAA）：斜的路線、山的稜線、立體建築邊緣才不會一格一格的。手機預設是省電模式，也一律開（不然 iPhone 上最明顯）

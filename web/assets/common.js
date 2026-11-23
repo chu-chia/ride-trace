@@ -351,7 +351,7 @@ export function liquidGlass(el, { radius = 24, bezel = 20, scale = 90 } = {}) {
 
 // ---------- 省電模式（手機預設開，設定頁可關） ----------
 // 地圖頁每一格都在移動鏡頭，地圖就每一格重畫；手機上再乘上 3 倍解析度、3D 地形和玻璃模糊，很吃電。
-// 省電時：鏡頭與標記 30 fps、地圖解析度最多 2 倍、面板不做背景模糊、戰情室不自動旋轉。
+// 省電時：鏡頭與標記 30 fps、地圖解析度最多 1.5 倍、面板不做背景模糊、戰情室不自動旋轉。
 export const LOW_POWER = (() => {
   let v = null;
   try { v = localStorage.getItem('qiji:lowpower'); } catch { /* 私密模式 */ }

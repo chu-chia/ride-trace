@@ -7,6 +7,7 @@ import { api, tripGate, $, esc, avatar, initialOf, inkOn, clock, ago, press, set
 import { createMap, addCompass, styleMenu } from '/assets/mapbase.js';
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
+import { trailChangeDetector } from '/assets/trail-change.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 await tripGate(tid);  // 錯誤 id／非成員／被移出／沒登入：錯誤畫面或登入頁（UX-02）
@@ -179,10 +180,12 @@ function dropMember(uid) {
   m.marker.remove();
   S.members.delete(uid);
 }
+const trailChanged = trailChangeDetector();
 const trailsGeo = () => ({ type: 'FeatureCollection', features: [...S.members.values()].filter((m) => m.trail.length > 1).map((m) => ({
   type: 'Feature', properties: { color: m.u.color }, geometry: { type: 'LineString', coordinates: m.pos ? [...m.trail, m.pos] : m.trail } })) });
 const routeGeo = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: S.route?.coords || [] } });
 M.onStyle(() => {
+  trailChanged.reset();
   if (!map.getSource('route')) map.addSource('route', { type: 'geojson', data: routeGeo() });
   if (!map.getLayer('route')) map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3d9bff', 'line-width': 6, 'line-opacity': 0.85 } });
   if (!map.getSource('trails')) map.addSource('trails', { type: 'geojson', data: trailsGeo() });
@@ -291,7 +294,10 @@ function frame(now) {
     else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
     else M.followGroup(pts, { padding: pad(), maxZoom: 14 });
   } else if (S.styleReady && !pts.length && !S.profiling && autoFollow && !M.busy) fitLast();
-  if (now - lastTrail > 500 && !window.__qijiPerfFlags?.has('notrail')) { lastTrail = now; map.getSource('trails')?.setData(trailsGeo()); }
+  if (now - lastTrail > 500 && !window.__qijiPerfFlags?.has('notrail')) {
+    lastTrail = now;
+    if (trailChanged(S.members)) map.getSource('trails')?.setData(trailsGeo());
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

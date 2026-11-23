@@ -3,6 +3,7 @@ import { createMap, declutter, addCompass, styleMenu } from '/assets/mapbase.js'
 import { cameraGestures, resumeMs } from '/assets/gestures.js';
 import { liveSocket } from '/assets/livesock.js';
 import { gpsQueue } from '/assets/gpsqueue.js';
+import { trailChangeDetector } from '/assets/trail-change.js';
 
 const tid = new URLSearchParams(location.search).get('id');
 // 打錯 id、不是成員、被移出、沒登入：先擋下來顯示錯誤畫面（或導去登入），不會卡在「載入中」一直重連（UX-02）
@@ -126,6 +127,7 @@ function placeMarker(m) {
 map.on('rotate', () => S.members.forEach(placeMarker));
 
 /* ---------- 軌跡圖層 ---------- */
+const trailChanged = trailChangeDetector();
 function trailsGeo() {
   return {
     type: 'FeatureCollection',
@@ -136,6 +138,7 @@ function trailsGeo() {
   };
 }
 M.onStyle(() => {
+  trailChanged.reset();
   if (!map.getSource('trails')) map.addSource('trails', { type: 'geojson', data: trailsGeo() });
   if (!map.getLayer('trails')) {
     map.addLayer({ id: 'trails-casing', type: 'line', source: 'trails', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#000', 'line-opacity': 0.25, 'line-width': 6 } });
@@ -304,7 +307,7 @@ function tick(now) {
   }
   if (now - lastTrailDraw > (LOW_POWER ? 1000 : 150) && map.getSource('trails')) {
     lastTrailDraw = now;
-    map.getSource('trails').setData(trailsGeo());
+    if (trailChanged(S.members)) map.getSource('trails').setData(trailsGeo());
   }
   requestAnimationFrame(tick);
 }
