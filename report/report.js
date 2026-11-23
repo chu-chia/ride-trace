@@ -49,19 +49,23 @@
     if (!d) return '';
     return src === 'live' ? LIVE + d.live : d.path();
   }
+  // 裝置外框：先放到容器正中央，再依容器大小縮放（不超過原尺寸）
   function fit(dev = device, box = stage) {
     const desk = dev.classList.contains('desk');
     const w = desk ? 1460 : 414, h = desk ? 880 : 868;
     const bw = box.clientWidth, bh = box.clientHeight;
     if (!bw || !bh) return;
-    dev.style.transform = `scale(${Math.min(bw / w, bh / h, 1)})`;
+    const sc = Math.min(bw / w, bh / h, 1);
+    const centered = getComputedStyle(dev).position === 'absolute';
+    dev.style.transform = centered ? `translate(-50%,-50%) scale(${sc})` : `scale(${sc})`;
   }
+  let lastCap = '';
   function show(key, cap) {
-    curKey = key;
+    curKey = key; lastCap = cap || '';
+    if (document.body.classList.contains('demo-off') && !document.body.classList.contains('slides')) return;
     const has = !!DEMO[key];
     device.hidden = !has; $('#demoEmpty').hidden = has;
-    $('#demoCap').innerHTML = has ? (cap || '') : '';
-    $('#liveNote').hidden = !(has && src === 'live');
+    $('#demoCap').innerHTML = has ? (cap || '') + (src === 'live' ? '<span class="ln">正式機：Demo 車隊即時跑（其他頁要登入）；連不到請切回展示資料。</span>' : '') : '';
     if (!has) return;
     device.classList.toggle('desk', !!DEMO[key].desk);
     const u = urlFor(key);
@@ -72,8 +76,17 @@
   $$('.demo-bar .seg button').forEach((b) => b.onclick = () => {
     src = b.dataset.src;
     $$('.demo-bar .seg button').forEach((x) => x.classList.toggle('on', x === b));
-    curUrl = ''; show(curKey, $('#demoCap').innerHTML);
+    curUrl = ''; show(curKey, lastCap);
   });
+  // 收起／展開右側（收起時卸載嵌入的頁面，不佔 GPU；記在這台瀏覽器）
+  const setDemoOff = (off) => {
+    document.body.classList.toggle('demo-off', off);
+    try { localStorage.setItem('rt-report-demo-off', off ? '1' : '0'); } catch { /* */ }
+    if (off) { frame.src = 'about:blank'; curUrl = ''; } else { show(curKey, lastCap); }
+  };
+  $('#demoHide').onclick = () => setDemoOff(true);
+  $('#demoShow').onclick = () => setDemoOff(false);
+  try { if (localStorage.getItem('rt-report-demo-off') === '1') document.body.classList.add('demo-off'); } catch { /* */ }
   addEventListener('resize', () => { fit(); if (document.body.classList.contains('slides')) placeSlide(); });
 
   // 沒有專屬操作的章節（長捲動時）也放一個相關的頁面，右邊不會空著；簡報模式這些頁維持全寬
@@ -309,6 +322,7 @@
     document.body.classList.remove('slides');
     sections.forEach((x) => { x.classList.remove('cur'); x.style.transform = ''; });
     stage.prepend(device);
+    if (document.body.classList.contains('demo-off')) { frame.src = 'about:blank'; curUrl = ''; }
     const s = sections[si];
     curSec = null; s.scrollIntoView({ behavior: 'instant', block: 'start' });
     const d = demoOf(s);

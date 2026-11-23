@@ -24,15 +24,15 @@
 <aside class="demo" id="demo" aria-label="操作展示">
   <div class="demo-bar">
     <div class="seg" role="group" aria-label="資料來源"><button class="on" data-src="demo" type="button">展示資料</button><button data-src="live" type="button">正式機即時</button></div>
-    <a class="demo-open" id="demoOpen" href="#" target="_blank" rel="noopener">新分頁開 ↗</a>
+    <div class="right"><a class="demo-open" id="demoOpen" href="#" target="_blank" rel="noopener">新分頁開 ↗</a><button class="demo-hide" id="demoHide" type="button">收起 ⇥</button></div>
   </div>
   <div class="demo-cap" id="demoCap"></div>
   <div class="stage" id="stage">
     <div class="device" id="device"><iframe id="demoFrame" title="騎跡操作展示" loading="lazy"></iframe></div>
     <div class="demo-empty" id="demoEmpty" hidden>這一章沒有操作展示。<br>捲到有 ▶ 的章節，這裡會切到對應的頁面。</div>
   </div>
-  <div class="live-note" id="liveNote" hidden>正式機跑在作者家裡的 Windows 電腦（Tailscale Funnel 公開），關機時會連不上，請切回「展示資料」。即時版顯示的是一直在跑的 Demo 車隊（中橫，真實速度）。</div>
 </aside>
+<button class="demo-show" id="demoShow" type="button">◀ 展開操作展示</button>
 
 <main id="main">
 

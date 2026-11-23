@@ -6,7 +6,7 @@
   --font:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
   --num:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",system-ui,sans-serif;
   --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
-  --toc-w:236px; --demo-w:430px;
+  --toc-w:236px; --demo-w:clamp(440px,30vw,600px);
   color-scheme:light;
 }
 :root:not([data-theme="light"]){
@@ -66,10 +66,13 @@ ul.plain li{margin:4px 0}
 .demo-bar .seg{display:inline-flex;background:var(--surface-2);border-radius:999px;padding:3px}
 .demo-bar .seg button{border:0;background:none;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .demo-bar .seg button.on{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.2)}
-.demo-cap{width:100%;font-size:12.5px;color:var(--muted);min-height:2.6em;line-height:1.45}
+.demo-cap{width:100%;font-size:12.5px;color:var(--muted);line-height:1.45;height:4.35em;overflow:hidden;flex:none}
+.demo-cap .ln{display:block;margin-top:3px;color:var(--warn)}
 .demo-cap b{color:var(--fg)}
-.stage{flex:1;width:100%;display:grid;place-items:center;min-height:0;position:relative}
-.device{position:relative;border-radius:46px;background:#0c0c0e;padding:12px;box-shadow:var(--shadow),inset 0 0 0 1.5px rgba(255,255,255,.14);transform-origin:center center}
+.stage{flex:1;width:100%;min-height:0;position:relative}
+.stage>.device{position:absolute;left:50%;top:50%}
+.stage>.demo-empty{position:absolute;inset:0;display:grid;place-items:center;margin:auto}
+.device{position:relative;border-radius:46px;background:#0c0c0e;padding:12px;box-shadow:var(--shadow),inset 0 0 0 1.5px rgba(255,255,255,.14);transform-origin:center center;flex:none}
 .device iframe{display:block;border:0;border-radius:34px;background:#000;width:390px;height:844px}
 .device.desk{border-radius:16px;padding:10px}
 .device.desk iframe{border-radius:8px;width:1440px;height:860px}
@@ -250,3 +253,16 @@ body.slides .er{grid-template-columns:1.35fr 1fr;align-items:start}
 body.slides .er-panel pre{font-size:12.5px}
 .er>*,.flow>*,.flow-cols>*{min-width:0}
 .er-panel pre{white-space:pre-wrap;word-break:break-all}
+
+/* 收起操作展示 */
+.demo-bar .right{display:flex;align-items:center;gap:12px}
+.demo-hide{border:0;background:none;color:var(--muted);font-size:12.5px;padding:2px 0}
+.demo-hide:hover{color:var(--fg)}
+.demo-show{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:15;writing-mode:vertical-rl;border:1px solid var(--line);border-right:0;border-radius:12px 0 0 12px;background:var(--surface);color:var(--fg);padding:14px 8px;font-size:13px;font-weight:600;box-shadow:var(--shadow)}
+.demo-show:hover{color:var(--accent-ink)}
+body.demo-off{--demo-w:0px}
+body.demo-off .demo{display:none}
+body:not(.demo-off) .demo-show{display:none}
+@media (max-width:1000px){.demo-show{display:none}}
+body.slides .demo-show{display:none}
+.sheet>.device{position:absolute;left:50%;top:50%}
