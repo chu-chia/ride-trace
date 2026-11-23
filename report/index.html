@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>騎跡 RideTrace｜Redis 資料庫專題報告</title>
+<meta name="description" content="機車車隊即時定位、回放與全年足跡：用 Redis 8 的 GEO、Streams、Pub/Sub、TimeSeries、RediSearch、JSON 解決即時與地理資料的問題。">
+<link rel="icon" href="app/assets/favicon.svg">
+<script>try{const t=localStorage.getItem('rt-report-theme');if(t==='light')document.documentElement.dataset.theme='light'}catch{}</script>
+<link rel="stylesheet" href="report.css">
+</head>
+<body>
+
+<aside class="toc" aria-label="目錄">
+  <div class="brand"><img src="app/assets/icon-192.png" alt=""><div>騎跡 RideTrace<small>Redis 資料庫專題</small></div></div>
+  <nav><ol id="tocList"></ol></nav>
+  <div class="toc-foot">
+    <button class="tbtn primary" id="bSlides" type="button"><span class="lbl">簡報模式</span> <kbd>S</kbd></button>
+    <button class="tbtn" id="bTheme" type="button"><span class="lbl" id="themeLbl">切成淺色</span></button>
+    <a class="tbtn" href="notes.html" target="_blank" rel="noopener"><span class="lbl">講稿（手機版）</span></a>
+  </div>
+</aside>
+
+<aside class="demo" id="demo" aria-label="操作展示">
+  <div class="demo-bar">
+    <div class="seg" role="group" aria-label="資料來源"><button class="on" data-src="demo" type="button">展示資料</button><button data-src="live" type="button">正式機即時</button></div>
+    <a class="demo-open" id="demoOpen" href="#" target="_blank" rel="noopener">新分頁開 ↗</a>
+  </div>
+  <div class="demo-cap" id="demoCap"></div>
+  <div class="stage" id="stage">
+    <div class="device" id="device"><iframe id="demoFrame" title="騎跡操作展示" loading="lazy"></iframe></div>
+    <div class="demo-empty" id="demoEmpty" hidden>這一章沒有操作展示。<br>捲到有 ▶ 的章節，這裡會切到對應的頁面。</div>
+  </div>
+  <div class="live-note" id="liveNote" hidden>正式機跑在作者家裡的 Windows 電腦（Tailscale Funnel 公開），關機時會連不上，請切回「展示資料」。即時版顯示的是一直在跑的 Demo 車隊（中橫，真實速度）。</div>
+</aside>
+
+<main id="main">
+
+<!-- 00 封面 -->
+<section class="ch cover nodemo" id="c00" data-title="封面" data-demo="">
+  <div class="cover-map" aria-hidden="true"><iframe id="coverFrame" title="" tabindex="-1" data-src="app/login.html?cover=1"></iframe></div>
+  <div class="cover-in">
+    <p class="kicker">DBMS · Redis 個人專題</p>
+    <h1>騎跡<span>RideTrace</span></h1>
+    <p class="tag">整隊一起出發，一個都不少。</p>
+    <p class="who">機車車隊即時定位、回放與全年足跡 · 11446084 朱嘉瑋 · 資管系四技二乙</p>
+    <div class="actions"><button class="tbtn primary" type="button" data-act="slides">簡報模式 <kbd>S</kbd></button><a class="tbtn" href="#c01">往下閱讀</a><a class="tbtn" href="https://github.com/chu-chia/ride-trace" target="_blank" rel="noopener">GitHub</a></div>
+  </div>
+</section>
+
+<!-- 01 動機 -->
+<section class="ch nodemo" id="c01" data-title="動機與目標" data-group="開場" data-demo="">
+<div class="wrap">
+  <p class="kicker">01 · 動機與目標</p>
+  <h2>跟朋友騎山路，最常發生四件事</h2>
+  <p class="lead">有人落隊沒人發現、在岔路走散、到了集合點不知道誰還沒到、回家想看整趟只有各自零散的紀錄。</p>
+  <div class="cards">
+    <div class="card"><div class="icon">1</div><h4>即時看到全隊</h4><p>每個人每 2～3 秒回報位置，全隊地圖同步更新</p></div>
+    <div class="card"><div class="icon">2</div><h4>自動警示</h4><p>落隊、失聯、偏離路線、異常久停、SOS，系統主動通知</p></div>
+    <div class="card"><div class="icon">3</div><h4>整趟回放</h4><p>全隊同步播放，事件時間軸、速度與海拔曲線</p></div>
+    <div class="card"><div class="icon">4</div><h4>長期紀錄</h4><p>全年足跡、點亮全台 368 個鄉鎮、熱力圖</p></div>
+  </div>
+  <p class="long">刻意不做速度排行榜，避免鼓勵飆車。所有位置資料只存在自己的伺服器，路線計算用本機的 Valhalla，不送到 Google 或公開的路線服務。</p>
+  <div class="callout">這是一門<b>資料庫</b>課。以下每一章都從一個功能出發，講它背後的資料怎麼存、怎麼查、為什麼選 Redis，以及換成 SQL 會遇到什麼。</div>
+</div>
+</section>
+
+<!-- 02 為什麼是 Redis -->
+<section class="ch nodemo" id="c02" data-title="為什麼是 Redis" data-demo="">
+<div class="wrap">
+  <p class="kicker">02 · 工作負載分析</p>
+  <h2>先看資料長什麼樣，再選資料庫</h2>
+  <p class="lead">騎跡的資料是<b>寫多讀少、要即時推送、要地理和時間查詢、很多會過期</b>。這幾點剛好都是 Redis 的強項。</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>特性</th><th>騎跡的情況</th><th>SQL 要補什麼</th></tr></thead>
+    <tbody>
+      <tr><td>寫入多</td><td>每位騎士每 2～3 秒一筆，一筆要更新十幾個地方</td><td>單筆寫入要夠快、要減少網路來回</td></tr>
+      <tr><td>即時推送</td><td>位置 1 秒內出現在全隊畫面</td><td>資料庫不會「推」，要輪詢或另外架訊息服務</td></tr>
+      <tr><td>地理查詢</td><td>隊友距離、前方 1 km 的測速照相、這個點在哪個鄉鎮</td><td>PostGIS</td></tr>
+      <tr><td>時間序列</td><td>回放的速度、海拔曲線，要依時間取、要降採樣</td><td>TimescaleDB 或自己寫</td></tr>
+      <tr><td>會過期</td><td>心跳、登入、邀請碼、快取</td><td>排程定期 DELETE</td></tr>
+      <tr><td>背景工作</td><td>落隊、統計、推播交給 Worker，當掉不能掉資料</td><td>RabbitMQ／Kafka</td></tr>
+    </tbody>
+  </table></div>
+  <div class="chips"><span class="chip r">Redis 8 一個服務</span><span class="chip">＝ PostgreSQL</span><span class="chip">＋ PostGIS</span><span class="chip">＋ TimescaleDB</span><span class="chip">＋ RabbitMQ</span><span class="chip">＋ 快取</span><span class="chip">＋ 排程器</span></div>
+  <p class="long">Redis 8 內建 Search、JSON、TimeSeries 模組，全部在記憶體中執行，單一指令是微秒等級。代價是記憶體比硬碟貴、沒有 JOIN（第 16 章會講）。</p>
+</div>
+</section>
+
+<!-- 03 架構 -->
+<section class="ch nodemo" id="c03" data-title="系統架構" data-demo="">
+<div class="wrap">
+  <p class="kicker">03 · 系統架構與部署</p>
+  <h2>一個 API、一個 Worker、一個 Redis</h2>
+  <p class="lead">手機回報位置給 FastAPI，API 寫進 Redis 並透過 <span class="t" data-t="pubsub">Pub/Sub</span> 推給全隊；需要判斷的事交給 Worker 從 <span class="t" data-t="stream">Stream</span> 領取。</p>
+  <svg class="arch" viewBox="0 0 720 360" role="img" aria-label="系統架構圖">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" style="color:var(--muted)"/></marker></defs>
+    <rect class="box" x="10" y="30" width="150" height="62" rx="12"/><text x="24" y="56">手機網頁</text><text class="s" x="24" y="76">騎乘・規劃・回放</text>
+    <rect class="box" x="10" y="112" width="150" height="62" rx="12"/><text x="24" y="138">Traccar Client</text><text class="s" x="24" y="158">原生 App 背景回報</text>
+    <rect class="box" x="10" y="194" width="150" height="62" rx="12"/><text x="24" y="220">戰情室・後台</text><text class="s" x="24" y="240">電腦大螢幕</text>
+    <rect class="box" x="240" y="100" width="150" height="90" rx="12"/><text x="256" y="128">FastAPI</text><text class="s" x="256" y="148">REST＋WebSocket</text><text class="s" x="256" y="166">Pipeline 寫入</text>
+    <rect class="box r" x="470" y="60" width="230" height="170" rx="14"/><text x="488" y="90">Redis 8</text>
+    <text class="s" x="488" y="112">GEO・Streams・Pub/Sub</text><text class="s" x="488" y="130">TimeSeries・Search・JSON</text><text class="s" x="488" y="148">Lua・TTL・Keyspace Notification</text><text class="s" x="488" y="170">AOF 每秒＋RDB 快照</text><text class="s" x="488" y="190">只綁 127.0.0.1、要密碼</text>
+    <rect class="box" x="470" y="266" width="230" height="62" rx="12"/><text x="488" y="292">Worker ×N</text><text class="s" x="488" y="312">Consumer Group：stats／alerts／push／import</text>
+    <rect class="box" x="240" y="266" width="150" height="62" rx="12"/><text x="256" y="292">Valhalla</text><text class="s" x="256" y="312">本機台灣路網</text>
+    <path class="ln" d="M160 61 C200 61 205 130 240 132"/><path class="ln" d="M160 143 L240 143"/><path class="ln" d="M160 225 C200 225 205 160 240 158"/>
+    <path class="ln a" d="M390 130 L470 120"/><text class="lb" x="404" y="112">寫入</text>
+    <path class="ln a" d="M470 170 L390 165"/><text class="lb" x="400" y="186">Pub/Sub</text>
+    <path class="ln a" d="M585 230 L585 266"/><text class="lb" x="592" y="252">XREADGROUP</text>
+    <path class="ln" d="M315 190 L315 266"/><text class="lb" x="322" y="236">算路線</text>
+  </svg>
+  <h3>部署：推上 GitHub 就自動上線</h3>
+  <p>Mac 開發 → 推到 GitHub → GitHub Actions 跑 CI（語法檢查＋冒煙測試，包含註冊、開團、回報、匯入）→ 通過後 Windows 正式機每分鐘檢查一次、自動部署 → Tailscale Funnel 把 <code>https://node.tail866fc3.ts.net:8443</code> 公開到網際網路。</p>
+  <p class="long">這份報告網頁本身放在 GitHub Pages，右邊的操作展示是同一份前端程式，只是把 API 換成錄好的資料，所以正式機關機時也能看。</p>
+</div>
+</section>
+
+<!-- 04 資料模型 -->
+<section class="ch nodemo" id="c04" data-title="資料模型" data-group="資料模型" data-demo="">
+<div class="wrap">
+  <p class="kicker">04 · 資料模型</p>
+  <h2>先畫 ER 圖，再依「怎麼查」決定怎麼存</h2>
+  <p class="lead">Redis 沒有資料表、沒有 JOIN、沒有外鍵。做法跟 SQL 相反：<b>先想好要怎麼查，再決定資料放成什麼型別</b>。點下面的實體，看它在 Redis 裡變成哪些 key。</p>
+  <div class="er">
+    <svg id="erSvg" viewBox="0 0 720 380" role="img" aria-label="ER 圖（可點選）"></svg>
+    <div class="er-panel" id="erPanel" aria-live="polite"></div>
+  </div>
+</div>
+</section>
+
+<section class="ch nodemo" id="c04b" data-title="關聯式怎麼對應" data-demo="">
+<div class="wrap">
+  <p class="kicker">04 · 資料模型（續）</p>
+  <h2>關聯式的概念怎麼搬進 Redis</h2>
+  <p class="lead">沒有 schema 的資料庫，規則要自己訂。下面是騎跡用的對應方式。</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>關聯式</th><th>騎跡的做法</th><th>例子</th></tr></thead>
+    <tbody>
+      <tr><td>一列資料</td><td>一個 Hash</td><td><code>user:{uid}</code>、<code>trip:{tid}</code></td></tr>
+      <tr><td>主鍵 AUTO_INCREMENT</td><td><code>INCR</code> 計數器</td><td><code>INCR seq:trip</code></td></tr>
+      <tr><td>UNIQUE</td><td><code>SET … NX</code> 搶占</td><td><code>SET username:wei 1 NX</code></td></tr>
+      <tr><td>外鍵</td><td>id 放進 key 名稱</td><td><code>trip:57:state:24</code></td></tr>
+      <tr><td>多對多關聯表</td><td>兩個方向各一個集合</td><td><code>trip:{tid}:members</code>、<code>user:{uid}:trips</code></td></tr>
+      <tr><td>彙總表</td><td>寫入時就算好（<span class="t" data-t="denorm">反正規化</span>）</td><td><code>trip:{tid}:stats:{uid}</code></td></tr>
+      <tr><td>二級索引</td><td>RediSearch <code>FT.CREATE</code></td><td><code>idx:poi</code>、<code>idx:speedcam</code></td></tr>
+    </tbody>
+  </table></div>
+  <p class="long">所有 key 的命名集中寫在 <code>backend/app/db.py</code> 的 <code>class K</code>，格式是「實體:id:子資料」，等於這個資料庫的 schema 文件。</p>
+</div>
+</section>
+
+<!-- 05 開團 -->
+<section class="ch" id="c05" data-title="開團" data-group="一趟騎乘" data-demo="home" data-cap="<b>首頁</b>：進行中的行程、全隊進度、建立行程與邀請碼加入。">
+<div class="wrap">
+  <p class="kicker">05 · 開團</p>
+  <h2>主鍵、唯一鍵、會過期的邀請碼</h2>
+  <p class="lead">建立行程拿到流水號，產生 6 碼邀請碼，24 小時後自動失效；開始行程時要防止兩個人同時按。</p>
+  <div class="cmp" data-cmp>
+    <div class="cmp-tabs"><button class="on" data-v="r">Redis</button><button data-v="s">換成 SQL</button><span class="ttl">trips.py</span></div>
+<pre data-v="r"><span class="c"># 主鍵：原子遞增</span>
+<span class="k">INCR</span> seq:trip                          <span class="c">→ 57</span>
+<span class="k">HSET</span> trip:57 name "中橫" owner 1 status planned
+<span class="c"># 邀請碼：搶不到（撞號）就換一組；24 小時自動消失</span>
+<span class="k">SET</span> invite:QF963Z 57 <span class="k">NX EX</span> 86400
+<span class="k">SADD</span> trip:57:members 1
+<span class="c"># 開始行程：樂觀鎖，有人搶先改了就重試</span>
+<span class="k">WATCH</span> trip:57 trip:57:members
+<span class="k">HGET</span>  trip:57 status                     <span class="c">→ planned</span>
+<span class="k">MULTI</span>
+  <span class="k">HSET</span> trip:57 status live started 1795423845037
+  <span class="k">SADD</span> trip:57:active 1 24 25 26 27
+<span class="k">EXEC</span>                                     <span class="c">→ nil 代表被搶先，重來</span></pre>
+<pre data-v="s" hidden>INSERT INTO trips(name, owner, status) VALUES ('中橫', 1, 'planned');  -- AUTO_INCREMENT
+INSERT INTO invites(code, trip_id, expires_at)
+  VALUES ('QF963Z', 57, NOW() + INTERVAL 1 DAY);   -- UNIQUE(code)，撞號會丟錯
+-- 過期要靠排程：DELETE FROM invites WHERE expires_at &lt; NOW();
+BEGIN;
+SELECT status FROM trips WHERE id = 57 FOR UPDATE; -- 悲觀鎖
+UPDATE trips SET status = 'live', started = NOW() WHERE id = 57;
+INSERT INTO trip_active SELECT trip_id, user_id FROM members WHERE trip_id = 57;
+COMMIT;</pre>
+    <div class="why">Redis 的 <span class="t" data-t="ttl">TTL</span> 讓邀請碼自己消失，不用排程；<span class="t" data-t="watch">WATCH</span> 是樂觀鎖，不會把整列鎖住。</div>
+  </div>
+</div>
+</section>
+
+<!-- 06 一筆 GPS 回報 -->
+<section class="ch nodemo" id="c06" data-title="一筆 GPS 回報" data-demo="">
+<div class="wrap">
+  <p class="kicker">06 · 寫入路徑</p>
+  <h2>一筆 GPS 回報，一次網路來回寫完十幾個地方</h2>
+  <p class="lead">回報一進來，API 用 <span class="t" data-t="pipeline">Pipeline</span> 把所有指令一次送出，再用 Pub/Sub 推給全隊、用 Stream 交給 Worker。按「播放」一步一步看。</p>
+  <div class="flow" id="flow">
+    <div class="flow-head"><button class="tbtn primary" id="flowPlay" type="button">▶ 播放</button><span class="muted" id="flowMsg">{ lat: 24.1838, lon: 121.2826, speed: 11.2, ts: … }</span></div>
+    <div class="flow-cols">
+      <div class="node" data-n="phone"><b>手機</b>POST /api/track</div>
+      <div class="pipe" id="pipe"></div>
+    </div>
+    <div class="fan">
+      <div class="node" data-n="pub"><b>Pub/Sub</b>trip:57:live → WebSocket → 全隊畫面</div>
+      <div class="node" data-n="stats"><b>Worker：stats</b>里程（Lua 去重）、熱力圖、點亮鄉鎮</div>
+      <div class="node" data-n="alerts"><b>Worker：alerts</b>落隊、抵達、測速、偏離、久停</div>
+    </div>
+  </div>
+  <div class="callout long"><b>為什麼不包成交易？</b>這裡用的是 <code>pipeline(transaction=False)</code>：只是減少網路來回，不保證原子性。位置、軌跡、速度彼此獨立，一個失敗不該拖累其他的，而且交易會讓高頻寫入變慢。真正需要原子性的判斷（落隊、全員到齊）交給 Worker 的 Lua。</div>
+</div>
+</section>
+
+<!-- 07 即時地圖 -->
+<section class="ch" id="c07" data-title="即時地圖" data-demo="trip" data-cap="<b>行程頁</b>：五位隊友沿中橫移動（30 倍速重播 3/14 真實騎乘）。右上可以切全隊、跟我、3D。">
+<div class="wrap">
+  <p class="kicker">07 · 騎乘中</p>
+  <h2>GEO 存位置、Pub/Sub 推給全隊</h2>
+  <p class="lead">每個人的最新位置放在同一個 <span class="t" data-t="geo">GEO</span> 集合，要算隊友距離、找最近的人直接查；畫面更新不靠輪詢，Redis 一 PUBLISH，所有連線中的瀏覽器就收到。</p>
+  <div class="cmp" data-cmp>
+    <div class="cmp-tabs"><button class="on" data-v="r">Redis</button><button data-v="s">換成 SQL</button><span class="ttl">ingest.py、live.py</span></div>
+<pre data-v="r"><span class="k">GEOADD</span> trip:57:geo 121.2826 24.1838 24
+<span class="k">GEOSEARCH</span> trip:57:geo <span class="k">FROMMEMBER</span> 24 <span class="k">BYRADIUS</span> 50 km <span class="k">ASC WITHDIST</span>
+<span class="c">→ 24 0 km、25 0.42 km、1 1.8 km …</span>
+<span class="k">PUBLISH</span> trip:57:live '{"kind":"pos","uid":24,"lat":24.1838,…}'
+<span class="c"># API 每個 WebSocket 連線 SUBSCRIBE trip:57:live，收到就轉給瀏覽器</span></pre>
+<pre data-v="s" hidden>-- 要 PostGIS
+SELECT uid, ST_Distance(pos::geography, me::geography)
+FROM rider_state WHERE trip_id = 57 ORDER BY 2;
+-- 資料庫不會主動通知：前端每 2 秒輪詢一次
+SELECT * FROM rider_state WHERE trip_id = 57 AND updated_at &gt; :last;
+-- （PostgreSQL 的 LISTEN/NOTIFY 可以，但 payload 上限 8 KB、沒有持久化）</pre>
+    <div class="why">10 個人同時騎，輪詢要每人每 2 秒查一次；Pub/Sub 只有「有新位置」時才送，而且延遲在毫秒等級。</div>
+  </div>
+  <p class="long">行程開始前的位置也會更新 GEO 並廣播（集合時看得到彼此），但不寫軌跡、不算統計，按下開始那一刻才開始記錄。</p>
+</div>
+</section>
+
+<!-- 08 警示 -->
+<section class="ch" id="c08" data-title="警示" data-demo="trip" data-cap="<b>行程頁</b>：落隊、抵達集合點、全員到齊會出現在事件列與通知；切到「訊息」分頁看事件時間軸。">
+<div class="wrap">
+  <p class="kicker">08 · 警示</p>
+  <h2>Streams＋Consumer Group：可靠的背景工作</h2>
+  <p class="lead">每筆回報 <code>XADD stream:ingest</code>，Worker 用 <span class="t" data-t="cg">Consumer Group</span> 領取。兩個 group 各拿一份完整訊息；同一個 group 開多個 Worker 就自動分攤。</p>
+  <div class="cards">
+    <div class="card"><h4>處理完才 XACK</h4><p>Worker 當掉時訊息留在待處理清單，別的 Worker 用 <code>XAUTOCLAIM</code> 接手閒置 60 秒的訊息</p></div>
+    <div class="card"><h4>At-least-once</h4><p>同一筆可能被處理兩次，所以每個判斷都要<span class="t" data-t="idem">冪等</span>：里程依時間戳去重</p></div>
+    <div class="card"><h4>只通知一次</h4><p>「判斷＋改旗標」寫在同一段 <span class="t" data-t="lua">Lua</span>，兩個 Worker 同時判斷也只警示一次</p></div>
+  </div>
+  <div class="cmp" data-cmp>
+    <div class="cmp-tabs"><button class="on" data-v="r">全員到齊（Lua）</button><button data-v="s">換成 SQL</button><span class="ttl">db.py</span></div>
+<pre data-v="r"><span class="c">-- KEYS: arrived:{wp}  active  allin:{wp}</span>
+<span class="k">if</span> redis.call('SADD', KEYS[1], uid) == 0 <span class="k">then return</span> 0 <span class="k">end</span>  <span class="c">-- 已經到過</span>
+<span class="k">local</span> left = redis.call('SDIFF', KEYS[2], KEYS[1])          <span class="c">-- 還沒到的人</span>
+<span class="k">if</span> #left == 0 <span class="k">and</span> redis.call('SET', KEYS[3], 1, 'NX') <span class="k">then</span>
+  <span class="k">return</span> 2                                              <span class="c">-- 全員到齊（只有一個 Worker 拿得到）</span>
+<span class="k">end</span>
+<span class="k">return</span> 1                                                <span class="c">-- 抵達</span></pre>
+<pre data-v="s" hidden>BEGIN;
+INSERT INTO arrivals(wp_id, uid) VALUES (:wp, :uid) ON CONFLICT DO NOTHING;
+SELECT COUNT(*) FROM active a
+ WHERE a.trip_id = :t AND NOT EXISTS (SELECT 1 FROM arrivals r WHERE r.wp_id = :wp AND r.uid = a.uid)
+ FOR UPDATE;                         -- 不鎖的話兩個 Worker 都會以為自己是最後一個
+UPDATE waypoints SET all_in = TRUE WHERE id = :wp AND all_in = FALSE;  -- 看影響列數
+COMMIT;</pre>
+    <div class="why">Redis 單執行緒執行 Lua，中間不會插進別的指令，等於免費的「可序列化」隔離。</div>
+  </div>
+  <p class="long"><b>落隊怎麼算：</b>有路線時用「沿路線里程」的中位數當全隊中心。山路髮夾彎直線距離只差 400 m，沿路線可能已經落後 3 km，用直線距離會漏掉。</p>
+</div>
+</section>
+
+<!-- 09 失聯 -->
+<section class="ch" id="c09" data-title="失聯" data-demo="trip" data-cap="<b>行程頁</b>：隊員列表的狀態燈。心跳過期的人會變成「失聯」並推播給全隊。">
+<div class="wrap">
+  <p class="kicker">09 · 失聯</p>
+  <h2>「沒有發生的事」怎麼偵測？讓 key 自己過期</h2>
+  <p class="lead">每筆回報重設一次心跳：移動中 90 秒、停著 10 分鐘。時間到 Redis 自動刪掉 key，並發出 <span class="t" data-t="keyspace">Keyspace Notification</span>，API 收到就發失聯警示。</p>
+  <div class="cmp" data-cmp>
+    <div class="cmp-tabs"><button class="on" data-v="r">Redis</button><button data-v="s">換成 SQL</button><span class="ttl">ingest.py、live.py</span></div>
+<pre data-v="r"><span class="c"># redis-server --notify-keyspace-events Ex</span>
+<span class="k">SET</span> hb:57:25 1795423900000 <span class="k">EX</span> 90       <span class="c"># 每筆回報重設</span>
+<span class="k">PSUBSCRIBE</span> __keyevent@*__:expired
+<span class="c">→ "hb:57:25"   ← 90 秒沒回報，key 過期的那一刻收到</span></pre>
+<pre data-v="s" hidden>UPDATE rider_state SET last_seen = NOW() WHERE trip_id = 57 AND uid = 25;
+-- 排程每 10 秒掃一次全表
+SELECT uid FROM rider_state
+ WHERE status = 'ok' AND last_seen &lt; NOW() - INTERVAL '90 seconds';
+UPDATE rider_state SET status = 'lost' WHERE …;</pre>
+    <div class="why">SQL 要排程一直掃，掃的頻率決定延遲；Redis 是事件驅動，過期當下就通知，沒有人失聯時完全不花資源。</div>
+  </div>
+</div>
+</section>
+
+<!-- 10 規劃路線 -->
+<section class="ch" id="c10" data-title="規劃路線" data-demo="plan" data-cap="<b>規劃頁</b>：埔里 → 清境 → 武嶺 → 太魯閣，重機路權、依個人速度估時。">
+<div class="wrap">
+  <p class="kicker">10 · 規劃路線</p>
+  <h2>RediSearch 中文搜尋、RedisJSON 存路線</h2>
+  <p class="lead">15.6 萬筆地名與 POI 用 RediSearch 建中文全文＋地理索引，打字就自動完成；算好的路線（幾千個座標）存成 JSON，只取需要的部分。</p>
+  <div class="cmp" data-cmp>
+    <div class="cmp-tabs"><button class="on" data-v="r">Redis</button><button data-v="s">換成 SQL</button><span class="ttl">poi.py、routes.py</span></div>
+<pre data-v="r"><span class="k">FT.CREATE</span> idx:poi <span class="k">ON HASH PREFIX</span> 1 poi: <span class="k">LANGUAGE</span> chinese
+  <span class="k">SCHEMA</span> name_n TEXT WEIGHT 2  kind TAG  rank NUMERIC SORTABLE  loc GEO
+<span class="k">FT.SUGGET</span> sug:poi "清" <span class="k">FUZZY MAX</span> 8             <span class="c">→ 清境農場、清水斷崖…</span>
+<span class="k">FT.SEARCH</span> idx:poi "@kind:{fuel} @loc:[121.28 24.18 3 km]"
+<span class="k">JSON.SET</span> route:33 $ '{"coords":[…3,875 點],"steps":[…],"summary":{…}}'
+<span class="k">JSON.GET</span> route:33 $.summary                    <span class="c">→ 只拿摘要，不搬幾千個座標</span>
+<span class="k">TS.MRANGE</span> - + <span class="k">FILTER</span> uid=1 <span class="k">GROUPBY</span> cat <span class="k">REDUCE</span> sum  <span class="c">→ 你在各種路的平均速度</span></pre>
+<pre data-v="s" hidden>-- LIKE '%清%' 用不到索引；中文要 ngram 全文索引
+SELECT * FROM poi WHERE MATCH(name) AGAINST('清境' IN BOOLEAN MODE);
+-- 自動完成要另外建前綴表或用 Elasticsearch
+-- 路線存 JSON 欄位，取摘要要整欄讀出再解析（或 JSON_EXTRACT）
+SELECT JSON_EXTRACT(route, '$.summary') FROM routes WHERE id = 33;</pre>
+    <div class="why">一個查詢同時用全文、標籤、數值範圍、地理四種條件，Hash 寫進去就自動進索引。沿路線找加油站是一個 Pipeline 送出上百個 <code>GEOSEARCH</code>。</div>
+  </div>
+  <p class="long">路線本身用本機的 Valhalla（OpenStreetMap 台灣路網）計算：機車不上國道與快速道路、重機可以走快速道路（國道 3 甲例外），估時用你自己過去在各種路的實際速度。</p>
+</div>
+</section>
+
+<!-- 11 回放 -->
+<section class="ch" id="c11" data-title="回放" data-demo="replay" data-cap="<b>回放頁</b>：南橫全隊同步播放，按 ▶、拖時間軸、點事件跳過去；「圖表」分頁看速度海拔。">
+<div class="wrap">
+  <p class="kicker">11 · 回放</p>
+  <h2>Stream 的 ID 就是時間索引</h2>
+  <p class="lead">軌跡、事件、聊天都存成 Stream，ID 是毫秒時間戳，<code>XRANGE</code> 依時間範圍取就好；速度、海拔放 <span class="t" data-t="ts">TimeSeries</span>，一個指令取全隊並降採樣。</p>
+  <div class="cmp" data-cmp>
+    <div class="cmp-tabs"><button class="on" data-v="r">Redis</button><button data-v="s">換成 SQL</button><span class="ttl">replay.py</span></div>
+<pre data-v="r"><span class="k">XRANGE</span> track:48:9 1794906180000 1794919320000     <span class="c"># 一個人的整段軌跡</span>
+<span class="k">XRANGE</span> trip:48:events - +                        <span class="c"># 事件時間軸</span>
+<span class="k">TS.MRANGE</span> - + <span class="k">FILTER</span> trip=48 kind=speed
+  <span class="k">AGGREGATION</span> avg 30000                          <span class="c"># 全隊速度，每 30 秒平均一點</span>
+<span class="k">XRANGE</span> trip:48:routes - +                        <span class="c"># 騎到一半改過路線：哪段時間走哪條</span></pre>
+<pre data-v="s" hidden>SELECT ts, lat, lon FROM track_points
+ WHERE trip_id = 48 AND uid = 9 ORDER BY ts;     -- 要 (trip_id, uid, ts) 複合索引
+-- 降採樣：每 30 秒一組
+SELECT uid, FLOOR(ts / 30000) AS b, AVG(speed)
+FROM track_points WHERE trip_id = 48 GROUP BY uid, b ORDER BY uid, b;</pre>
+    <div class="why">同樣做得到，但 Redis 的資料一寫進去就是「依時間排好」的結構，不用另外建索引、也不用 GROUP BY。</div>
+  </div>
+</div>
+</section>
+
+<!-- 12 足跡與鄉鎮 -->
+<section class="ch" id="c12" data-title="足跡與鄉鎮" data-group="長期紀錄" data-demo="towns" data-cap="<b>足跡頁</b>：一年 358 天的真實紀錄，點亮 298／368 個鄉鎮；切「熱力圖」「足跡」看不同圖層。（展示資料只放約 160 m 的格子，沒有原始 GPS 點）">
+<div class="wrap">
+  <p class="kicker">12 · 全年足跡</p>
+  <h2>一年 16.5 萬個點：Set、Sorted Set、GEOSHAPE</h2>
+  <p class="lead">把地圖切成約 160 m 的格子。去過的格子放 Set，選日期範圍時 <code>SUNION</code>；每格經過幾次用 Sorted Set 計數就是熱力圖；格子在哪個鄉鎮用多邊形索引查。</p>
+  <div class="cards">
+    <div class="card acc"><span class="big num">298<small>/ 368</small></span><p>點亮的鄉鎮市區</p></div>
+    <div class="card"><span class="big num">32,764<small>km</small></span><p>一年總里程</p></div>
+    <div class="card"><span class="big num">50,319</span><p>去過的格子</p></div>
+  </div>
+  <div class="cmp" data-cmp>
+    <div class="cmp-tabs"><button class="on" data-v="r">Redis</button><button data-v="s">換成 SQL</button><span class="ttl">longterm.py、footprint.py</span></div>
+<pre data-v="r"><span class="k">SUNION</span> fog:1:20260301:day fog:1:20260302:day …   <span class="c"># 某段日期、某個時段去過的格子</span>
+<span class="k">ZINCRBY</span> heat:1 1 "16687:80867"                   <span class="c"># 熱力圖計數</span>
+<span class="k">ZREVRANGE</span> heat:1 0 9 <span class="k">WITHSCORES</span>                 <span class="c"># 最常去的地方</span>
+<span class="k">FT.SEARCH</span> idx:townshape "@shape:[CONTAINS $pt]"
+  <span class="k">PARAMS</span> 2 pt "POINT(121.4422 25.1690)"          <span class="c">→ townpart:1296139（淡水區）</span>
+<span class="k">SADD</span> user:1:towns 1296139                       <span class="c">→ 1＝第一次點亮，發通知</span></pre>
+<pre data-v="s" hidden>-- 點在多邊形內：要 PostGIS
+SELECT code FROM towns WHERE ST_Contains(shape, ST_Point(121.2826, 24.1838));
+-- 熱力圖：每次查都要 GROUP BY 十幾萬點（或另外維護彙總表）
+SELECT cell, COUNT(*) FROM footprint WHERE uid = 1 GROUP BY cell ORDER BY 2 DESC LIMIT 10;
+-- 第一次點亮：INSERT … ON CONFLICT DO NOTHING 再看影響列數</pre>
+    <div class="why"><code>SADD</code> 的回傳值本身就回答了「是不是第一次」，不用先查再寫；格子→鄉鎮的結果再用 Hash <code>celltown</code> 快取，同一格不重查空間索引。</div>
+  </div>
+</div>
+</section>
+
+<!-- 13 匯入 -->
+<section class="ch" id="c13" data-title="匯入舊紀錄" data-demo="import" data-cap="<b>足跡頁 → 統計</b>：最下面的「匯入其他 App 的紀錄」，選任何檔案就會跑一遍進度（展示模式不會真的寫入）。">
+<div class="wrap">
+  <p class="kicker">13 · 匯入舊紀錄</p>
+  <h2>舊資料加不進 Stream？整份重建，再原子換上</h2>
+  <p class="lead">支援靈感足跡的 GPX、Google 地圖時間軸、KML。問題是 Stream 的 ID 必須遞增，<b>比現有最後一筆舊的點根本加不進去</b>。</p>
+  <ol class="plain">
+    <li>上傳：<code>SET import:lock:{uid} NX</code> 一人一次；原始檔暫存（1 小時 TTL）；<code>XADD stream:import</code></li>
+    <li>Worker（group <code>import</code>）把舊足跡＋新點依時間合併，同一秒已有點就算重複</li>
+    <li>在暫存 key 重建足跡、迷霧格子、每日里程、熱力圖、點亮鄉鎮</li>
+    <li><code>WATCH</code> 足跡 → <code>MULTI</code> → 一連串 <code>RENAME</code> → <code>EXEC</code>，一次換上</li>
+  </ol>
+  <div class="cmp" data-cmp>
+    <div class="cmp-tabs"><button class="on" data-v="r">Redis</button><button data-v="s">換成 SQL</button><span class="ttl">importer.py</span></div>
+<pre data-v="r"><span class="k">WATCH</span> footprint:1
+<span class="k">XREVRANGE</span> footprint:1 + - <span class="k">COUNT</span> 1      <span class="c"># 跟讀取時的最後一筆一樣嗎？</span>
+<span class="k">MULTI</span>
+  <span class="k">RENAME</span> imp:a1b2:footprint:1 footprint:1
+  <span class="k">RENAME</span> imp:a1b2:heat:1      heat:1
+  <span class="k">RENAME</span> imp:a1b2:fog:1:all   fog:1:all   <span class="c"># …一千多個 key</span>
+  <span class="k">INCR</span> fp:ver:1                         <span class="c"># 查詢快取帶版本號，自然失效</span>
+<span class="k">EXEC</span>                                   <span class="c">→ nil：期間有新的 GPS 點寫入，重新合併</span></pre>
+<pre data-v="s" hidden>BEGIN;
+CREATE TABLE footprint_new AS SELECT … UNION SELECT …;   -- 合併
+LOCK TABLE footprint IN ACCESS EXCLUSIVE MODE;          -- 換的時候鎖住，讀的人要等
+ALTER TABLE footprint RENAME TO footprint_old;
+ALTER TABLE footprint_new RENAME TO footprint;
+COMMIT;</pre>
+    <div class="why">跟 SQL「建新表、交易裡 RENAME」是同一招。讀的人不會看到一半舊一半新；騎車中匯入，剛回報的點也不會被蓋掉。實測 30 萬點（24 MB）約 9 秒。</div>
+  </div>
+</div>
+</section>
+
+<!-- 14 ACID -->
+<section class="ch nodemo" id="c14" data-title="交易與一致性" data-group="資料庫特性" data-demo="">
+<div class="wrap">
+  <p class="kicker">14 · 交易與一致性</p>
+  <h2>用 ACID 檢查 Redis</h2>
+  <p class="lead">Redis 的交易跟 SQL 不一樣：沒有 rollback，但單執行緒讓隔離性變簡單。</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th></th><th>Redis 的情況</th><th>騎跡怎麼用</th></tr></thead>
+    <tbody>
+      <tr><td>原子性 A</td><td><code>MULTI/EXEC</code> 一起執行；Lua 整段原子；<b>沒有 rollback</b>（中間一個指令錯了，其他照樣執行）</td><td>踢人一次移出成員、GEO、心跳；結束紀錄「移出＋是否最後一人＋改狀態」用 Lua</td></tr>
+      <tr><td>一致性 C</td><td>沒有外鍵、CHECK、NOT NULL，要由程式保證</td><td>規則集中在 Lua 與 <code>db.py</code>；CI 冒煙測試走完整流程</td></tr>
+      <tr><td>隔離性 I</td><td>單執行緒，指令一個一個執行，天生可序列化；<code>WATCH</code> 樂觀鎖</td><td>開始行程 WATCH 後檢查狀態，被搶先就重試</td></tr>
+      <tr><td>持久性 D</td><td>看設定：AOF <code>everysec</code> 最多掉 1 秒</td><td>GPS 掉 1 秒可以接受；帳號一樣受 AOF 保護</td></tr>
+    </tbody>
+  </table></div>
+  <h3>At-least-once 與冪等</h3>
+  <p>Worker 處理完才 <code>XACK</code>，當掉會被別人接手，所以同一筆可能處理兩次。統計的 Lua 記住「處理過的最後時間戳」，比它舊的直接略過；推播用 <code>SET push:sent:{事件}:{收件人} NX</code> 去重。重送不會重算里程、也不會推兩次。</p>
+</div>
+</section>
+
+<!-- 15 持久化 -->
+<section class="ch nodemo" id="c15" data-title="持久化與資料量" data-demo="">
+<div class="wrap">
+  <p class="kicker">15 · 持久化、生命週期、資料量</p>
+  <h2>記憶體資料庫，關機不能掉資料</h2>
+  <div class="cmp"><div class="cmp-tabs"><button class="on">docker-compose.yml</button></div>
+<pre><span class="k">--appendonly</span> yes <span class="k">--appendfsync</span> everysec   <span class="c"># AOF：每個寫入記進日誌，每秒 fsync（像資料庫的 WAL）</span>
+<span class="k">--save</span> 300 10                            <span class="c"># RDB：5 分鐘內有 10 次寫入就存快照（備份、搬機器用）</span>
+<span class="k">maxmemory-policy</span> noeviction              <span class="c"># 記憶體滿了寧可報錯，也不偷偷刪資料</span>
+<span class="k">--notify-keyspace-events</span> Ex              <span class="c"># 過期事件（失聯偵測）</span></pre></div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>資料</th><th>怎麼清</th></tr></thead>
+    <tbody>
+      <tr><td>心跳 <code>hb:</code></td><td>TTL 90 秒（停著 10 分鐘），過期觸發失聯</td></tr>
+      <tr><td>登入、邀請碼</td><td>TTL 24 小時</td></tr>
+      <tr><td>外部 API 快取</td><td>交通部 TDX 120 秒、氣象署 30 分鐘；<code>SET NX</code> 鎖住只讓一個 Worker 去抓</td></tr>
+      <tr><td>工作佇列</td><td><code>XADD … MAXLEN ~</code> 自動修剪</td></tr>
+      <tr><td>系統指標</td><td>TimeSeries <code>RETENTION</code> 7 天</td></tr>
+      <tr><td>軌跡、足跡</td><td>永久保存</td></tr>
+    </tbody>
+  </table></div>
+  <div class="cards">
+    <div class="card"><span class="big num">17<small>萬 key</small></span><p>約 384 MB 記憶體</p></div>
+    <div class="card"><span class="big num">15.6<small>萬</small></span><p>地名與 POI（RediSearch）</p></div>
+    <div class="card"><span class="big num">368</span><p>鄉鎮多邊形（609 塊）</p></div>
+    <div class="card"><span class="big num">1,901</span><p>測速照相（警政署）</p></div>
+  </div>
+</div>
+</section>
+
+<!-- 16 不擅長 -->
+<section class="ch nodemo" id="c16" data-title="Redis 不擅長的地方" data-demo="">
+<div class="wrap">
+  <p class="kicker">16 · 誠實面對</p>
+  <h2>Redis 不擅長、SQL 會比較好的地方</h2>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>情況</th><th>原因</th><th>如果要改進</th></tr></thead>
+    <tbody>
+      <tr><td>臨時報表（每月所有人騎幾公里）</td><td>沒有 JOIN、GROUP BY，要事先設計好 key</td><td>結束的行程歸檔到 PostgreSQL 做分析</td></tr>
+      <tr><td>資料一大成本就高</td><td>全部在記憶體</td><td>舊軌跡壓縮或搬到磁碟資料庫</td></tr>
+      <tr><td>約束要自己寫</td><td>沒有外鍵、CHECK</td><td>規則集中在 <code>db.py</code>＋Lua，CI 測試</td></tr>
+      <tr><td>刪一個行程要刪很多 key</td><td>子資料分散在 <code>trip:{tid}:*</code></td><td><code>SCAN MATCH</code> 逐批找出來刪</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><b>結論：</b>騎跡的資料大多是「高頻寫入、即時、會過期、要地理和時間查詢」，正好是 Redis 的強項；長期分析才適合 SQL。實務上常見兩者並用：Redis 處理即時，SQL 存歸檔做分析。</div>
+</div>
+</section>
+
+<!-- 17 戰情室 -->
+<section class="ch" id="c17" data-title="戰情室與後台" data-group="其他" data-demo="war" data-cap="<b>戰情室</b>（電腦大螢幕）：3D 自動運鏡、隊員卡片、事件流、海拔剖面，右上是沿途天氣與路況。">
+<div class="wrap">
+  <p class="kicker">17 · 戰情室與後台</p>
+  <h2>給在家、在支援車上的人看</h2>
+  <p class="lead">戰情室跟行程頁訂閱同一個 Pub/Sub 頻道；觀看連結免登入（<code>SET watch:{tok} 57 EX</code>，行程結束就失效）。</p>
+  <ul class="plain">
+    <li><b>沿途天氣</b>：位置先在本機用 GEOSHAPE 換成鄉鎮，只向氣象署要整個縣市的預報，座標不會送出去；cache-aside 30 分鐘</li>
+    <li><b>前方路況</b>：交通部 TDX 每月只有 4,500 次，<code>SET lock:tdx NX EX 30</code> 只讓一個 Worker 去抓（防 cache stampede），重建時寫暫存 key 再 <code>RENAME</code></li>
+    <li><b>管理後台</b>：每秒寫入、Pub/Sub 訊息量、推播數都是 TimeSeries；<code>SCAN</code>＋<code>TYPE</code>／<code>TTL</code> 看 key 型別分布；Worker 的 lag 用 <code>XINFO GROUPS</code></li>
+  </ul>
+</div>
+</section>
+
+<!-- 18 開發過程 -->
+<section class="ch nodemo" id="c18" data-title="開發過程與 AI 協作" data-demo="">
+<div class="wrap">
+  <p class="kicker">18 · 開發過程與 AI 協作</p>
+  <h2>8 天、284 個 commit，跟 AI 一起做</h2>
+  <p class="lead">程式主要由 Claude Code（AI 程式助理）撰寫與測試；我負責<b>決定產品規則、驗收、實機騎車測試</b>。</p>
+  <h3>分工方式</h3>
+  <div class="cards">
+    <div class="card"><h4>我決定</h4><p>功能要不要做、畫面怎麼呈現、隱私界線（位置不送外部服務、GitHub 公開前清歷史）</p></div>
+    <div class="card"><h4>AI 實作</h4><p>寫程式、寫測試、用無頭瀏覽器截圖驗證；技術選擇（型別、索引設計）由 AI 提案、我確認</p></div>
+    <div class="card"><h4>交接紀錄</h4><p>每次工作結束寫一份交接（做到哪、踩到的坑、下一步），下一次從這裡接</p></div>
+  </div>
+  <h3>時間線</h3>
+  <ul class="tl">
+    <li><b>11/16</b>M1 核心：帳號、開團、位置回報、即時地圖、失聯偵測、GPX 匯入</li>
+    <li><b>11/17</b>M2～M5：回放、Worker 警示、導航規劃、點亮鄉鎮、戰情室；Web Push、聊天室、TDX 路況、氣象署天氣</li>
+    <li><b>11/18～19</b>Redis 加密碼、介面統一；第一輪 UI/UX 實測 62 項全部修完</li>
+    <li><b>11/21～22</b>改版成原型設計；改用 GitHub＋CI；Windows 正式機自動部署</li>
+    <li><b>11/23</b>第二輪 UI/UX 45 項；網頁匯入足跡；GitHub 公開；這份報告</li>
+  </ul>
+</div>
+</section>
+
+<section class="ch nodemo" id="c18b" data-title="品質把關與 AI 的錯" data-demo="">
+<div class="wrap">
+  <p class="kicker">18 · 開發過程（續）</p>
+  <h2>品質把關，以及 AI 犯過的錯</h2>
+  <h3>品質把關</h3>
+  <ul class="plain">
+    <li>CI 冒煙測試：每次推送都在乾淨環境跑「註冊 → 開團 → 回報 → 結束 → 匯入」，不過不部署</li>
+    <li>每個改動用無頭瀏覽器截桌機與手機畫面，檢查 JS 錯誤；不能只說「應該好了」</li>
+    <li>兩輪 UI/UX 實測報告（62＋45 項），逐項修正</li>
+    <li>真的騎車上山測試：iPhone＋Traccar 背景回報</li>
+  </ul>
+  <h3>AI 犯過的錯（以及怎麼發現的）</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>錯誤</th><th>怎麼發現</th><th>怎麼修</th></tr></thead>
+    <tbody>
+      <tr><td>地圖標記寫了 <code>position:relative</code>，第 n 個人往下偏 34×n px，看起來不在路上</td><td>截圖比對：人和軌跡線對不上</td><td>MapLibre 標記不設 position；寫進交接的「坑」</td></tr>
+      <tr><td>舊的模擬器沒關，兩個程序用同一個帳號回報，位置來回跳，誤以為是 bug</td><td>查 log 發現同一秒有兩筆</td><td>測完一定 <code>pkill</code>；交接紀錄提醒</td></tr>
+      <tr><td>指令列匯入工具直接 <code>XADD</code>，比現有足跡舊的點被 Redis 拒絕，但錯誤被吞掉，看起來「匯入成功」</td><td>做網頁匯入時重新檢查 Stream ID 規則</td><td>改成合併重建＋<code>RENAME</code> 換上（第 13 章）</td></tr>
+      <tr><td>健檢報告引用了一段 log，裡面有家裡等級的 GPS 座標，被 commit 進 repo</td><td>GitHub 公開前掃整段歷史</td><td><code>git filter-repo</code> 從所有 commit 抹掉再公開</td></tr>
+    </tbody>
+  </table></div>
+  <p class="long">完整的交接與開發紀錄在 GitHub 的 <a href="https://github.com/chu-chia/ride-trace/tree/main/docs/records" target="_blank" rel="noopener">docs/records</a>。</p>
+</div>
+</section>
+
+<!-- 19 成果 -->
+<section class="ch nodemo" id="c19" data-title="成果、心得、待解決" data-group="結尾" data-demo="">
+<div class="wrap">
+  <p class="kicker">19 · 成果、心得、待解決</p>
+  <h2>成果</h2>
+  <div class="cards">
+    <div class="card acc"><span class="big num">15+</span><p>種 Redis 進階功能（最低要求 2 項）</p></div>
+    <div class="card"><span class="big num">8.8k</span><p>行 Python（後端＋工具）</p></div>
+    <div class="card"><span class="big num">8.6k</span><p>行 JavaScript（前端，無框架）</p></div>
+    <div class="card"><span class="big num">358</span><p>天真實騎乘資料</p></div>
+  </div>
+  <h3>心得</h3>
+  <ul class="plain">
+    <li><b>資料模型比程式重要。</b>一開始想清楚「怎麼查」，型別選對了，程式就很短；選錯（例如足跡用 Stream 卻要補舊資料）就要重建。</li>
+    <li><b>原子性要放在資料庫裡。</b>「只通知一次」「全員到齊」這種判斷寫在 Python 裡一定會有競爭條件，搬進 Lua 就沒了。</li>
+    <li><b>「沒發生的事」最難偵測。</b>失聯靠 TTL 過期事件，比排程掃表乾淨很多。</li>
+    <li><b>跟 AI 合作要有驗收機制。</b>CI、截圖、實機測試、交接紀錄，缺一個就會有「說好了其實沒好」。</li>
+  </ul>
+  <h3>尚待解決</h3>
+  <ul class="plain">
+    <li>手機網頁鎖螢幕就不能定位，背景回報目前靠 Traccar；之後包成 App（Capacitor＋背景定位）</li>
+    <li>結束的行程歸檔到 SQL 做長期分析</li>
+    <li>全站省電：靜止時地圖不重畫；出發前下載沿線地圖，山區沒訊號也能用</li>
+  </ul>
+</div>
+</section>
+
+<!-- 20 參考 -->
+<section class="ch nodemo" id="c20" data-title="參考資料與連結" data-demo="">
+<div class="wrap">
+  <p class="kicker">20 · 參考資料與雲端連結</p>
+  <h2>自己打開來玩</h2>
+  <div class="qr" id="qrs">
+    <figure data-qr="https://chu-chia.github.io/ride-trace/"><div></div><figcaption>這份報告<small>chu-chia.github.io/ride-trace</small></figcaption></figure>
+    <figure data-qr="https://node.tail866fc3.ts.net:8443/"><div></div><figcaption>騎跡正式機（可註冊）<small>node.tail866fc3.ts.net:8443</small></figcaption></figure>
+    <figure data-qr="https://github.com/chu-chia/ride-trace"><div></div><figcaption>GitHub 原始碼<small>github.com/chu-chia/ride-trace</small></figcaption></figure>
+  </div>
+  <p>正式機的 <a href="https://node.tail866fc3.ts.net:8443/demo" target="_blank" rel="noopener">示範車隊觀看連結</a> 免登入，可以看 Demo 車隊即時騎中橫。</p>
+  <h3>參考資料</h3>
+  <ul class="refs">
+    <li>Redis 官方文件：<a href="https://redis.io/docs/latest/develop/data-types/geospatial/" target="_blank" rel="noopener">GEO</a>、<a href="https://redis.io/docs/latest/develop/data-types/streams/" target="_blank" rel="noopener">Streams</a>、<a href="https://redis.io/docs/latest/develop/interact/pubsub/" target="_blank" rel="noopener">Pub/Sub</a>、<a href="https://redis.io/docs/latest/develop/data-types/timeseries/" target="_blank" rel="noopener">TimeSeries</a>、<a href="https://redis.io/docs/latest/develop/interact/search-and-query/" target="_blank" rel="noopener">Search and Query</a>、<a href="https://redis.io/docs/latest/develop/data-types/json/" target="_blank" rel="noopener">JSON</a>、<a href="https://redis.io/docs/latest/develop/interact/transactions/" target="_blank" rel="noopener">Transactions</a>、<a href="https://redis.io/docs/latest/develop/use/keyspace-notifications/" target="_blank" rel="noopener">Keyspace notifications</a>、<a href="https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/" target="_blank" rel="noopener">Persistence</a></li>
+    <li>路線與地圖：<a href="https://github.com/valhalla/valhalla" target="_blank" rel="noopener">Valhalla</a>、<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>（經 Geofabrik）、<a href="https://maplibre.org" target="_blank" rel="noopener">MapLibre GL JS</a>、<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>、<a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a></li>
+    <li>公開資料：政府資料開放平臺「測速執法設置點」、<a href="https://tdx.transportdata.tw" target="_blank" rel="noopener">交通部 TDX</a> 省道即時事件、<a href="https://opendata.cwa.gov.tw" target="_blank" rel="noopener">中央氣象署</a> 鄉鎮天氣預報</li>
+    <li>其他：<a href="https://fastapi.tiangolo.com" target="_blank" rel="noopener">FastAPI</a>、<a href="https://www.traccar.org/client/" target="_blank" rel="noopener">Traccar Client</a>、<a href="https://tailscale.com/kb/1223/funnel" target="_blank" rel="noopener">Tailscale Funnel</a></li>
+    <li>AI 協作：Claude Code；開發與交接紀錄 <a href="https://github.com/chu-chia/ride-trace/tree/main/docs/records" target="_blank" rel="noopener">docs/records</a>、<a href="https://github.com/chu-chia/ride-trace/blob/main/docs/資料庫設計.md" target="_blank" rel="noopener">資料庫設計</a>、<a href="https://github.com/chu-chia/ride-trace/blob/main/docs/Redis功能對照.md" target="_blank" rel="noopener">Redis 功能對照</a></li>
+  </ul>
+</div>
+</section>
+
+</main>
+
+<div class="slide-ui" id="slideUi"><button id="sPrev" type="button" aria-label="上一頁">←</button><span class="num" id="sNum">1 / 21</span><button id="sNext" type="button" aria-label="下一頁">→</button><button id="sExit" type="button">離開 Esc</button></div>
+<div class="tip" id="tip" hidden></div>
+
+<script src="app/vendor/qrcode-generator-1.4.4/qrcode.min.js"></script>
+<script src="report.js"></script>
+</body>
+</html>

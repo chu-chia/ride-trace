@@ -1,0 +1,34 @@
+# 報告網頁＋騎跡展示版 → GitHub Pages（https://chu-chia.github.io/ride-trace/）
+# 只在報告、前端或建置腳本改了才重新發布；展示資料在 report/demo-data/（用 scripts/pages/record_demo.py 在 Mac 錄）
+name: Pages
+on:
+  push:
+    branches: [main]
+    paths: ["report/**", "web/**", "scripts/pages/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: 建置網站（報告＋展示版）
+        run: python3 scripts/pages/build.py --base /ride-trace/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

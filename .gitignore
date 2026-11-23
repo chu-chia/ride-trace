@@ -14,3 +14,4 @@ web/deployed.json
 # 暫時的比較頁（含個人軌跡），不進版控
 web/assets/_*
 *.egg-info/
+_site/

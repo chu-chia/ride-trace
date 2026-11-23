@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>騎跡講稿</title>
+<meta name="description" content="騎跡 Redis 專題上台講稿（手機版），逐章對應報告網頁。">
+<link rel="icon" href="app/assets/favicon.svg">
+<style>
+:root{--bg:#000;--card:#1c1c1e;--fg:#f5f5f7;--muted:#98989d;--accent:#ff8a3d;--line:rgba(255,255,255,.1);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.7 -apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif;padding:0 16px calc(90px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:rgba(0,0,0,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);margin:0 -16px;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+header b{font-size:16px}
+header .tm{margin-left:auto;font:600 20px/1 ui-monospace,Menlo,monospace;color:var(--accent)}
+header button{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:10px;padding:6px 10px;font:600 14px system-ui}
+.intro{color:var(--muted);font-size:14px;margin:14px 0 4px}
+section{background:var(--card);border-radius:16px;padding:14px 16px 12px;margin:14px 0;scroll-margin-top:80px}
+section h2{margin:0 0 2px;font-size:18px;display:flex;gap:8px;align-items:baseline}
+section h2 i{font-style:normal;font:700 13px ui-monospace,Menlo,monospace;color:var(--accent)}
+section h2 small{margin-left:auto;font:600 12.5px system-ui;color:var(--muted);white-space:nowrap}
+section p{margin:8px 0}
+.do{display:block;margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(255,138,61,.12);color:#ffc29c;font-size:15px}
+.do::before{content:"▶ ";color:var(--accent)}
+.key{color:var(--accent);font-weight:700}
+nav{position:fixed;left:0;right:0;bottom:0;background:rgba(0,0,0,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:8px 10px calc(8px + env(safe-area-inset-bottom));display:flex;gap:6px;overflow-x:auto}
+nav a{flex:none;min-width:40px;text-align:center;padding:8px 6px;border-radius:10px;background:var(--card);color:var(--fg);text-decoration:none;font:600 14px ui-monospace,Menlo,monospace}
+nav a.on{background:var(--accent);color:#000}
+</style>
+</head>
+<body>
+<header><b>騎跡講稿</b><span class="intro" style="margin:0">約 20 分鐘</span><span class="tm" id="tm">00:00</span><button id="tbtn" type="button">開始計時</button></header>
+<p class="intro">每章右邊是建議秒數，▶ 是要在報告網頁上做的操作。報告網頁按 <b>S</b> 進簡報模式，方向鍵翻頁。</p>
+
+<section id="n00"><h2><i>00</i>封面<small>30 秒</small></h2>
+<p>大家好，我是資管四技二乙的朱嘉瑋。我的 Redis 專題叫<span class="key">騎跡 RideTrace</span>，是給機車車隊用的即時定位系統。口號是「整隊一起出發，一個都不少」。</p>
+<span class="do">背景這張會動的地圖就是系統的登入頁</span></section>
+
+<section id="n01"><h2><i>01</i>動機與目標<small>50 秒</small></h2>
+<p>我常跟朋友騎山路，最常發生四件事：有人落隊沒人發現、在岔路走散、到集合點不知道誰還沒到、回家想看整趟只有各自零散的紀錄。</p>
+<p>所以騎跡要做四件事：即時看到全隊、自動警示、整趟回放、長期紀錄。</p>
+<p>因為這是資料庫課，接下來每一章我都從一個功能出發，講背後的資料怎麼存、怎麼查、為什麼用 Redis、換成 SQL 會怎樣。</p></section>
+
+<section id="n02"><h2><i>02</i>為什麼是 Redis<small>60 秒</small></h2>
+<p>選資料庫之前先看資料長什麼樣。騎跡的資料是<span class="key">寫多讀少</span>：每個人每兩三秒一筆；要<span class="key">即時推送</span>；要<span class="key">地理查詢</span>和<span class="key">時間序列</span>；很多資料<span class="key">會過期</span>，像心跳、邀請碼。</p>
+<p>這些關聯式資料庫都做得到，但要加 PostGIS、TimescaleDB、訊息佇列、快取、排程器。Redis 8 一個服務就涵蓋，而且在記憶體裡跑，一個指令是微秒等級。</p></section>
+
+<section id="n03"><h2><i>03</i>系統架構<small>50 秒</small></h2>
+<p>架構很簡單：手機回報位置給 FastAPI，API 寫進 Redis，同時用 Pub/Sub 推給全隊；需要判斷的事，例如落隊，交給 Worker 從 Stream 領取。路線用本機的 Valhalla 算，位置不送到 Google。</p>
+<p>部署是推上 GitHub 就自動上線：CI 跑冒煙測試，通過後我家的 Windows 電腦自動部署，用 Tailscale Funnel 公開。</p></section>
+
+<section id="n04"><h2><i>04</i>資料模型<small>90 秒</small></h2>
+<p>Redis 沒有資料表、JOIN、外鍵，所以做法跟 SQL 相反：<span class="key">先想好要怎麼查，再決定存成什麼型別</span>。</p>
+<span class="do">點 ER 圖的「行程」→「即時狀態」→「足跡」</span>
+<p>例如行程本身是一個 Hash；成員是多對多，就用兩個方向各一個集合；即時位置要查距離，所以放 GEO；軌跡要依時間讀，所以放 Stream。</p>
+<p>關聯式的主鍵用 INCR、UNIQUE 用 SET NX、外鍵就是把 id 放進 key 名稱裡。</p></section>
+
+<section id="n05"><h2><i>05</i>開團<small>50 秒</small></h2>
+<span class="do">右邊是首頁，有進行中的行程</span>
+<p>開團時 INCR 拿流水號；邀請碼用 SET NX EX，撞號就換一組，24 小時後自己消失，不用排程刪。</p>
+<p>開始行程要防止兩個人同時按，用 WATCH 做樂觀鎖，被搶先就重試。</p>
+<span class="do">點「換成 SQL」：SQL 要 FOR UPDATE 鎖住那一列，還要排程刪過期邀請碼</span></section>
+
+<section id="n06"><h2><i>06</i>一筆 GPS 回報<small>70 秒</small></h2>
+<span class="do">按「播放」</span>
+<p>這是整個系統最關鍵的路徑。一筆位置進來，API 用 Pipeline 把 15 個指令一次送出：寫足跡、寫軌跡、更新 GEO、寫速度海拔的 TimeSeries、PUBLISH 給全隊、重設心跳，最後 XADD 交給 Worker。</p>
+<p>注意這裡<span class="key">刻意不包交易</span>：Pipeline 只是減少網路來回。這些寫入彼此獨立，包交易反而拖慢高頻寫入。真正需要原子性的判斷交給 Worker 的 Lua。</p></section>
+
+<section id="n07"><h2><i>07</i>即時地圖<small>60 秒</small></h2>
+<span class="do">右邊是行程頁，五個人沿中橫在騎（3/14 真實紀錄，30 倍速）</span>
+<p>每個人的位置放在同一個 GEO 集合，GEOSEARCH 就能算隊友距離。畫面不靠輪詢：Redis PUBLISH，所有連著的瀏覽器就收到。</p>
+<p>如果用 SQL，前端要每兩秒輪詢一次，十個人就是每秒五次查詢；Pub/Sub 只在有新位置時送，延遲是毫秒。</p></section>
+
+<section id="n08"><h2><i>08</i>警示<small>80 秒</small></h2>
+<p>警示用 Streams 加 Consumer Group：兩個 group 各拿一份完整訊息，同一個 group 開多個 Worker 就自動分攤。處理完才 XACK，Worker 當掉的話別人用 XAUTOCLAIM 接手。</p>
+<p>代價是同一筆可能處理兩次，所以每個判斷都要冪等。「全員到齊」寫在一段 Lua 裡：SADD、SDIFF 算誰沒到、SET NX，兩個 Worker 同時判斷也只會通知一次。</p>
+<p>落隊用「沿路線里程」判斷：山路髮夾彎直線只差 400 公尺，沿路線可能已經落後 3 公里。</p>
+<span class="do">右邊行程頁切到「訊息」，看事件</span></section>
+
+<section id="n09"><h2><i>09</i>失聯<small>50 秒</small></h2>
+<p>失聯是「沒有發生的事」，要怎麼偵測？讓 key 自己過期。每筆回報重設心跳 SET EX 90，90 秒沒回報 key 就過期，Redis 發出 Keyspace Notification，API 收到就發警示。</p>
+<p>SQL 要排程一直掃全表，掃的頻率決定延遲；Redis 是事件驅動，沒人失聯時完全不花資源。</p></section>
+
+<section id="n10"><h2><i>10</i>規劃路線<small>60 秒</small></h2>
+<span class="do">右邊是規劃頁：埔里到太魯閣</span>
+<p>15.6 萬筆地名和 POI 用 RediSearch 建中文全文加地理索引，打字就自動完成。一個查詢可以同時用全文、標籤、數值、地理四種條件。</p>
+<p>路線有幾千個座標，存成 RedisJSON，JSON.GET 只取摘要。估時用 TS.MRANGE GROUPBY 算我自己在各種路的平均速度。</p></section>
+
+<section id="n11"><h2><i>11</i>回放<small>60 秒</small></h2>
+<span class="do">右邊回放頁按 ▶，拖時間軸，點一個事件跳過去</span>
+<p>軌跡、事件、聊天都是 Stream，ID 就是毫秒時間戳，XRANGE 依時間取就好，不用另外建索引。速度海拔是 TimeSeries，一個 TS.MRANGE 取全隊，順便每 30 秒平均一點。</p></section>
+
+<section id="n12"><h2><i>12</i>足跡與鄉鎮<small>70 秒</small></h2>
+<span class="do">右邊是我一整年的足跡：點亮 298 個鄉鎮</span>
+<p>這是我一年 358 天、16.5 萬個點的真實資料。地圖切成 160 公尺的格子：去過的格子放 Set，選日期就 SUNION；熱力圖是 Sorted Set 計數；格子在哪個鄉鎮用 GEOSHAPE 多邊形索引查。</p>
+<p>SADD 的回傳值直接回答「是不是第一次點亮」，不用先查再寫。</p>
+<span class="do">切到「熱力圖」</span></section>
+
+<section id="n13"><h2><i>13</i>匯入舊紀錄<small>70 秒</small></h2>
+<span class="do">右邊統計分頁最下面，選一個檔案，看進度條</span>
+<p>可以匯入靈感足跡的 GPX、Google 地圖時間軸。問題是 Stream 的 ID 必須遞增，比最後一筆舊的點加不進去。</p>
+<p>所以 Worker 把舊足跡和新的點合併，在暫存 key 整份重建，最後用 WATCH、MULTI、一連串 RENAME 一次換上。期間有新的 GPS 點寫進來，WATCH 會讓交易失敗、重新合併，騎車中匯入也不會掉點。30 萬點大約 9 秒。</p></section>
+
+<section id="n14"><h2><i>14</i>交易與一致性<small>60 秒</small></h2>
+<p>用 ACID 檢查 Redis：原子性有 MULTI/EXEC 和 Lua，但<span class="key">沒有 rollback</span>；一致性要程式自己保證；隔離性因為單執行緒，天生可序列化；持久性看設定，AOF 每秒寫一次，最多掉一秒。</p>
+<p>Worker 是 at-least-once，所以里程依時間戳去重、推播用 SET NX 去重。</p></section>
+
+<section id="n15"><h2><i>15</i>持久化與資料量<small>45 秒</small></h2>
+<p>記憶體資料庫關機不能掉資料：AOF 類似交易日誌，RDB 是快照；noeviction 讓記憶體滿了寧可報錯也不偷刪資料。</p>
+<p>心跳、登入、快取都用 TTL 自己清。目前大約 17 萬個 key、384 MB。</p></section>
+
+<section id="n16"><h2><i>16</i>Redis 不擅長的地方<small>45 秒</small></h2>
+<p>Redis 也有不適合的地方：臨時報表沒有 JOIN、GROUP BY；資料大了記憶體很貴；約束要自己寫。實務上會兩個一起用：Redis 處理即時，結束的行程歸檔到 SQL 做分析。</p></section>
+
+<section id="n17"><h2><i>17</i>戰情室與後台<small>45 秒</small></h2>
+<span class="do">右邊是戰情室（大螢幕版）</span>
+<p>戰情室給在家或支援車上的人看，跟行程頁訂閱同一個 Pub/Sub 頻道。沿途天氣和路況呼叫外部 API，用 cache-aside 加 SET NX 鎖，只讓一個 Worker 去抓，避免額度被用完。</p>
+<span class="do">（可選）右上切「正式機即時」，看家裡電腦上真的在跑的 Demo 車隊</span></section>
+
+<section id="n18"><h2><i>18</i>開發過程與 AI 協作<small>80 秒</small></h2>
+<p>這個專題 8 天、284 個 commit，程式主要由 Claude Code 寫。我負責決定功能、驗收、實際騎車測試。每次結束都寫交接紀錄，下次從那裡接。</p>
+<p>品質靠 CI 冒煙測試、無頭瀏覽器截圖、兩輪 UI/UX 實測。AI 也犯過錯，例如匯入工具直接 XADD，舊的點被 Redis 拒絕但錯誤被吞掉，看起來像成功；還有把含家裡座標的 log 寫進 repo，公開前才掃出來清掉。</p></section>
+
+<section id="n19"><h2><i>19</i>成果、心得<small>60 秒</small></h2>
+<p>最後用了 15 種以上的 Redis 進階功能。心得有三點：資料模型比程式重要，型別選對程式就短；原子性要放進資料庫，寫在 Python 一定有競爭條件；跟 AI 合作一定要有驗收機制。</p>
+<p>還沒解決的是手機網頁鎖螢幕就不能定位，之後會包成 App。</p></section>
+
+<section id="n20"><h2><i>20</i>參考資料與連結<small>20 秒</small></h2>
+<p>報告網頁、正式機、GitHub 都有 QR code，正式機可以自己註冊，也可以免登入看 Demo 車隊。謝謝大家。</p></section>
+
+<nav id="nav"></nav>
+<script>
+const secs=[...document.querySelectorAll('section')];
+const nav=document.getElementById('nav');
+secs.forEach(s=>{const a=document.createElement('a');a.href='#'+s.id;a.textContent=s.id.slice(1);nav.append(a)});
+const links=[...nav.children];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(!e.isIntersecting)return;links.forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+e.target.id));nav.querySelector('.on')?.scrollIntoView({inline:'center',block:'nearest'})})},{rootMargin:'-30% 0px -60% 0px'});
+secs.forEach(s=>io.observe(s));
+let t0=0,iv=null;const tm=document.getElementById('tm'),tb=document.getElementById('tbtn');
+tb.onclick=()=>{if(iv){clearInterval(iv);iv=null;tb.textContent='開始計時';return}t0=Date.now();tb.textContent='停止';iv=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);tm.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')},500)};
+</script>
+</body>
+</html>
