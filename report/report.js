@@ -76,6 +76,23 @@
   });
   addEventListener('resize', () => { fit(); if (document.body.classList.contains('slides')) placeSlide(); });
 
+  // 沒有專屬操作的章節（長捲動時）也放一個相關的頁面，右邊不會空著；簡報模式這些頁維持全寬
+  const FALLBACK = {
+    c01: ['trip', '<b>行程頁</b>：這就是騎跡要解決的事——全隊在同一張地圖上，誰落後、誰到了一眼看到。'],
+    c02: ['war', '<b>戰情室</b>：每 2～3 秒一筆位置、即時推給所有人，就是 Redis 擅長的工作負載。'],
+    c03: ['trip', '<b>行程頁</b>：畫面上每一次更新，都是「手機 → API → Redis → Pub/Sub → 瀏覽器」走一趟。'],
+    c04: ['trip', '<b>行程頁</b>：隊員列表＝<code>trip:{tid}:members</code>＋<code>trip:{tid}:state:{uid}</code>；地圖上的點＝<code>trip:{tid}:geo</code>。'],
+    c04b: ['home', '<b>首頁</b>：「我的行程」就是多對多的另一個方向 <code>user:{uid}:trips</code>。'],
+    c06: ['trip', '<b>行程頁</b>：每個點每移動一次，背後就是左邊那 15 個指令。'],
+    c14: ['trip', '<b>行程頁</b>：抵達集合點、全員到齊只通知一次，靠的是 Lua 的原子性。'],
+    c15: ['footprint', '<b>足跡頁</b>：一年的紀錄都在記憶體裡，靠 AOF＋RDB 保證關機不會掉。'],
+    c16: ['import', '<b>足跡頁 → 統計</b>：每月里程這種報表，在 Redis 要事先設計好 key，SQL 一個 GROUP BY 就好。'],
+    c18: ['home', '<b>首頁</b>：8 天、將近 300 個 commit 的成果。'],
+    c18b: ['trip', '<b>行程頁</b>：每次改動都用無頭瀏覽器截這幾頁的桌機與手機畫面驗證。'],
+    c19: ['towns', '<b>足跡頁</b>：一年 358 天、點亮 298 個鄉鎮。'],
+    c20: ['home', '<b>首頁</b>：掃左邊的 QR code，可以在自己的手機上打開。'],
+  };
+  const demoOf = (s) => s.dataset.demo ? [s.dataset.demo, s.dataset.cap] : FALLBACK[s.id] || null;
   // 捲到哪一章就切到哪一頁
   let curSec = null;
   const spy = new IntersectionObserver((ents) => {
@@ -85,8 +102,8 @@
       if (curSec === s) continue;
       curSec = s;
       $$('.toc li a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#' + s.id));
-      if (s.dataset.demo) show(s.dataset.demo, s.dataset.cap);
-      else if (s.id !== 'c00') show(curKey && DEMO[curKey] ? curKey : null, $('#demoCap').innerHTML);
+      const d = demoOf(s);
+      if (d) show(d[0], d[1]);
     }
   }, { rootMargin: '-35% 0px -60% 0px' });
   sections.forEach((s) => spy.observe(s));
@@ -294,7 +311,8 @@
     stage.prepend(device);
     const s = sections[si];
     curSec = null; s.scrollIntoView({ behavior: 'instant', block: 'start' });
-    if (s.dataset.demo) show(s.dataset.demo, s.dataset.cap); else fit();
+    const d = demoOf(s);
+    if (d) show(d[0], d[1]); else fit();
   }
   const go = (d) => { si = Math.max(0, Math.min(sections.length - 1, si + d)); placeSlide(); };
   $('#bSlides').onclick = () => enterSlides();
@@ -323,8 +341,8 @@
   fetch('app/demo-data/live.json').then((r) => r.json()).then((d) => { TID = d.tid || ''; })
     .catch(() => {}).finally(() => {
       const start = location.hash && $(location.hash);
-      if (start && start.dataset.demo) show(start.dataset.demo, start.dataset.cap);
-      else show(null);
+      const d = start ? demoOf(start) : null;
+      show(...(d || ['trip', FALLBACK.c01[1]]));
       if (new URLSearchParams(location.search).has('slides')) enterSlides(start ? sections.indexOf(start) : 0);
     });
 })();
