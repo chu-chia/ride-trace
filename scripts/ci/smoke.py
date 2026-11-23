@@ -58,4 +58,24 @@ for i in range(3):
         sys.exit(f"失敗：回報位置沒有進行程 {tid}：{res}")
 call("GET", f"/api/trips/{tid}")
 call("POST", f"/api/trips/{tid}/end", {})
+
+# 匯入足跡：比剛剛即時回報還舊的 GPX（要走合併重建），worker 處理完應該新增 20 點；同一份再傳一次應該全部算重複
+gpx = ('<gpx><trk><trkseg>' + ''.join(
+    f'<trkpt lat="{25.0 + i * 0.0004:.6f}" lon="121.5"><time>2025-06-01T08:{i:02d}:00Z</time></trkpt>' for i in range(20))
+       + '</trkseg></trk></gpx>').encode()
+for want_added in (20, 0):
+    req = urllib.request.Request(BASE + "/api/footprint/import", method="POST", data=gpx,
+                                 headers={"Authorization": f"Bearer {TOKEN}", "X-Filename": "ci.gpx"})
+    with urllib.request.urlopen(req, timeout=10) as res:
+        job = json.loads(res.read())["job"]
+    for _ in range(30):
+        st = call("GET", f"/api/footprint/imports/{job}")
+        if st["status"] in ("done", "error"):
+            break
+        time.sleep(1)
+    if st["status"] != "done" or st.get("added") != want_added:
+        sys.exit(f"失敗：匯入結果不對（預期新增 {want_added}）：{st}")
+summ = call("GET", "/api/footprint/summary")
+if summ.get("points", 0) < 20:
+    sys.exit(f"失敗：匯入後足跡點數不對：{summ}")
 print("冒煙測試通過")

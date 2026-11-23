@@ -37,6 +37,20 @@
   .chart div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}
   .chart i{display:block;width:100%;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
   .chart em{font-style:normal;font-size:12px;color:var(--muted)}
+  .imp-fmts{list-style:none;margin:10px 0;padding:0;display:grid;gap:6px;font-size:12.5px;color:var(--muted)}
+  .imp-fmts b{color:var(--text);font-weight:600;margin-right:8px}
+  .imp-pick{margin-top:4px}
+  .imp-pick.busy{opacity:.5;pointer-events:none}
+  .imp-status{margin-top:10px;display:grid;gap:6px;font-size:13px}
+  .imp-line{display:flex;justify-content:space-between;gap:8px}
+  .imp-status.err{color:var(--crit-ink)}
+  .imp-how{margin-top:10px;font-size:12.5px}
+  .imp-how summary{cursor:pointer;color:var(--accent-ink,var(--accent))}
+  .imp-row{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line,rgba(127,127,127,.15));font-size:12.5px}
+  .imp-row:first-child{margin-top:10px}
+  .imp-row span{color:var(--muted);text-align:right}
+  .imp-go{margin-top:12px;display:flex;width:100%}
+  .imp.inline{margin:0 var(--sp-4) var(--sp-3)}
   .note{font-size:12.5px;color:var(--muted);line-height:1.5}
   .legend{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
   .legend i{flex:1;height:8px;border-radius:4px}
@@ -90,7 +104,7 @@
   <div class="panel-head" id="head"><a class="icon-btn" id="back" href="/" data-back data-back-to="/" data-icon="back" aria-label="回首頁"></a><div class="panel-title"><b>我的足跡 <span class="refreshing" id="refreshing" hidden>更新中…</span></b><div class="sub" id="overall">讀取中…</div></div><button class="icon-btn" id="bFog" type="button" aria-pressed="false" aria-label="迷霧模式：沒去過的地方蓋起來" title="迷霧模式"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9h12M6 13h14M4 17h10M9 5h9"/></svg></button><button class="icon-btn panel-collapse" data-icon="collapse" aria-expanded="true"></button></div>
   <!-- 收起時看到的四個數字（照原型） -->
   <div class="fp-kv peek num" id="fpKv"><div><b id="kvTowns">–</b><span id="kvTownsOf">鄉鎮</span></div><div><b id="kvKm">–</b><span>公里</span></div><div><b id="kvArea">–</b><span>探索 km²</span></div><div><b id="kvDays">–</b><span>騎車天數</span></div></div>
-  <div class="fp-emptycard peek" id="fpEmpty"><b>騎完第一趟，走過的路就會亮起來</b><span>到首頁建立行程、開始回報位置，或在「設定」連上 Traccar；騎過的鄉鎮、熱力圖、統計都會出現在這裡。</span></div>
+  <div class="fp-emptycard peek" id="fpEmpty"><b>騎完第一趟，走過的路就會亮起來</b><span>到首頁建立行程、開始回報位置，或在「設定」連上 Traccar；騎過的鄉鎮、熱力圖、統計都會出現在這裡。</span><button class="btn imp-go" id="impGo" type="button">匯入其他 App 的紀錄</button></div>
   <div class="seg peek" id="tabs" role="tablist" aria-label="足跡分頁"><button data-t="footprint" role="tab">足跡</button><button data-t="towns" role="tab">鄉鎮</button><button data-t="heat" role="tab">熱力圖</button><button data-t="stats" role="tab">統計</button></div>
   <div class="panel-body" data-b="footprint" role="tabpanel">
     <div><div class="fp-range" id="rangeTitle">全部</div><div class="small muted" id="rangeSub"></div></div>
@@ -119,6 +133,14 @@
     <div class="kpi"><div><b class="num" id="sKm">–</b><span>總里程 km</span></div><div><b class="num" id="sDays">–</b><span>有騎車的天數</span></div><div><b class="num" id="sTrips">–</b><span>車隊行程</span></div></div>
     <div class="card2"><h4>每月里程（km）</h4><div class="chart" id="sChart"></div></div>
     <div class="card2"><h4>你在各種路的實際速度</h4><div id="sPace"></div><div class="note" style="margin-top:6px">規劃路線時的「依你的速度」就是用這些數字。<a href="/about#how">怎麼算的？</a></div></div>
+    <div class="card2 imp" id="impCard"><h4>匯入其他 App 的紀錄</h4>
+      <div class="note">把以前的軌跡加進足跡，鄉鎮、熱力圖、統計會一起重算；重複的點會自動略過。</div>
+      <ul class="imp-fmts"><li><b>GPX</b>靈感足跡、Strava、Garmin 等</li><li><b>Google 時間軸</b>手機匯出的 Timeline.json，或 Takeout 的 Records.json</li><li><b>KML</b>舊版時間軸、Google 我的地圖</li><li><b>ZIP</b>整包 Takeout 也可以</li></ul>
+      <label class="btn primary block imp-pick" id="impPick"><input type="file" id="impFile" accept=".gpx,.kml,.json,.zip" hidden>選擇檔案</label>
+      <div class="imp-status" id="impStatus" role="status" aria-live="polite" hidden><div class="imp-line"><span id="impMsg"></span><span class="num" id="impPct"></span></div><div class="bar"><i id="impBar" style="width:0"></i></div></div>
+      <details class="imp-how"><summary>怎麼從 Google 地圖匯出時間軸？</summary><div class="note">手機 Google 地圖 → 右上頭像 → 你的時間軸 → 右上「⋯」→ 位置和隱私設定 → 匯出時間軸資料，會得到 Timeline.json。靈感足跡：在 App 裡選擇匯出 GPX。</div></details>
+      <div id="impList"></div>
+    </div>
   </div>
 </aside>
 
@@ -126,5 +148,6 @@
 <script src="/vendor/maplibre-gl-5.24.0/maplibre-gl.js"></script>
 <script type="module" src="/assets/footprint.js"></script>
 <script type="module" src="/assets/footprint-ui.js"></script>
+<script type="module" src="/assets/fp-import.js"></script>
 </body>
 </html>

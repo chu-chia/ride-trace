@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import admin, admin_ops, admin_test, auth, chat, footprint, ingest, interact, live, longterm, pace, poi, push, replay, routes, speedcam, system, trips, waypoints
+from . import admin, admin_ops, admin_test, auth, chat, footprint, importer, ingest, interact, live, longterm, pace, poi, push, replay, routes, speedcam, system, trips, waypoints
 from .auth import token_from, uid_from_token
 from .db import r
 
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="騎跡 API", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
-for mod in (auth, trips, replay, ingest, live, footprint, system, waypoints, speedcam, interact, routes, poi, pace, longterm, admin, admin_ops, admin_test, chat, push):
+for mod in (auth, trips, replay, ingest, live, footprint, importer, system, waypoints, speedcam, interact, routes, poi, pace, longterm, admin, admin_ops, admin_test, chat, push):
     app.include_router(mod.router)
 
 

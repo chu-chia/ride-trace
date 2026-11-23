@@ -23,6 +23,7 @@ from redis.exceptions import ResponseError
 
 from . import events, footprint, traffic, weather
 from .db import STATS_RULE_ARGS, K, advance_alert_ts, arrive, check_lag, r, update_stats
+from .importer import GROUP as IMPORT_GROUP, STREAM as IMPORT_STREAM, handle_import
 from .longterm import record_point
 from .push import NOTIFY, flush_loop, handle_push
 from .geo import bearing_deg, project_on_route as project
@@ -509,7 +510,8 @@ async def handle_alerts(msgs: list[tuple[str, dict]]) -> list[str]:
 
 
 # (stream, group) → handler。位置回報給統計、警示各一份；要推播的事件另走 stream:notify 給推播 group
-HANDLERS = {(K.ingest, "stats"): handle_stats, (K.ingest, "alerts"): handle_alerts, (NOTIFY, "push"): handle_push}
+HANDLERS = {(K.ingest, "stats"): handle_stats, (K.ingest, "alerts"): handle_alerts, (NOTIFY, "push"): handle_push,
+            (IMPORT_STREAM, IMPORT_GROUP): handle_import}
 
 
 async def run_group(stream: str, group: str, handler):
