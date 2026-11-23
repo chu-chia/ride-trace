@@ -41,7 +41,7 @@ export async function start() {
 
   // 深淺色由 <head> 先決定（記住的或跟系統），地圖跟著用深色／淺色底圖；syncTheme 讓換底圖時整頁一起換
   const isLight = () => document.documentElement.dataset.theme === 'light';
-  const M = createMap($('#map'), { style: isLight() ? 'light' : 'dark', center: [121.0, 23.75], zoom: 6.6, terrain: !reduce, interactive: false, syncTheme: true });
+  const M = createMap($('#map'), { style: isLight() ? 'light' : 'dark', center: [121.0, 23.75], zoom: 6.6, terrain: !reduce, forceTerrain: true, interactive: false, syncTheme: true });
   const map = M.map;
   // 只是背景裝飾，又鋪滿整個畫面：解析度最多 1.5 倍（Retina 原本 2 倍，像素少一半左右）
   if (devicePixelRatio > 1.5) map.setPixelRatio?.(1.5);

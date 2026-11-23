@@ -180,12 +180,13 @@ export function terrainPref() {
   return v ? v === '1' : !LOW_DPR();
 }
 
-export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, rotate = interactive3d, interactive = true, syncTheme = true, styles = DEFAULT_ORDER } = {}) {
+export function createMap(container, { style = 'dark', center = [121.0, 23.8], zoom = 7, terrain = false, interactive3d = true, rotate = interactive3d, interactive = true, syncTheme = true, styles = DEFAULT_ORDER, forceTerrain = false } = {}) {
   const ORDER = styles;
   let cur = style;
   let is3d = terrain;
   let tiltOK = false; // 導航模式：2D 也可以傾斜（只是不畫立體建築、地形），跟 Google／Apple 導航一樣
-  let useTerrain = terrainPref();
+  // forceTerrain：不管設定頁「立體地形」開關一律畫（登入頁：手機預設關地形，只傾斜的平面地圖看起來被壓扁、地名特別大）
+  let useTerrain = forceTerrain || terrainPref();
   window.__qiji3d = terrain;
   // 浮在地圖上的面板跟著底圖深淺走（深色、衛星 → 深色面板；淺色 → 淺色面板），不跟系統
   // syncTheme:false 給只有半邊是地圖的頁面（登入頁），那邊的表單還是跟系統
@@ -338,7 +339,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
   // 開地形後頭 8 秒在載圖磚，也不算。同一個分頁只問一次
   let watching = false;
   function watchSlow() {
-    if (watching || !(is3d && useTerrain)) return;
+    if (watching || forceTerrain || !(is3d && useTerrain)) return;
     try { if (sessionStorage.getItem('qiji:terrain-asked')) return; } catch { /* 私密模式 */ }
     watching = true;
     let prev = 0, t0 = 0, long = 0, bad = 0;
