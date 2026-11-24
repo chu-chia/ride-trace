@@ -346,10 +346,11 @@ function frame(now) {
   const target = !autoFollow || S.profiling ? '' : fm?.pos ? `f${S.focus}` : pts.length === 1 ? `o${live[0].u.uid}` : pts.length ? 'g' : 'last';
   if (target !== lastTarget) { if (target && lastTarget) M.retarget(); lastTarget = target; }
   if (S.styleReady && pts.length && !S.profiling && autoFollow) {
-    if (!LOW_POWER && !reduceMotion() && !M.busy) map.setBearing((map.getBearing() + dt * 2) % 360); // 慢慢旋轉；省電時不轉，鏡頭不動地圖就不必重畫
-    if (fm?.pos) M.follow(fm.pos, { padding: pad() });  // 點了隊員表：鏡頭跟著他
-    else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
-    else M.followGroup(pts, { padding: pad(), maxZoom: 14 });
+    // 慢慢旋轉（省電、減少動態效果時不轉）。角度跟中心、高度在 follow 裡同一次設定：另外 setBearing 會把高度改回舊值，跟著停住的人時畫面上下跳
+    const spin = !LOW_POWER && !reduceMotion() && !M.busy ? { bearing: (map.getBearing() + dt * 2) % 360 } : {};
+    if (fm?.pos) M.follow(fm.pos, { padding: pad(), ...spin });  // 點了隊員表：鏡頭跟著他
+    else if (pts.length === 1) M.follow(pts[0], { padding: pad(), ...spin });
+    else M.followGroup(pts, { padding: pad(), maxZoom: 14, ...spin });
   } else if (S.styleReady && !pts.length && !S.profiling && autoFollow && !M.busy) fitLast();
   if (now - lastTrail > 500) {
     lastTrail = now;

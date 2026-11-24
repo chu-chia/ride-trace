@@ -289,10 +289,11 @@ function frame(now) {
   const target = !autoFollow || S.profiling ? '' : fm?.pos ? `f${S.focus}` : pts.length === 1 ? `o${live[0].u.uid}` : pts.length ? 'g' : 'last';
   if (target !== lastTarget) { if (target && lastTarget) M.retarget(); lastTarget = target; }
   if (S.styleReady && pts.length && !S.profiling && autoFollow) {
-    if (!LOW_POWER && !reduceMotion() && !M.busy && M.is3d) map.setBearing((map.getBearing() + dt * 2) % 360); // 慢慢旋轉；省電或 2D 時不轉
-    if (fm?.pos) M.follow(fm.pos, { padding: pad() });
-    else if (pts.length === 1) M.follow(pts[0], { padding: pad() });
-    else M.followGroup(pts, { padding: pad(), maxZoom: 14 });
+    // 慢慢旋轉（省電、減少動態效果或 2D 時不轉）。角度跟中心、高度在 follow 裡同一次設定：另外 setBearing 會把高度改回舊值，跟著停住的人時畫面上下跳
+    const spin = !LOW_POWER && !reduceMotion() && !M.busy && M.is3d ? { bearing: (map.getBearing() + dt * 2) % 360 } : {};
+    if (fm?.pos) M.follow(fm.pos, { padding: pad(), ...spin });
+    else if (pts.length === 1) M.follow(pts[0], { padding: pad(), ...spin });
+    else M.followGroup(pts, { padding: pad(), maxZoom: 14, ...spin });
   } else if (S.styleReady && !pts.length && !S.profiling && autoFollow && !M.busy) fitLast();
   if (now - lastTrail > 500 && !window.__qijiPerfFlags?.has('notrail')) {
     lastTrail = now;

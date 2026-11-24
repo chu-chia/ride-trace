@@ -430,6 +430,8 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     nextStyle() { this.setStyle(ORDER[(ORDER.indexOf(cur) + 1) % ORDER.length]); return STYLES[cur].name; },
     // 跟隨模式：每一格把鏡頭中心移到 center。高度不直接貼地形（地形有細小起伏，鏡頭會上下彈），
     // 而是周圍取幾個點平均後再慢慢追，看起來就是平穩地沿著山坡移動。
+    // 自動旋轉要用 extra.bearing 一起傳進來，不要另外 setBearing：地形開著時 setBearing 會把高度改回 MapLibre 記著的舊值，
+    // 人停著時這裡又會跳過 jumpTo（鏡頭沒變），高度就在舊值和平滑值之間來回，畫面上下跳。
     follow(center, extra = {}) {
       if (window.__qijiPerfFlags?.has('nofollow')) return;  // 效能量測 A/B：鏡頭不動
       const now = performance.now();
@@ -464,7 +466,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
     // 全隊鏡頭：每一格算「框住所有人」需要的中心和縮放，鏡頭往那裡平滑地追（不用 easeTo：
     // 每隔一段時間重新 easeTo 會一頓一頓的，動畫結束時地形高度校正還會讓畫面跳一下）。
     // 有人快跑出畫面時拉遠要快，拉近則慢慢來，避免縮放一直來回。
-    followGroup(pts, { padding, maxZoom = 14.5 } = {}) {
+    followGroup(pts, { padding, maxZoom = 14.5, bearing } = {}) {
       if (!pts.length || performance.now() < busyUntil || held) return;
       // 中心用全隊的重心（彎道上某人折返時，外框中心會左右甩，重心穩很多），範圍取以重心為中心、能包住所有人的對稱框
       const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
@@ -474,7 +476,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       // 不然全隊會少拉近約半級，大家只佔畫面一半（回放頁的同一個問題，見 replay.js fitAll）
       const cur = map.getPadding(), extra = {};
       for (const k of ['top', 'bottom', 'left', 'right']) extra[k] = Math.max(0, (padding?.[k] || 0) - (cur[k] || 0));
-      const cam = map.cameraForBounds(b, { padding: extra, maxZoom, bearing: map.getBearing() });
+      const cam = map.cameraForBounds(b, { padding: extra, maxZoom, bearing: bearing ?? map.getBearing() });
       const c = { lng: cx, lat: cy };
       // 鏡頭傾斜很大、畫面又很高（例如手機直拿看戰情室電腦版）時 cameraForBounds 會算不出來，改用平面換算
       let tz = cam?.zoom ?? flatZoom(b, padding, maxZoom, map);
@@ -499,7 +501,7 @@ export function createMap(container, { style = 'dark', center = [121.0, 23.8], z
       grp.lon += (c.lng - grp.lon) * kc;
       grp.lat += (c.lat - grp.lat) * kc;
       grp.zoom += (tz - grp.zoom) * kz;
-      this.follow([grp.lon, grp.lat], { zoom: grp.zoom, padding });
+      this.follow([grp.lon, grp.lat], { zoom: grp.zoom, padding, ...(bearing != null && { bearing }) });
     },
     // 換回全隊時呼叫：全隊鏡頭從「目前畫面」重新開始追，不會跳回上次全隊時的舊位置
     regroup() { grp = null; grpT = 0; },
